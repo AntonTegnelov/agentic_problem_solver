@@ -1,4 +1,5 @@
 #Agentic Problem Solver
+##TODO
 
 - Install langraph + langchain
 
@@ -6,6 +7,12 @@
   - [x] Install langchain
   - [x] Verify installations work correctly
   - [x] Set up basic environment configuration
+
+- setup git
+
+  - [x] setup git
+  - [x] push to github using their CLI
+  - [x] update gitignore
 
 - setup an easy way to switch llm provider
 
