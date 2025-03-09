@@ -1,18 +1,33 @@
-import pytest
+"""Test configuration file."""
+
 import asyncio
 import os
-from typing import Generator
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create an instance of the default event loop for each test case."""
-    policy = asyncio.WindowsSelectorEventLoopPolicy()
-    asyncio.set_event_loop_policy(policy)
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+import pytest
+import pytest_asyncio
+
+
+@pytest_asyncio.fixture(scope="session")
+async def event_loop_session():
+    """Create a session-scoped event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
     loop.close()
 
+
 @pytest.fixture(autouse=True)
+def setup_test():
+    """Set up any test prerequisites."""
+    # Setup code here if needed
+    yield
+    # Cleanup code here if needed
+
+
+@pytest.fixture(scope="function")
 def setup_env() -> None:
-    """Set up environment variables for testing."""
-    os.environ["GOOGLE_API_KEY"] = "test_key" 
+    """Set up test environment."""
+    os.environ["GOOGLE_API_KEY"] = "test_key"
+    yield
+    if "GOOGLE_API_KEY" in os.environ:
+        del os.environ["GOOGLE_API_KEY"]

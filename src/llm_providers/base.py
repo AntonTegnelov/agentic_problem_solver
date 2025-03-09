@@ -1,33 +1,30 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, AsyncGenerator
-from pydantic import BaseModel, Field
-from langchain_core.messages import AIMessage, HumanMessage
+from typing import Any, Dict, Optional, AsyncGenerator
+
 
 class LLMProvider(ABC):
     """Base class for LLM providers."""
-    
+
     @abstractmethod
     async def generate(
         self,
         prompt: str,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        stop_sequences: Optional[List[str]] = None,
-        **kwargs: Any
+        **kwargs,
     ) -> str:
-        """Generate text based on the prompt.
-        
+        """Generate text from prompt.
+
         Args:
-            prompt: The input prompt for text generation
-            max_tokens: Maximum number of tokens to generate
+            prompt: Input prompt
+            max_tokens: Maximum tokens to generate
             temperature: Controls randomness in generation (0.0 to 1.0)
-            stop_sequences: List of sequences that will stop generation
-            **kwargs: Additional provider-specific parameters
-            
+            **kwargs: Additional arguments
+
         Returns:
-            Generated text response
+            Generated text
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def generate_stream(
@@ -35,49 +32,47 @@ class LLMProvider(ABC):
         prompt: str,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        stop_sequences: Optional[List[str]] = None,
-        **kwargs: Any
+        **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Stream generated text based on the prompt.
-        
+        """Generate text from prompt with streaming.
+
         Args:
-            prompt: The input prompt for text generation
-            max_tokens: Maximum number of tokens to generate
+            prompt: Input prompt
+            max_tokens: Maximum tokens to generate
             temperature: Controls randomness in generation (0.0 to 1.0)
-            stop_sequences: List of sequences that will stop generation
-            **kwargs: Additional provider-specific parameters
-            
+            **kwargs: Additional arguments
+
         Yields:
-            Generated text chunks as they become available
+            Generated text chunks
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_token_count(self, text: str) -> int:
-        """Get the number of tokens in the text.
-        
+        """Get token count for text.
+
         Args:
-            text: The text to count tokens for
-            
+            text: Input text
+
         Returns:
-            Number of tokens in the text
+            Token count
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_config(self) -> Dict[str, Any]:
-        """Get the current configuration of the provider.
-        
+        """Get current configuration.
+
         Returns:
-            Dictionary containing provider configuration
+            Current configuration
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def update_config(self, config: Dict[str, Any]) -> None:
-        """Update the provider configuration.
-        
+        """Update configuration.
+
         Args:
-            config: Dictionary containing new configuration values
+            config: New configuration values
         """
-        pass 
+        raise NotImplementedError

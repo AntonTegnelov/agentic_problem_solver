@@ -31,16 +31,21 @@ For every checked mark, please commit it to git
 
   - [x] create a CLI
   - [x] create an AI agent with langgraph
-  - [ ] Implement input validation
-  - [ ] Add error handling
-  - [ ] Create logging system
-  - [ ] Add configuration options for the agent
-  - [ ] Implement prompt templates
-  - [ ] verify that it works
+  - [x] Implement input validation
+  - [x] Add error handling
+  - [x] Create logging system
+  - [x] Add configuration options for the agent
+  - [x] Implement prompt templates
+  - [x] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] run ruff and fix all warnings
 
-- create CI/CD that automatically runs all test
+- create CI/CD that
+
+  - [ ] automatically runs all test on each commit
+  - [ ] checks for at least 75% test coverage
+  - [ ] run ruff with strict typing and code must pass without warnings
 
 - enable the ai to break down the prompt into TODO lists following a standardized format
 
@@ -53,6 +58,7 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] verify the feature passes CI/CD
 
 - enable the top agent to create other agents by itself, as a tool
 
@@ -66,6 +72,7 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] verify the feature passes CI/CD
 
 - combine the two approaches and make the top agent break down the problem into TODO lists and delegate them to new agents
 
@@ -79,6 +86,7 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] verify the feature passes CI/CD
 
 - create a vector database that stores the codebase for RAG
 
@@ -96,6 +104,7 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] verify the feature passes CI/CD
 
 - enable the new agents to systematically solve the TODO lists propmting themselves until the TODO is done
 
@@ -109,6 +118,7 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] verify the feature passes CI/CD
 
 - create a structure where the top agent is asked to break the problem down and delegate it to further agents, each new agent is also either tasked with further breaking down the problem or actually solving the problem
   - [ ] Design hierarchical agent structure
@@ -121,3 +131,4 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+  - [ ] verify the feature passes CI/CD
