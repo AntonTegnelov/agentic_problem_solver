@@ -30,7 +30,7 @@ For every checked mark, please commit it to git
 - create a top level agent that recieves a prompt
 
   - [x] create a CLI
-  - [ ] create an AI agent with langgraph
+  - [x] create an AI agent with langgraph
   - [ ] Implement input validation
   - [ ] Add error handling
   - [ ] Create logging system
@@ -39,6 +39,8 @@ For every checked mark, please commit it to git
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
+
+- create CI/CD that automatically runs all test
 
 - enable the ai to break down the prompt into TODO lists following a standardized format
 
