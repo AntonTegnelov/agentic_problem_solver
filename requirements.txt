@@ -3,6 +3,8 @@ langgraph==0.3.5
 google-generativeai==0.3.2
 python-dotenv==1.0.1
 typing-extensions>=4.7.0
+click==8.1.7
+anyio==4.3.0
 
 # Testing dependencies
 pytest==8.0.2
