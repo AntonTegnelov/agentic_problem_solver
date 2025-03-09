@@ -2,6 +2,7 @@ import click
 import asyncio
 from dotenv import load_dotenv
 from typing import Optional
+from ..agents import SolverAgent
 
 @click.group()
 def cli():
@@ -16,8 +17,13 @@ def cli():
 async def solve(prompt: str, max_tokens: Optional[int], temperature: Optional[float], stream: bool):
     """Solve a problem using AI agents."""
     click.echo(f"Processing prompt: {prompt}")
-    # TODO: Implement agent logic
-    click.echo("Solution will be implemented in next steps")
+    
+    # Create solver agent
+    agent = SolverAgent()
+    
+    # Process the prompt
+    response = await agent.process_message(prompt)
+    click.echo(f"\nResponse: {response}")
 
 @cli.command()
 def version():
