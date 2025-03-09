@@ -1,78 +1,92 @@
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, AsyncGenerator
+"""Base LLM provider implementation."""
+
+from collections.abc import AsyncGenerator
+from typing import Any, Protocol
+
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
-class LLMProvider(ABC):
-    """Base class for LLM providers."""
+class BaseLLMProvider(Protocol):
+    """Base LLM provider protocol."""
 
-    @abstractmethod
+    def __init__(self, api_key: str, model: str | None = None) -> None:
+        """Initialize provider.
+
+        Args:
+            api_key: Provider API key.
+            model: Model name to use.
+        """
+        ...
+
     async def generate(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        **kwargs,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Generate text from prompt.
 
         Args:
-            prompt: Input prompt
-            max_tokens: Maximum tokens to generate
-            temperature: Controls randomness in generation (0.0 to 1.0)
-            **kwargs: Additional arguments
+            prompt: The input prompt.
+            max_tokens: Maximum tokens to generate.
+            temperature: Sampling temperature.
 
         Returns:
-            Generated text
-        """
-        raise NotImplementedError
+            Generated text.
 
-    @abstractmethod
+        Raises:
+            ValueError: If prompt is empty or parameters are invalid.
+            RuntimeError: If generation fails.
+        """
+        ...
+
     async def generate_stream(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        **kwargs,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate text from prompt with streaming.
 
         Args:
-            prompt: Input prompt
-            max_tokens: Maximum tokens to generate
-            temperature: Controls randomness in generation (0.0 to 1.0)
-            **kwargs: Additional arguments
+            prompt: The input prompt.
+            max_tokens: Maximum tokens to generate.
+            temperature: Sampling temperature.
 
         Yields:
-            Generated text chunks
-        """
-        raise NotImplementedError
+            Generated text chunks.
 
-    @abstractmethod
-    def get_token_count(self, text: str) -> int:
-        """Get token count for text.
+        Raises:
+            ValueError: If prompt is empty or parameters are invalid.
+            RuntimeError: If generation fails.
+        """
+        ...
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens in text.
 
         Args:
-            text: Input text
+            text: Text to count tokens in.
 
         Returns:
-            Token count
+            Token count.
         """
-        raise NotImplementedError
+        ...
 
-    @abstractmethod
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """Get current configuration.
 
         Returns:
-            Current configuration
+            Current configuration.
         """
-        raise NotImplementedError
+        ...
 
-    @abstractmethod
-    def update_config(self, config: Dict[str, Any]) -> None:
+    def update_config(self, config: dict[str, Any]) -> None:
         """Update configuration.
 
         Args:
-            config: New configuration values
+            config: Configuration updates.
         """
-        raise NotImplementedError
+        ...

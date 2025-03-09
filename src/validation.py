@@ -1,104 +1,160 @@
-"""Validation module for input validation."""
+"""Validation utilities."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, TypeVar
 
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-)
 from pydantic import BaseModel, Field, field_validator
 
-from src.config import (
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_MAX_STEPS,
-    DEFAULT_MODEL,
-    DEFAULT_TASK_TIMEOUT,
-    DEFAULT_TEMPERATURE,
-)
+# Type variables
+T = TypeVar("T")
+
+# Error messages
+TEMPERATURE_ERROR = "Temperature must be between 0 and 1"
+MAX_TOKENS_ERROR = "Max tokens must be greater than 0"
+MODEL_ERROR = "Model name cannot be empty"
+TASK_TIMEOUT_ERROR = "Task timeout must be greater than 0"
+MAX_RETRIES_ERROR = "Max retries must be greater than 0"
+MAX_STEPS_ERROR = "Max steps must be greater than 0"
+
+
+class MessageRoles(str, Enum):
+    """Message roles."""
+
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
 
 
 class AgentStep(str, Enum):
-    """Possible steps in the agent's workflow."""
+    """Agent processing steps."""
 
-    UNDERSTAND = "UNDERSTAND"
-    PLAN = "PLAN"
-    EXECUTE = "EXECUTE"
-    VERIFY = "VERIFY"
-    END = "END"
+    UNDERSTAND = "understand"
+    PLAN = "plan"
+    IMPLEMENT = "implement"
+    VERIFY = "verify"
+    END = "end"
+
+
+class Message(BaseModel):
+    """Message model."""
+
+    role: MessageRoles
+    content: str
+    additional_kwargs: dict[str, Any] = Field(default_factory=dict)
+    response_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentState(BaseModel):
+    """Agent state."""
+
+    messages: list[Message] = Field(default_factory=list)
+    current_step: AgentStep = AgentStep.UNDERSTAND
+    step_count: int = 0
+    task_completed: bool = False
+    error: str | None = None
+
+    def get_message_metadata(self, index: int, key: str, default: T = None) -> T:
+        """Get message metadata.
+
+        Args:
+            index: Message index.
+            key: Metadata key.
+            default: Default value.
+
+        Returns:
+            Metadata value.
+        """
+        if index < 0 or index >= len(self.messages):
+            return default
+        return self.messages[index].response_metadata.get(key, default)
+
+
+class ProcessingStep(str, Enum):
+    """Steps in the agent's workflow."""
+
+    UNDERSTAND = "understand"
+    PLAN = "plan"
+    IMPLEMENT = "implement"
+    VERIFY = "verify"
+    END = "end"
+
+
+class GraphState(BaseModel):
     """The state of the agent."""
 
-    messages: List[Union[HumanMessage, AIMessage, SystemMessage, ToolMessage]] = Field(
+    messages: list[Message] = Field(
         default_factory=list,
         description="The conversation history using LangChain message types",
     )
-    current_step: str = Field(
-        default=AgentStep.UNDERSTAND,
+    current_step: ProcessingStep = Field(
+        default=ProcessingStep.UNDERSTAND,
         description="The current step in the workflow",
     )
-    error: Optional[str] = Field(None, description="Error message if any")
-    result: Optional[str] = Field(None, description="Final result if any")
+    error: str | None = Field(None, description="Error message if any")
+    result: str | None = Field(None, description="Final result if any")
 
-    def get_message_metadata(self, index: int, key: str, default: Any = None) -> Any:
+    def get_message_metadata(self, index: int, key: str, default: T = None) -> T:
         """Get metadata from a message at the specified index.
 
         Args:
-            index: Index of the message
-            key: Metadata key
-            default: Default value if key not found
+            index: The index of the message.
+            key: The metadata key to get.
+            default: The default value to return if the key is not found.
 
         Returns:
-            Metadata value or default
+            The metadata value or default if not found.
         """
         try:
             message = self.messages[index]
-            # First check standard message attributes
             if key == "content":
-                return message.content
-            elif key == "type":
-                return message.type
-            elif key == "tool_call_id" and isinstance(message, ToolMessage):
-                return message.tool_call_id
-            # Then check additional_kwargs metadata
-            metadata = message.additional_kwargs.get("metadata", {})
-            return metadata.get(key, default)
-        except IndexError:
+                return message.content  # type: ignore[return-value]
+            if key == "type":
+                return message.type  # type: ignore[return-value]
+            if key == "tool_call_id" and isinstance(message, ToolMessage):
+                return message.tool_call_id  # type: ignore[return-value]
+            return message.additional_kwargs.get(key, default)
+        except (IndexError, AttributeError):
             return default
 
-    def set_message_metadata(self, index: int, key: str, value: Any) -> None:
+    def set_message_metadata(self, index: int, key: str, value: T) -> None:
         """Set metadata for a message at the specified index.
 
         Args:
-            index: Index of the message
-            key: Metadata key
-            value: Metadata value
+            index: The index of the message.
+            key: The metadata key to set.
+            value: The value to set.
         """
         try:
             message = self.messages[index]
-            # Handle standard message attributes
             if key == "content":
-                message.content = value
-                return
-            # Store other metadata in additional_kwargs
-            if "metadata" not in message.additional_kwargs:
-                message.additional_kwargs["metadata"] = {}
-            message.additional_kwargs["metadata"][key] = value
-        except IndexError:
+                message.content = value  # type: ignore[assignment]
+            elif key == "type":
+                message.type = value  # type: ignore[assignment]
+            elif key == "tool_call_id" and isinstance(message, ToolMessage):
+                message.tool_call_id = value  # type: ignore[assignment]
+            else:
+                message.additional_kwargs[key] = value
+        except (IndexError, AttributeError):
             pass
 
-    @field_validator("messages")
     @classmethod
-    def messages_not_empty(
-        cls, v: List[Union[HumanMessage, AIMessage, SystemMessage, ToolMessage]]
-    ) -> List[Union[HumanMessage, AIMessage, SystemMessage, ToolMessage]]:
-        """Validate that the messages list is not empty."""
+    @field_validator("messages")
+    def validate_messages(cls, v: list[Any]) -> list[Any]:
+        """Validate messages list.
+
+        Args:
+            v: The messages list to validate.
+
+        Returns:
+            The validated messages list.
+
+        Raises:
+            ValueError: If messages list is empty.
+        """
         if not v:
-            raise ValueError("Messages list cannot be empty")
+            msg = "Messages list cannot be empty"
+            raise ValueError(msg)
         return v
 
     model_config = {
@@ -122,113 +178,17 @@ class AgentState(BaseModel):
     }
 
 
-class AgentConfig(BaseModel):
-    """Agent configuration model."""
-
-    temperature: float = Field(default=DEFAULT_TEMPERATURE)
-    max_tokens: Optional[int] = Field(default=None)
-    model: str = Field(default=DEFAULT_MODEL)
-    task_timeout: int = Field(default=DEFAULT_TASK_TIMEOUT)
-    max_retries: int = Field(default=DEFAULT_MAX_RETRIES)
-    max_steps: int = Field(default=DEFAULT_MAX_STEPS)
-
-    @field_validator("temperature")
-    def validate_temperature(cls, v: float) -> float:
-        """Validate temperature value.
-
-        Args:
-            v: Temperature value
-
-        Returns:
-            Validated temperature value
-
-        Raises:
-            ValueError: If temperature is not between 0 and 1
-        """
-        if not 0 <= v <= 1:
-            raise ValueError("Temperature must be between 0 and 1")
-        return v
-
-    @field_validator("max_tokens")
-    def validate_max_tokens(cls, v: Optional[int]) -> Optional[int]:
-        """Validate max_tokens value.
-
-        Args:
-            v: Max tokens value
-
-        Returns:
-            Validated max tokens value
-
-        Raises:
-            ValueError: If max_tokens is not positive
-        """
-        if v is not None and v <= 0:
-            raise ValueError("Max tokens must be positive")
-        return v
-
-    @field_validator("task_timeout")
-    def validate_task_timeout(cls, v: int) -> int:
-        """Validate task_timeout value.
-
-        Args:
-            v: Task timeout value
-
-        Returns:
-            Validated task timeout value
-
-        Raises:
-            ValueError: If task_timeout is not positive
-        """
-        if v <= 0:
-            raise ValueError("Task timeout must be positive")
-        return v
-
-    @field_validator("max_retries")
-    def validate_max_retries(cls, v: int) -> int:
-        """Validate max_retries value.
-
-        Args:
-            v: Max retries value
-
-        Returns:
-            Validated max retries value
-
-        Raises:
-            ValueError: If max_retries is negative
-        """
-        if v < 0:
-            raise ValueError("Max retries cannot be negative")
-        return v
-
-    @field_validator("max_steps")
-    def validate_max_steps(cls, v: int) -> int:
-        """Validate max_steps value.
-
-        Args:
-            v: Max steps value
-
-        Returns:
-            Validated max steps value
-
-        Raises:
-            ValueError: If max_steps is not positive
-        """
-        if v <= 0:
-            raise ValueError("Max steps must be positive")
-        return v
-
-
-class TaskInput(BaseModel):
-    """Input for a task."""
+class Task(BaseModel):
+    """A task to be solved by the agent."""
 
     content: str = Field(description="The task content")
-    context: Dict[str, Any] = Field(
+    context: dict[str, Any] = Field(
         default_factory=dict, description="Additional context for the task"
     )
-    constraints: List[str] = Field(
+    constraints: list[str] = Field(
         default_factory=list, description="Constraints for the task"
     )
-    requirements: List[str] = Field(
+    requirements: list[str] = Field(
         default_factory=list, description="Requirements for the task"
     )
 
@@ -249,39 +209,83 @@ class TaskInput(BaseModel):
     }
 
 
-class TaskOutput(BaseModel):
-    """Output from a task."""
+class TaskResult(BaseModel):
+    """The result of a task."""
 
     result: str = Field(..., description="The task result")
     success: bool = Field(..., description="Whether the task was successful")
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata about the task"
     )
 
 
-class WorkflowStep(BaseModel):
+class Step(BaseModel):
     """A step in the agent's workflow."""
 
-    name: str = Field(..., description="The name of the step")
-    description: str = Field(..., description="Description of what the step does")
-    input: TaskInput = Field(..., description="The input for this step")
-    output: TaskOutput = Field(..., description="The output from this step")
-    status: str = Field(..., description="The status of this step")
+    name: ProcessingStep = Field(..., description="The name of the step")
+    status: str = Field(
+        default="pending",
+        description="The status of the step (pending, in_progress, completed, failed)",
+    )
 
-    @field_validator("name")
     @classmethod
-    def validate_name(cls, v):
+    @field_validator("name")
+    def validate_name(cls, v: ProcessingStep) -> ProcessingStep:
         """Validate the name field."""
-        valid_steps = [step for step in AgentStep]
+        valid_steps = list(ProcessingStep)
         if v not in valid_steps:
-            raise ValueError(f"Step name must be one of {valid_steps}")
+            msg = f"Step name must be one of {valid_steps}"
+            raise ValueError(msg)
         return v
 
-    @field_validator("status")
     @classmethod
-    def validate_status(cls, v):
+    @field_validator("status")
+    def validate_status(cls, v: str) -> str:
         """Validate the status field."""
         valid_statuses = ["pending", "in_progress", "completed", "failed"]
         if v not in valid_statuses:
-            raise ValueError(f"Status must be one of {valid_statuses}")
+            msg = f"Status must be one of {valid_statuses}"
+            raise ValueError(msg)
         return v
+
+
+class AgentConfig(BaseModel):
+    """Agent configuration."""
+
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Temperature for text generation",
+        error_messages={"le": TEMPERATURE_ERROR},
+    )
+    max_tokens: int = Field(
+        default=1000,
+        gt=0,
+        description="Maximum number of tokens to generate",
+        error_messages={"gt": MAX_TOKENS_ERROR},
+    )
+    model: str = Field(
+        default="gemini-pro",
+        min_length=1,
+        description="Model name",
+        error_messages={"min_length": MODEL_ERROR},
+    )
+    task_timeout: int = Field(
+        default=300,
+        gt=0,
+        description="Task timeout in seconds",
+        error_messages={"gt": TASK_TIMEOUT_ERROR},
+    )
+    max_retries: int = Field(
+        default=3,
+        gt=0,
+        description="Maximum number of retries",
+        error_messages={"gt": MAX_RETRIES_ERROR},
+    )
+    max_steps: int = Field(
+        default=10,
+        gt=0,
+        description="Maximum number of processing steps",
+        error_messages={"gt": MAX_STEPS_ERROR},
+    )

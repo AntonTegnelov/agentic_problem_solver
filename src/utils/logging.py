@@ -1,54 +1,97 @@
-"""Logging configuration for the agent system."""
+"""Logging utilities for the agent."""
 
 import logging
-import sys
-from typing import Optional
-from pathlib import Path
+import os
+
+# Constants
+DEFAULT_LOG_LEVEL = logging.INFO
+DEFAULT_LOG_FORMAT = "%(levelname)s: %(message)s"
+DEFAULT_FILE_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+DEFAULT_LOGS_DIR = "logs"
+MIN_HANDLERS = 2
+
+# Third-party loggers to adjust
+THIRD_PARTY_LOGGERS = [
+    "urllib3",
+    "google.api_core",
+    "google.auth",
+    "google.oauth2",
+]
+
+# Global flag to track if logging has been set up
+_logging_initialized = False
 
 
 def setup_logging(
-    level: str = "INFO",
-    log_file: Optional[str] = None,
-    log_format: Optional[str] = None,
-) -> None:
+    name: str,
+    level: int = logging.INFO,
+    log_file: str | None = None,
+    format_str: str | None = None,
+) -> logging.Logger:
     """Set up logging configuration.
 
     Args:
-        level: Logging level (default: INFO)
-        log_file: Optional file path for logging
-        log_format: Optional custom log format
-    """
-    # Create logs directory if logging to file
-    if log_file:
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Default format includes timestamp, level, and message
-    if not log_format:
-        log_format = "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"
-
-    # Basic configuration
-    logging.basicConfig(
-        level=getattr(logging, level.upper()),
-        format=log_format,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            *([logging.FileHandler(log_file)] if log_file else []),
-        ],
-    )
-
-    # Set levels for third-party loggers
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("google").setLevel(logging.WARNING)
-
-
-def get_logger(name: str) -> logging.Logger:
-    """Get a logger instance.
-
-    Args:
-        name: Logger name (usually __name__)
+        name: Logger name.
+        level: Logging level.
+        log_file: Optional log file path.
+        format_str: Optional format string.
 
     Returns:
-        Logger instance
+        Configured logger.
     """
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    # Clear existing handlers
+    logger.handlers.clear()
+
+    # Create formatter
+    formatter = logging.Formatter(format_str or DEFAULT_FILE_FORMAT)
+
+    # Add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Add file handler if specified
+    if log_file:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    # Ensure minimum number of handlers
+    while len(logger.handlers) < MIN_HANDLERS:
+        handler = logging.StreamHandler()
+        handler.setLevel(level)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
+    # Set third-party loggers to WARNING level
+    for logger_name in THIRD_PARTY_LOGGERS:
+        third_party_logger = logging.getLogger(logger_name)
+        third_party_logger.setLevel(logging.WARNING)
+
+    return logger
+
+
+def get_logger(
+    name: str,
+    level: int = logging.INFO,
+    log_file: str | None = None,
+    format_str: str | None = None,
+) -> logging.Logger:
+    """Get or create a logger with the specified configuration.
+
+    Args:
+        name: Logger name.
+        level: Logging level.
+        log_file: Optional log file path.
+        format_str: Optional format string.
+
+    Returns:
+        Configured logger.
+    """
+    return setup_logging(name, level, log_file, format_str)

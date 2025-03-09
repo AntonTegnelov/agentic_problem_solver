@@ -1,135 +1,127 @@
 """Message wrapper module for LangChain message types."""
 
-from typing import Any, Dict, Optional
-
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 
 def create_system_message(
-    content: str, metadata: Optional[Dict[str, Any]] = None
+    content: str, metadata: dict[str, object] | None = None
 ) -> SystemMessage:
     """Create a SystemMessage with proper initialization.
 
     Args:
-        content: Message content
-        metadata: Optional metadata dictionary
+        content: The message content.
+        metadata: Optional metadata to attach to the message.
 
     Returns:
-        Initialized SystemMessage
+        A SystemMessage instance.
     """
-    return SystemMessage(
-        content=content,
-        additional_kwargs={
-            "metadata": metadata or {},
-            "tool_calls": None,
-            "function_call": None,
-        },
-    )
+    if metadata is None:
+        metadata = {}
+    return SystemMessage(content=content, additional_kwargs={"metadata": metadata})
 
 
 def create_human_message(
-    content: str, metadata: Optional[Dict[str, Any]] = None
+    content: str, metadata: dict[str, object] | None = None
 ) -> HumanMessage:
     """Create a HumanMessage with proper initialization.
 
     Args:
-        content: Message content
-        metadata: Optional metadata dictionary
+        content: The message content.
+        metadata: Optional metadata to attach to the message.
 
     Returns:
-        Initialized HumanMessage
+        A HumanMessage instance.
     """
-    return HumanMessage(
-        content=content,
-        additional_kwargs={
-            "metadata": metadata or {},
-            "tool_calls": None,
-            "function_call": None,
-        },
-    )
+    if metadata is None:
+        metadata = {}
+    return HumanMessage(content=content, additional_kwargs={"metadata": metadata})
 
 
 def create_ai_message(
-    content: str, metadata: Optional[Dict[str, Any]] = None
+    content: str, metadata: dict[str, object] | None = None
 ) -> AIMessage:
     """Create an AIMessage with proper initialization.
 
     Args:
-        content: Message content
-        metadata: Optional metadata dictionary
+        content: The message content.
+        metadata: Optional metadata to attach to the message.
 
     Returns:
-        Initialized AIMessage
+        An AIMessage instance.
     """
-    return AIMessage(
-        content=content,
-        additional_kwargs={
-            "metadata": metadata or {},
-            "tool_calls": None,
-            "function_call": None,
-        },
-    )
+    if metadata is None:
+        metadata = {}
+    return AIMessage(content=content, additional_kwargs={"metadata": metadata})
 
 
 def create_tool_message(
-    content: str, tool_call_id: str, metadata: Optional[Dict[str, Any]] = None
+    content: str, tool_call_id: str, metadata: dict[str, object] | None = None
 ) -> ToolMessage:
     """Create a ToolMessage with proper initialization.
 
     Args:
-        content: Message content
-        tool_call_id: ID of the tool call
-        metadata: Optional metadata dictionary
+        content: The message content.
+        tool_call_id: The ID of the tool call.
+        metadata: Optional metadata to attach to the message.
 
     Returns:
-        Initialized ToolMessage
+        A ToolMessage instance.
     """
+    if metadata is None:
+        metadata = {}
     return ToolMessage(
         content=content,
         tool_call_id=tool_call_id,
-        additional_kwargs={
-            "metadata": metadata or {},
-            "tool_calls": None,
-            "function_call": None,
-        },
+        additional_kwargs={"metadata": metadata},
     )
 
 
-def get_message_metadata(message: Any, key: str, default: Any = None) -> Any:
+def get_message_metadata(
+    message: HumanMessage | AIMessage | SystemMessage | ToolMessage,
+    key: str,
+    default: object | None = None,
+) -> object | None:
     """Get metadata from a message.
 
     Args:
-        message: Message object
-        key: Metadata key
-        default: Default value if key not found
+        message: The message to get metadata from.
+        key: The metadata key to get.
+        default: The default value to return if the key is not found.
 
     Returns:
-        Metadata value or default
+        The metadata value or default if not found.
     """
-    if message is None:
-        return default
-
     if key == "content":
         return message.content
-    elif key == "type":
+    if key == "type":
         return message.type
-    elif key == "tool_call_id" and isinstance(message, ToolMessage):
+    if key == "tool_call_id" and isinstance(message, ToolMessage):
         return message.tool_call_id
-    metadata = message.additional_kwargs.get("metadata", {})
-    return metadata.get(key, default)
+    return message.additional_kwargs.get("metadata", {}).get(key, default)
 
 
-def set_message_metadata(message: Any, key: str, value: Any) -> None:
+def set_message_metadata(
+    message: HumanMessage | AIMessage | SystemMessage | ToolMessage,
+    key: str,
+    value: object,
+) -> None:
     """Set metadata for a message.
 
     Args:
-        message: Message object
-        key: Metadata key
-        value: Metadata value
+        message: The message to set metadata for.
+        key: The metadata key to set.
+        value: The value to set.
     """
     if key == "content":
-        message.content = value
+        message.content = str(value)
         return
+    if key == "type":
+        message.type = str(value)
+        return
+    if key == "tool_call_id" and isinstance(message, ToolMessage):
+        message.tool_call_id = str(value)
+        return
+
     if "metadata" not in message.additional_kwargs:
         message.additional_kwargs["metadata"] = {}
     message.additional_kwargs["metadata"][key] = value

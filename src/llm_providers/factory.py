@@ -1,157 +1,60 @@
-from typing import Dict, Type, Optional
+"""Factory for creating LLM providers."""
+
 import os
-from .base import LLMProvider
-from .gemini import GeminiProvider
-from src.config import DEFAULT_LLM_CONFIG
+
+from src.llm_providers.base import BaseLLMProvider
+from src.llm_providers.gemini import GeminiProvider
 
 
 class LLMProviderFactory:
     """Factory for creating LLM providers."""
 
-    _providers: Dict[str, Type[LLMProvider]] = {
-        "gemini": GeminiProvider,
-    }
-
     _instance = None
-    _current_provider = None
-    _provider = None
-    _api_key = None
-    _model = None
-    _current_provider_name = "gemini"  # Track current provider name
+    _initialized = False
 
-    def __new__(cls):
-        """Ensure singleton instance."""
+    def __new__(cls, api_key: str | None = None) -> "LLMProviderFactory":
+        """Create a new factory instance or return existing one."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, api_key: str | None = None) -> None:
         """Initialize the factory."""
-        if not hasattr(self, "initialized"):
-            self.initialized = True
-            self._load_default_provider()
-
-    def _load_default_provider(self) -> None:
-        """Load the default provider from environment variables."""
-        provider_name = os.getenv("LLM_PROVIDER", "gemini").lower()
-
-        if provider_name not in self._providers:
-            raise ValueError(f"Unsupported provider: {provider_name}")
-
-        provider_class = self._providers[provider_name]
-        self._current_provider_name = provider_name
-
-        if provider_name == "gemini":
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                raise ValueError("GEMINI_API_KEY environment variable not set")
-            self._current_provider = provider_class(api_key=api_key)
-
-    def get_provider(self, model: Optional[str] = None) -> LLMProvider:
-        """Get or create an LLM provider instance.
-
-        Args:
-            model: Optional model name to use. If not provided, uses the default.
-
-        Returns:
-            An LLM provider instance
-
-        Raises:
-            ValueError: If no API key is found
-        """
-        api_key = self._get_api_key()
-
-        # Use default model if none specified
-        model = model or DEFAULT_LLM_CONFIG["model"]
-
-        # Create new provider if model changed
-        if self._provider is None or model != self._model:
-            self._provider = self._create_provider(api_key, model)
-            self._model = model
-
-        return self._provider
-
-    def _create_provider(
-        self, api_key: str, model: Optional[str] = None
-    ) -> LLMProvider:
-        """Create a new LLM provider instance.
-
-        Args:
-            api_key: API key to use
-            model: Optional model name to use. If not provided, uses the default.
-
-        Returns:
-            A new LLM provider instance
-        """
-        # Use default model if none specified
-        model = model or DEFAULT_LLM_CONFIG["model"]
-
-        # Use current provider class
-        provider_class = self._providers[self._current_provider_name]
-        return provider_class(api_key, model)
-
-    def set_provider(self, provider_name: str, **kwargs) -> None:
-        """Set a new LLM provider.
-
-        Args:
-            provider_name: Name of the provider to use
-            **kwargs: Provider-specific configuration
-
-        Raises:
-            ValueError: If provider_name is not supported
-        """
-        provider_name = provider_name.lower()
-        if provider_name not in self._providers:
-            raise ValueError(f"Unsupported provider: {provider_name}")
-
-        provider_class = self._providers[provider_name]
-
-        # Update API key if provided
-        if "api_key" in kwargs:
-            self._api_key = kwargs["api_key"]
-        # If no API key in kwargs, use the current one
-        elif self._api_key:
-            kwargs["api_key"] = self._api_key
-
-        # Reset provider state
-        self._provider = provider_class(**kwargs)
-        self._model = None
-        self._current_provider = self._provider
-        self._current_provider_name = provider_name
-
-    def register_provider(self, name: str, provider_class: Type[LLMProvider]) -> None:
-        """Register a new provider type.
-
-        Args:
-            name: Name to register the provider under
-            provider_class: Provider class to register
-        """
-        self._providers[name.lower()] = provider_class
-
-    @property
-    def available_providers(self) -> list[str]:
-        """Get list of available provider names."""
-        return list(self._providers.keys())
-
-    def _get_api_key(self) -> str:
-        """Get the API key from environment variables.
-
-        Returns:
-            API key
-
-        Raises:
-            ValueError: If no API key is found
-        """
-        if self._api_key is None:
-            self._api_key = os.environ.get("GEMINI_API_KEY")
+        if not self._initialized:
+            self._api_key = api_key or os.getenv("GEMINI_API_KEY")
             if not self._api_key:
-                raise ValueError("GEMINI_API_KEY not found in environment variables")
-        return self._api_key
+                raise ValueError("GEMINI_API_KEY environment variable not set")
+            self._providers: dict[str, type[BaseLLMProvider]] = {}
+            self._current_provider: BaseLLMProvider | None = None
+            self._provider_name: str | None = None
 
-    def _set_api_key(self, api_key: str) -> None:
-        """Set the API key.
+            # Register and set Gemini as the default provider
+            self.register_provider("gemini", GeminiProvider)
+            self.set_active_provider("gemini")
 
-        Args:
-            api_key: API key to use
-        """
+            self._initialized = True
+
+    def register_provider(
+        self, name: str, provider_class: type[BaseLLMProvider]
+    ) -> None:
+        """Register a new provider."""
+        self._providers[name] = provider_class
+
+    def set_active_provider(self, name: str) -> None:
+        """Set the active provider."""
+        if name not in self._providers:
+            raise ValueError(f"Unsupported provider: {name}")
+        self._provider_name = name
+        self._current_provider = self._providers[name](self._api_key)
+
+    def get_provider(self) -> BaseLLMProvider:
+        """Get the current provider instance."""
+        if not self._current_provider:
+            raise ValueError("No provider set")
+        return self._current_provider
+
+    def set_api_key(self, api_key: str) -> None:
+        """Set the API key."""
         self._api_key = api_key
+        if self._provider_name:
+            self._current_provider = self._providers[self._provider_name](api_key)

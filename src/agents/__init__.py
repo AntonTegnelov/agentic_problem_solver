@@ -1,4 +1,6 @@
-from .base import BaseAgent, AgentState
-from .solver_agent import SolverAgent, AgentGraphState
+"""Agents package initialization."""
 
-__all__ = ['BaseAgent', 'AgentState', 'SolverAgent', 'AgentGraphState'] 
+from .base import AgentState, BaseAgent
+from .solver_agent import SolverAgent
+
+__all__ = ["BaseAgent", "AgentState", "SolverAgent"]

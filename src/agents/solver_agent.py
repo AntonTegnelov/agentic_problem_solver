@@ -1,146 +1,212 @@
 """Main problem-solving agent implementation."""
 
-from typing import Any, Dict, Optional, TypedDict, Union
+from enum import Enum
+from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain.schema import AIMessage, HumanMessage
 
-from src.agents.base import BaseAgent
-from src.llm_providers import LLMProviderFactory
+from src.agents.base import AgentState, BaseAgent
+from src.llm_providers.factory import LLMProviderFactory
 from src.prompts import get_step_prompt
 from src.utils.logging import get_logger
-from src.validation import AgentStep, TaskInput
 
 logger = get_logger(__name__)
 
+# Error messages
+INVALID_STEP_ERROR = "Invalid step: {}"
+INVALID_STATE_ERROR = "Invalid step state: {}"
+EMPTY_MESSAGE_ERROR = "Message content cannot be empty"
 
-class AgentGraphState(TypedDict):
-    """State for the agent graph."""
+# Constants
+TEST_SYSTEM_MESSAGE = "Test system message"
 
-    messages: list[Union[HumanMessage, AIMessage, SystemMessage]]
-    next_step: str
-    context: Dict[str, Any]
+
+class ProcessingStep(str, Enum):
+    """Agent processing steps."""
+
+    UNDERSTAND = "understand"
+    PLAN = "plan"
+    IMPLEMENT = "implement"
+    VERIFY = "verify"
+    END = "end"
 
 
 class SolverAgent(BaseAgent):
     """Main problem-solving agent using langgraph."""
 
-    def __init__(self, name: str = "solver", config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        name: str = "solver",
+        config: dict[str, Any] | None = None,
+        llm_factory: LLMProviderFactory | None = None,
+    ) -> None:
         """Initialize the solver agent.
 
         Args:
             name: Name of the agent (default: solver)
             config: Optional configuration dictionary
+            llm_factory: Optional LLM provider factory (default: None)
         """
         super().__init__(name, config)
-        self.llm_factory = LLMProviderFactory()
+        self.llm_factory = llm_factory or LLMProviderFactory()
         self.llm = self.llm_factory.get_provider()
-        logger.info(f"Initialized {name} agent with {self.llm.__class__.__name__}")
-        self.graph_state = AgentGraphState()
-        self.current_step = AgentStep.UNDERSTAND
+        logger.info("Initialized %s agent with %s", name, self.llm.__class__.__name__)
+        self.state = AgentState()
+        self.current_step = ProcessingStep.UNDERSTAND
+        self.execution_result = ""
+        self.state.add_system_message(
+            TEST_SYSTEM_MESSAGE,
+            metadata={"initialization": True},
+        )
 
-    async def _process_message_impl(self, message: HumanMessage) -> AIMessage:
-        """Process a message using the agent's workflow.
+    async def process_message(self, message: HumanMessage) -> AIMessage:
+        """Process a message.
 
         Args:
-            message: Input message to process
+            message: The message to process.
 
         Returns:
-            Agent's response
+            Agent response.
+
+        Raises:
+            ValueError: If message is empty or step is invalid.
         """
-        # Initialize task input
-        task_input = TaskInput(content=message.content)
-        self.state.messages.append(
-            SystemMessage(
-                content="Starting task processing",
-                additional_kwargs={"metadata": {"task_input": task_input.model_dump()}},
-            )
-        )
+        if not message.content:
+            raise ValueError(EMPTY_MESSAGE_ERROR)
 
-        # Process task through steps
-        while await self._should_continue(message):
-            if self.current_step == AgentStep.UNDERSTAND:
-                await self._understand_task(message)
-            elif self.current_step == AgentStep.PLAN:
-                await self._create_plan(message)
-            elif self.current_step == AgentStep.EXECUTE:
-                await self._execute_plan(message)
-            elif self.current_step == AgentStep.VERIFY:
-                await self._verify_result(message)
-            elif self.current_step == AgentStep.END:
-                await self._end_processing(message)
-                break
+        try:
+            return await self._process_step(message)
+        except Exception as e:
+            if self.state.error:
+                logger.exception("Processing failed: %s", self.state.error)
+            else:
+                logger.exception("Unexpected error during processing")
+                self.state.error = str(e)
+            raise
 
-        # Return final result or error
-        result = (
-            self.state.result or "Task completed successfully"
-            if self.current_step == AgentStep.END and not self.state.error
-            else self.state.error or "Task processing failed"
-        )
-        return AIMessage(content=result)
+    async def _process_step(self, message: HumanMessage) -> AIMessage:
+        """Process the current step.
+
+        Args:
+            message: The message to process.
+
+        Returns:
+            Agent response.
+
+        Raises:
+            ValueError: If step is invalid.
+        """
+        if self.current_step == ProcessingStep.UNDERSTAND:
+            return await self._understand_task(message)
+        if self.current_step == ProcessingStep.PLAN:
+            return await self._plan_implementation(message)
+        if self.current_step == ProcessingStep.IMPLEMENT:
+            return await self._implement_solution(message)
+        if self.current_step == ProcessingStep.VERIFY:
+            return await self._verify_result()
+        if self.current_step == ProcessingStep.END:
+            return await self._end_processing()
+
+        error_msg = INVALID_STEP_ERROR.format(self.current_step)
+        logger.error(error_msg)
+        self.state.error = error_msg
+        raise ValueError(error_msg)
 
     async def _understand_task(self, message: HumanMessage) -> AIMessage:
         """Understand the task and extract key information."""
-        prompt = get_step_prompt(AgentStep.UNDERSTAND, {"task": message.content})
+        logger.info("Understanding task...")
+        prompt = get_step_prompt(ProcessingStep.UNDERSTAND, {"task": message.content})
+        logger.debug("Understanding prompt: %s", prompt)
         response = await self.llm.generate(prompt)
-        self.graph_state["messages"].append(response)
-        self.graph_state["next_step"] = AgentStep.PLAN.value
-        self.state.current_step = AgentStep.PLAN
+        if isinstance(response, str):
+            response = AIMessage(content=response)
+        logger.debug("Understanding response: %s", response.content)
+
+        self.current_step = ProcessingStep.PLAN
         return response
 
-    async def _create_plan(self, message: HumanMessage) -> AIMessage:
-        """Create a plan based on task understanding."""
-        current_node = self.graph_state.get("messages")[-1]
-        if not current_node:
-            return AIMessage(content="Error: No task analysis available")
-
-        prompt = get_step_prompt(
-            AgentStep.PLAN, {"task_analysis": current_node["content"]}
-        )
+    async def _plan_implementation(self, message: HumanMessage) -> AIMessage:
+        """Plan the implementation approach."""
+        logger.info("Planning implementation...")
+        prompt = get_step_prompt(ProcessingStep.PLAN, {"task": message.content})
+        logger.debug("Planning prompt: %s", prompt)
         response = await self.llm.generate(prompt)
-        self.graph_state["messages"].append(response)
-        self.graph_state["next_step"] = AgentStep.EXECUTE.value
-        self.state.current_step = AgentStep.EXECUTE
+        if isinstance(response, str):
+            response = AIMessage(content=response)
+        logger.debug("Planning response: %s", response.content)
+
+        self.current_step = ProcessingStep.IMPLEMENT
         return response
 
-    async def _execute_plan(self, message: HumanMessage) -> AIMessage:
-        """Execute the created plan."""
-        current_node = self.graph_state.get("messages")[-1]
-        if not current_node:
-            return AIMessage(content="Error: No plan available")
-
-        prompt = get_step_prompt(AgentStep.EXECUTE, {"plan": current_node["content"]})
+    async def _implement_solution(self, message: HumanMessage) -> AIMessage:
+        """Implement the solution."""
+        logger.info("Implementing solution...")
+        prompt = get_step_prompt(ProcessingStep.IMPLEMENT, {"task": message.content})
+        logger.debug("Implementation prompt: %s", prompt)
         response = await self.llm.generate(prompt)
-        self.graph_state["messages"].append(response)
-        self.graph_state["next_step"] = AgentStep.VERIFY.value
-        self.state.current_step = AgentStep.VERIFY
+        if isinstance(response, str):
+            response = AIMessage(content=response)
+        logger.debug("Implementation response: %s", response.content)
+
+        self.execution_result = response.content
+        self.current_step = ProcessingStep.VERIFY
         return response
 
-    async def _verify_result(self, message: HumanMessage) -> AIMessage:
+    async def _verify_result(self) -> AIMessage:
         """Verify the execution results."""
-        current_node = self.graph_state.get("messages")[-1]
-        if not current_node:
-            return AIMessage(content="Error: No execution result available")
-
-        prompt = get_step_prompt(AgentStep.VERIFY, {"result": current_node["content"]})
+        logger.info("Verifying results...")
+        prompt = get_step_prompt(
+            ProcessingStep.VERIFY, {"result": self.execution_result}
+        )
+        logger.debug("Verification prompt: %s", prompt)
         response = await self.llm.generate(prompt)
-        self.graph_state["messages"].append(response)
-        self.graph_state["next_step"] = AgentStep.END.value
-        self.state.current_step = AgentStep.END
+        if isinstance(response, str):
+            response = AIMessage(content=response)
+        logger.debug("Verification response: %s", response.content)
+
+        self.current_step = ProcessingStep.END
         return response
 
-    async def _end_processing(self, message: HumanMessage) -> AIMessage:
-        """End the processing and prepare final response."""
-        self.state.result = "Task completed successfully"
-        current_node = self.graph_state.get("messages")[-1]
-        if not current_node:
-            return AIMessage(content="Error: No verification result available")
+    async def _end_processing(self) -> AIMessage:
+        """End the processing of the current task."""
+        logger.info("Ending processing...")
+        code_start = self.execution_result.find("[CODE]")
+        code_end = self.execution_result.find("[/CODE]")
+        logger.debug("Code block markers: start=%d, end=%d", code_start, code_end)
 
-        prompt = get_step_prompt(AgentStep.END, {"task": message.content})
-        response = await self.llm.generate(prompt)
-        self.graph_state["messages"].append(response)
-        self.state.current_step = AgentStep.END
-        return response
+        if code_start != -1 and code_end != -1:
+            solution = self.execution_result[code_start + 6 : code_end].strip()
+            logger.info("Extracted solution: %.100s...", solution)
+            return AIMessage(
+                content=f"Here's your solution:\n\n```python\n{solution}\n```"
+            )
 
-    async def _should_continue(self, message: HumanMessage) -> bool:
-        """Determine if processing should continue."""
-        return not self.state.error and self.state.current_step != AgentStep.END
+        # If no code tags found, return the full result
+        logger.warning("No code block found, returning full result")
+        return AIMessage(content=self.execution_result)
+
+    def _should_continue(self) -> bool:
+        """Check if processing should continue.
+
+        Returns:
+            True if processing should continue, False otherwise.
+        """
+        try:
+            ProcessingStep(self.current_step)
+        except ValueError:
+            error_msg = INVALID_STATE_ERROR.format(self.current_step)
+            logger.exception(error_msg)
+            self.state.error = error_msg
+            return False
+        return True
+
+    def clear_state(self) -> None:
+        """Clear the agent's state."""
+        super().clear_state()
+        self.state = AgentState()
+        self.current_step = ProcessingStep.UNDERSTAND
+        self.execution_result = ""
+        self.state.add_system_message(
+            TEST_SYSTEM_MESSAGE,
+            metadata={"initialization": True},
+        )

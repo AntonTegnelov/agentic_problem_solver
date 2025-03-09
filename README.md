@@ -1,134 +1,185 @@
 #Agentic Problem Solver
-For every checked mark, please commit it to git
-##TODO
 
-- Install langraph + langchain
+A powerful AI-powered problem-solving system that breaks down complex programming tasks into manageable steps and generates solutions.
 
-  - [x] Install langraph
-  - [x] Install langchain
-  - [x] Verify installations work correctly
-  - [x] Set up basic environment configuration
+## Features
 
-- setup git
+- Intelligent task breakdown and analysis
+- Step-by-step solution generation
+- Multiple LLM provider support
+- Comprehensive error handling
+- Extensive logging and debugging capabilities
+- Modular and extensible architecture
 
-  - [x] setup git
-  - [x] push to github using their CLI
-  - [x] update gitignore
+## Installation
 
-- setup an easy way to switch llm provider
+1. Clone the repository:
 
-  - [x] use google gemini ai as it's the cheapest for now
-  - [x] Create abstraction layer for LLM providers
-  - [x] Implement configuration system for API keys
-  - [x] Add support for environment variables
-  - [x] Create provider switching mechanism
-  - [x] Add fallback mechanisms
-  - [x] verify that it works
-  - [x] write unit tests
-  - [x] write integration tests
+   ```bash
+   git clone https://github.com/yourusername/Agentic_problem_solver.git
+   cd Agentic_problem_solver
+   ```
 
-- create a top level agent that recieves a prompt
+2. Create and activate a virtual environment:
 
-  - [x] create a CLI
-  - [x] create an AI agent with langgraph
-  - [x] Implement input validation
-  - [x] Add error handling
-  - [x] Create logging system
-  - [x] Add configuration options for the agent
-  - [x] Implement prompt templates
-  - [x] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] run ruff and fix all warnings
+   ```bash
+   python -m venv venv
+   # On Windows:
+   .\venv\Scripts\activate
+   # On Unix/MacOS:
+   source venv/bin/activate
+   ```
 
-- create CI/CD that
+3. Install the package in development mode:
 
-  - [ ] automatically runs all test on each commit
-  - [ ] checks for at least 75% test coverage
-  - [ ] run ruff with strict typing and code must pass without warnings
+   ```bash
+   pip install -e .
+   ```
 
-- enable the ai to break down the prompt into TODO lists following a standardized format
+4. Set up environment variables:
 
-  - [ ] use langchain to do this
-  - [ ] Define standardized TODO format schema
-  - [ ] Create prompt templates for task breakdown
-  - [ ] Implement validation for generated TODOs
-  - [ ] Add priority system
-  - [ ] Create task dependency tracking
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] verify the feature passes CI/CD
+   ```bash
+   # Required:
+   export GEMINI_API_KEY=your_api_key_here
 
-- enable the top agent to create other agents by itself, as a tool
+   # Optional:
+   export PROVIDER=gemini  # Default LLM provider
+   export LOG_LEVEL=INFO  # Logging level
+   export LOG_FILE=agent.log  # Log file path
+   ```
 
-  - [ ] configure a framework for tools for the ai
-  - [ ] Define agent creation interface
-  - [ ] Implement agent lifecycle management
-  - [ ] Create agent communication protocol
-  - [ ] Add resource management for agents
-  - [ ] Implement agent capability discovery
-  - [ ] Create agent templates
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] verify the feature passes CI/CD
+## Usage
 
-- combine the two approaches and make the top agent break down the problem into TODO lists and delegate them to new agents
+### Command Line Interface
 
-  - [ ] Create delegation strategy
-  - [ ] Implement task assignment system
-  - [ ] Add progress tracking
-  - [ ] Create inter-agent communication system
-  - [ ] Implement result aggregation
-  - [ ] Add error handling for failed delegations
-  - [ ] Create reporting mechanism
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] verify the feature passes CI/CD
+Use the `APS` command to solve problems:
 
-- create a vector database that stores the codebase for RAG
+```bash
+# Basic usage
+APS solve "Create a calculator app in TypeScript"
 
-  - [ ] install postgress locally
-  - [ ] setup postgress locally
-  - [ ] setup postgress as a vector database
-  - [ ] run postgress automatically when launching the cli
-  - [ ] store code base in vector database
-  - [ ] setup RAG
-  - [ ] Create indexing system
-  - [ ] Implement automatic updates
-  - [ ] Add query optimization
-  - [ ] Create backup system
-  - [ ] Implement caching layer
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] verify the feature passes CI/CD
+# With options
+APS solve --temperature 0.7 --max-tokens 2000 "Write a Python web scraper"
 
-- enable the new agents to systematically solve the TODO lists propmting themselves until the TODO is done
+# Stream output
+APS solve --stream "Create a REST API in FastAPI"
 
-  - [ ] Create self-prompting mechanism
-  - [ ] Implement progress tracking
-  - [ ] Add completion verification
-  - [ ] Create feedback loops
-  - [ ] Implement retry mechanisms
-  - [ ] Add success criteria validation
-  - [ ] Create reporting system
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] verify the feature passes CI/CD
+# Show version
+APS version
+```
 
-- create a structure where the top agent is asked to break the problem down and delegate it to further agents, each new agent is also either tasked with further breaking down the problem or actually solving the problem
-  - [ ] Design hierarchical agent structure
-  - [ ] Implement role-based agent system
-  - [ ] Create task distribution algorithm
-  - [ ] Add coordination mechanism
-  - [ ] Implement result aggregation
-  - [ ] Create conflict resolution system
-  - [ ] Add performance monitoring
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-  - [ ] verify the feature passes CI/CD
+Available options:
+
+- `--temperature, -t`: Control creativity (0.0 to 1.0)
+- `--max-tokens, -m`: Maximum tokens to generate
+- `--stream, -s`: Stream output as it's generated
+
+### Python API
+
+```python
+from src.agents.solver_agent import SolverAgent
+from langchain_core.messages import HumanMessage
+
+# Create an agent
+agent = SolverAgent()
+
+# Process a task
+message = HumanMessage(content="Write a Python function to calculate factorial")
+response = await agent._process_message_impl(message)
+print(response.content)
+```
+
+## Documentation
+
+- [Tutorials](docs/tutorials/): Step-by-step guides for beginners
+- [How-To Guides](docs/howto/): Solutions to common problems
+- [Reference](docs/reference/): API documentation
+- [Explanation](docs/explanation/): Architecture and design decisions
+- [Examples](docs/examples.py): Code examples with doctests
+
+## Development Status
+
+### Completed Features
+
+- [x] LLM Provider System
+
+  - Multiple provider support
+  - Configuration management
+  - Error handling
+  - Unit and integration tests
+
+- [x] Core Agent System
+
+  - Task processing pipeline
+  - State management
+  - Logging system
+  - Configuration options
+  - Unit and integration tests
+
+- [x] Documentation
+  - Getting started guide
+  - How-to guides
+  - API reference
+  - Architecture explanation
+  - Code examples
+
+### In Progress
+
+- [ ] CI/CD Pipeline
+
+  - Automated testing (pytest and doctest)
+  - Test coverage monitoring (75% minimum)
+  - Documentation completeness checks
+  - Strict typing and linting (ruff)
+
+- [ ] Task Breakdown System
+  - Standardized TODO format
+  - Task prioritization
+  - Dependency tracking
+  - Validation system
+
+### Planned Features
+
+- [ ] Multi-Agent System
+
+  - Dynamic agent creation
+  - Agent lifecycle management
+  - Inter-agent communication
+  - Resource management
+
+- [ ] Task Delegation
+
+  - Hierarchical problem solving
+  - Progress tracking
+  - Result aggregation
+  - Error recovery
+
+- [ ] Vector Database Integration
+
+  - Codebase storage
+  - RAG implementation
+  - Query optimization
+  - Automatic updates
+
+- [ ] End-to-End Testing
+  - Comprehensive test scenarios
+  - Performance benchmarks
+  - Reliability testing
+  - Stress testing
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `pytest`
+5. Run doctests: `python -m doctest docs/examples.py -v`
+6. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Project Status
+
+This project is under active development. Check the [Issues](https://github.com/yourusername/Agentic_problem_solver/issues) page for current tasks and planned features.
