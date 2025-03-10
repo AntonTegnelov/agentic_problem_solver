@@ -1,15 +1,18 @@
 """Base agent module."""
+from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.agent_types.agent_types import Agent
 from src.agent.agent_types.agent_types import Result as StepResult
 from src.agent.state.base import AgentState
 from src.config.agent import AgentConfig
 from src.utils.log_utils import setup_logging
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 

@@ -1,13 +1,10 @@
 """Gemini LLM provider implementation."""
+from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import google.generativeai as genai
-from google.generativeai import GenerativeModel
-from google.generativeai.types import AsyncGenerateContentResponse
 
-from src.agent.agent_types.agent_types import Message
 from src.config.utils import load_env_var
 from src.exceptions import (
     APIKeyError,
@@ -19,8 +16,16 @@ from src.exceptions import (
 )
 from src.llm_providers.config.provider_config import GeminiConfig
 from src.llm_providers.providers.base import BaseLLMProvider
-from src.llm_providers.type_defs import GenerationConfig
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from google.generativeai import GenerativeModel
+    from google.generativeai.types import AsyncGenerateContentResponse
+
+    from src.agent.agent_types.agent_types import Message
+    from src.llm_providers.type_defs import GenerationConfig
 
 logger = get_logger(__name__)
 
@@ -49,8 +54,12 @@ class GeminiProvider(BaseLLMProvider):
             config: Provider configuration.
 
         """
-        super().__init__(config)
+        # Store the config directly
+        self.config = config
         self._config = config
+        # Validate the config
+        self._validate_config()
+        # Initialize the provider
         self._initialize()
 
     def _create_config(self, api_key: str | None = None) -> GeminiConfig:
@@ -66,12 +75,16 @@ class GeminiProvider(BaseLLMProvider):
             APIKeyError: If API key is not found.
 
         """
-        if api_key:
-            return GeminiConfig(api_key=api_key)
-
         try:
+            if api_key:
+                # Load model from environment
+                model = load_env_var("GEMINI_MODEL")
+                return GeminiConfig(api_key=api_key, model=model)
+
+            # Load both API key and model from environment
             api_key = load_env_var("GEMINI_API_KEY")
-            return GeminiConfig(api_key=api_key)
+            model = load_env_var("GEMINI_MODEL")
+            return GeminiConfig(api_key=api_key, model=model)
         except ConfigError as e:
             raise APIKeyError(str(e)) from e
 

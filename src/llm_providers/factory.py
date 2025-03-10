@@ -1,6 +1,10 @@
 """LLM provider factory."""
 
-from typing import ClassVar
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, ClassVar
+
+from typing_extensions import Self
 
 from src.config.utils import load_config_from_env
 from src.exceptions import (
@@ -10,12 +14,14 @@ from src.exceptions import (
     InvalidModelError,
     RetryError,
 )
-from src.llm_providers.config.provider_config import ProviderConfig
-from src.llm_providers.lifecycle import ProviderLifecycle, ProviderState
+from src.llm_providers.lifecycle import ProviderLifecycle
 from src.llm_providers.providers.base import BaseLLMProvider
 from src.llm_providers.providers.gemini import GeminiProvider
-from src.llm_providers.selection import ProviderCapability, ProviderSelector
+from src.llm_providers.selection import ProviderSelector
 from src.llm_providers.version import ProviderVersion
+
+if TYPE_CHECKING:
+    from src.llm_providers.config.provider_config import ProviderConfig
 
 # Error messages
 PROVIDER_NOT_FOUND = "Provider {name} not found"
@@ -25,9 +31,7 @@ UNSUPPORTED_PROVIDER = "Unsupported provider: {}"
 INVALID_PROVIDER = "Invalid provider class: {name}. Must implement BaseLLMProvider"
 PROVIDER_EXISTS = "Provider {name} already registered"
 PROVIDER_CONFIG_ERROR = "Failed to create config for provider {name}: {error}"
-VERSION_MISMATCH = (
-    "Provider {name} version {version} does not match required version {required}"
-)
+VERSION_MISMATCH = "Provider {name} version {version} does not match required version {required}"
 PROVIDER_NOT_READY = "Provider {name} is not ready (state: {state})"
 PROVIDER_UNHEALTHY = "Provider {name} is unhealthy: {error}"
 NO_SUITABLE_PROVIDER = "No suitable provider found for capabilities: {capabilities}"
@@ -49,7 +53,7 @@ class ProviderNotFoundError(ValueError):
 class LLMProviderFactory:
     """Factory for creating LLM providers."""
 
-    _instance: ClassVar[type["LLMProviderFactory"] | None] = None
+    _instance: ClassVar[type[LLMProviderFactory] | None] = None
     _initialized: ClassVar[bool] = False
     _providers: ClassVar[dict[str, type[BaseLLMProvider]]] = {}
     _current_provider: ClassVar[BaseLLMProvider | None] = None
@@ -59,7 +63,7 @@ class LLMProviderFactory:
     _provider_lifecycles: ClassVar[dict[str, ProviderLifecycle]] = {}
     _selector: ClassVar[ProviderSelector | None] = None
 
-    def __new__(cls) -> "LLMProviderFactory":
+    def __new__(cls) -> Self:
         """Create or return singleton instance.
 
         Returns:
@@ -191,104 +195,163 @@ class LLMProviderFactory:
         """Load provider configuration.
 
         Args:
-            name: Provider name.
+            name: Provider name
 
         Returns:
-            Provider configuration.
+            Provider configuration
 
         Raises:
-            ConfigError: If configuration loading fails.
+            ConfigError: If configuration loading fails
 
         """
         try:
-            provider_cls = cls.get_provider(name)
-            dummy_instance = provider_cls(
-                None,
-            )  # Create temporary instance to get config class
+            # Create dummy instance to get config class
+            dummy_instance = cls.get_provider(name)(None)  # type: ignore[arg-type]
             config_keys = dummy_instance.config.required_keys()
             env_vars = load_config_from_env(config_keys)
             return dummy_instance.config.__class__.from_env(env_vars)
-        except Exception as e:
-            raise ConfigError(PROVIDER_CONFIG_ERROR.format(name=name, error=str(e)))
+        except (KeyError, ValueError, AttributeError) as e:
+            raise ConfigError(PROVIDER_CONFIG_ERROR.format(name=name, error=str(e))) from e
 
-    def set_provider(
-        self,
-        name: str | None = None,
-        capabilities: list[ProviderCapability] | None = None,
-        temperature: float | None = None,
-    ) -> None:
-        """Set the active provider.
+    def _create_provider_config(self, name: str) -> ProviderConfig:
+        """Create provider configuration.
 
         Args:
-            name: Optional provider name. If not provided, selects based on capabilities.
-            capabilities: Required capabilities.
-            temperature: Required temperature setting.
+            name: Provider name
+
+        Returns:
+            Provider configuration
 
         Raises:
-            ValueError: If provider not supported.
-            ConfigError: If provider configuration is invalid.
-            EmptyResponseError: If provider is unhealthy.
-            TemperatureError: If temperature requirements not met.
+            ConfigError: If configuration creation fails
 
         """
         try:
+            # Create dummy instance to get config class
+            dummy_instance = self._providers[name](None)  # type: ignore[arg-type]
+            config_keys = dummy_instance.config.required_keys()
+            env_vars = load_config_from_env(config_keys)
+            return dummy_instance.config.__class__.from_env(env_vars)
+        except (KeyError, ValueError, AttributeError) as e:
+            raise ConfigError(PROVIDER_CONFIG_ERROR.format(name=name, error=str(e))) from e
+
+    def _get_provider_by_name(
+        self,
+        name: str,
+    ) -> tuple[BaseLLMProvider, ProviderVersion]:
+        """Get provider by name.
+
+        Args:
+            name: Provider name.
+
+        Returns:
+            Tuple of provider and version.
+
+        Raises:
+            ValueError: If provider name is invalid.
+            ConfigError: If provider version is missing.
+
+        """
+        if name not in self._providers:
+            raise ValueError(UNSUPPORTED_PROVIDER.format(name))
+
+        provider = self._providers[name]
+        version = self._provider_versions.get(name)
+        if not version:
+            msg = f"No version information for provider {name}"
+            raise ConfigError(msg)
+
+        return provider, version
+
+    def _get_provider_by_capabilities(
+        self,
+        capabilities: list[str] | None = None,
+        temperature: float | None = None,
+    ) -> tuple[BaseLLMProvider, ProviderVersion]:
+        """Get provider by capabilities.
+
+        Args:
+            capabilities: Required capabilities.
+            temperature: Temperature setting.
+
+        Returns:
+            Tuple of provider and version.
+
+        Raises:
+            ConfigError: If provider selector is not initialized.
+
+        """
+        if not self._selector:
+            msg = "Provider selector not initialized"
+            raise ConfigError(msg)
+
+        lifecycle = self._selector.select_provider(capabilities, temperature)
+        return lifecycle.provider, lifecycle.version
+
+    def _validate_provider_health(
+        self,
+        lifecycle: ProviderLifecycle,
+        name: str | None = None,
+    ) -> None:
+        """Validate provider health.
+
+        Args:
+            lifecycle: Provider lifecycle.
+            name: Provider name.
+
+        Raises:
+            EmptyResponseError: If provider is unhealthy.
+
+        """
+        if not lifecycle.check_health():
+            raise EmptyResponseError(
+                PROVIDER_UNHEALTHY.format(
+                    name=name or lifecycle.provider.__class__.__name__,
+                    error=lifecycle.health.last_error or "Unknown error",
+                ),
+            )
+
+    def get_provider_instance(
+        self,
+        name: str | None = None,
+        capabilities: list[str] | None = None,
+        temperature: float | None = None,
+    ) -> BaseLLMProvider:
+        """Get provider instance.
+
+        Args:
+            name: Provider name.
+            capabilities: Required capabilities.
+            temperature: Temperature setting.
+
+        Returns:
+            Provider instance.
+
+        Raises:
+            ConfigError: If provider creation fails.
+
+        """
+        try:
+            # Get provider and version
             if name:
-                if name not in self._providers:
-                    raise ValueError(UNSUPPORTED_PROVIDER.format(name))
-
-                # Use specific provider
-                if name in self._provider_lifecycles:
-                    lifecycle = self._provider_lifecycles[name]
-                else:
-                    # Create new provider instance
-                    config = self._load_provider_config(name)
-                    provider_cls = self._providers[name]
-                    provider = provider_cls(config.api_key)
-
-                    # Create and initialize lifecycle
-                    version = self._provider_versions.get(name)
-                    if not version:
-                        msg = f"No version information for provider {name}"
-                        raise ConfigError(msg)
-
-                    lifecycle = ProviderLifecycle(provider, version)
-                    lifecycle.initialize()
-                    self._provider_lifecycles[name] = lifecycle
-
+                provider, version = self._get_provider_by_name(name)
             else:
-                # Select provider based on capabilities
-                if not self._selector:
-                    msg = "Provider selector not initialized"
-                    raise ConfigError(msg)
+                provider, version = self._get_provider_by_capabilities(capabilities, temperature)
 
-                lifecycle = self._selector.select_provider(capabilities, temperature)
+            # Create lifecycle
+            lifecycle = ProviderLifecycle(provider, version)
 
             # Validate provider health
-            if not lifecycle.check_health():
-                raise EmptyResponseError(
-                    PROVIDER_UNHEALTHY.format(
-                        name=name or lifecycle.provider.__class__.__name__,
-                        error=lifecycle.health.last_error or "Unknown error",
-                    ),
-                )
+            self._validate_provider_health(lifecycle, name)
 
             # Set as current provider
             self._current_provider = lifecycle.provider
-            self._provider_name = name or lifecycle.provider.__class__.__name__
-            self._provider_configs[self._provider_name] = lifecycle.provider.config
-
-            # Update load distribution
-            if self._selector:
-                self._selector.update_load_distribution(
-                    self._provider_name,
-                    lifecycle.stats.requests_per_minute,
-                )
-
-        except Exception as e:
-            if name and name in self._provider_lifecycles:
-                self._provider_lifecycles[name].state = ProviderState.ERROR
-            msg = f"Failed to initialize provider {name}: {e!s}"
-            raise ConfigError(msg)
+            self._provider_lifecycles[name] = lifecycle
+        except (ValueError, ConfigError, EmptyResponseError) as e:
+            msg = f"Failed to get provider: {e!s}"
+            raise ConfigError(msg) from e
+        else:
+            return self._current_provider
 
     def get_fallback_provider(self) -> BaseLLMProvider:
         """Get next provider in fallback chain.
@@ -338,80 +401,80 @@ class LLMProviderFactory:
             self._selector.reset_fallback_chain()
 
     @classmethod
-    def create_provider(cls, name: str, api_key: str | None = None) -> BaseLLMProvider:
+    def create_provider(
+        cls,
+        name: str,
+        config: ProviderConfig | None = None,
+    ) -> BaseLLMProvider:
         """Create provider instance.
 
         Args:
             name: Provider name.
-            api_key: Optional API key. If not provided, loaded from config.
+            config: Provider configuration.
 
         Returns:
             Provider instance.
 
         Raises:
+            ConfigError: If provider creation fails.
             APIKeyError: If API key is missing.
-            ConfigError: If provider configuration is invalid.
-            ProviderNotFoundError: If provider not found.
 
         """
-        if name not in cls._providers:
-            raise ProviderNotFoundError(name)
+
+        def _raise_unsupported_provider(name: str) -> None:
+            raise ValueError(UNSUPPORTED_PROVIDER.format(name))
+
+        def _raise_api_key_error() -> None:
+            raise APIKeyError(API_KEY_REQUIRED)
 
         try:
-            if api_key is None:
-                config = cls._load_provider_config(name)
-                api_key = config.api_key
+            # Get provider class
+            if name not in cls._providers:
+                _raise_unsupported_provider(name)
 
-            if not api_key:
-                raise APIKeyError(API_KEY_REQUIRED)
+            # Create configuration if not provided
+            if not config:
+                api_key = load_config_from_env(["API_KEY"])
+                if not api_key:
+                    _raise_api_key_error()
 
-            provider_cls = cls._providers[name]
-            provider = provider_cls(api_key)
+                provider_cls = cls._providers[name]
+                config = provider_cls.create_config(api_key)
 
-            # Create and initialize lifecycle
-            version = cls._provider_versions.get(name)
-            if version:
-                lifecycle = ProviderLifecycle(provider, version)
-                lifecycle.initialize()
-                cls._provider_lifecycles[name] = lifecycle
+            # Create provider instance
+            provider = cls._providers[name](config)
 
-            return provider
+            # Create lifecycle
+            version = provider.get_version()
+            lifecycle = ProviderLifecycle(provider, version)
 
+            # Store in cache
+            cls._provider_lifecycles[name] = lifecycle
         except APIKeyError:
             raise
         except Exception as e:
-            if name in cls._provider_lifecycles:
-                cls._provider_lifecycles[name].state = ProviderState.ERROR
             msg = f"Failed to create provider {name}: {e!s}"
-            raise ConfigError(msg)
+            raise ConfigError(msg) from e
+        else:
+            return provider
 
     @classmethod
     def cleanup_provider(cls, name: str) -> None:
         """Clean up provider resources.
 
         Args:
-            name: Provider name.
+            name: Provider name
 
         Raises:
-            ProviderNotFoundError: If provider not found.
+            ConfigError: If cleanup fails
 
         """
-        if name not in cls._provider_lifecycles:
-            raise ProviderNotFoundError(name)
-
         try:
-            lifecycle = cls._provider_lifecycles[name]
-            lifecycle.cleanup()
-
-            if name == cls._provider_name:
-                cls._current_provider = None
-                cls._provider_name = None
-
+            # Remove provider lifecycle
             del cls._provider_lifecycles[name]
-
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             msg = f"Failed to clean up provider {name}: {e!s}"
-            raise ConfigError(msg)
+            raise ConfigError(msg) from e
 
 
 # Register default providers

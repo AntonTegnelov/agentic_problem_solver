@@ -1,5 +1,7 @@
 """Provider version management."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -24,7 +26,7 @@ class Version:
         return f"{self.major}.{self.minor}.{self.patch}"
 
     @classmethod
-    def from_string(cls, version_str: str) -> "Version":
+    def from_string(cls, version_str: str) -> Version:
         """Create version from string.
 
         Args:
@@ -42,9 +44,9 @@ class Version:
             return cls(major=major, minor=minor, patch=patch)
         except (ValueError, AttributeError) as e:
             msg = f"Invalid version format: {version_str}. Error: {e!s}"
-            raise InvalidModelError(msg)
+            raise InvalidModelError(msg) from e
 
-    def __lt__(self, other: "Version") -> bool:
+    def __lt__(self, other: Version) -> bool:
         """Compare versions.
 
         Args:
@@ -90,7 +92,7 @@ class ProviderVersion:
     default_model: str
 
     # Known provider versions
-    GEMINI_V1: ClassVar["ProviderVersion"]
+    GEMINI_V1: ClassVar[ProviderVersion]
 
     def get_model(self, model_name: str | None = None) -> ModelVersion:
         """Get model version.
@@ -116,24 +118,23 @@ class ProviderVersion:
 
         return self.supported_models[model_name]
 
-    def supports_capability(
-        self, capability: str, model_name: str | None = None,
-    ) -> bool:
-        """Check if provider supports capability.
+    def has_capability(self, model_name: str, capability: str) -> bool:
+        """Check if model has capability.
 
         Args:
+            model_name: Model name.
             capability: Capability to check.
-            model_name: Optional model name. If not provided, checks default model.
 
         Returns:
-            True if capability is supported.
+            True if model has capability, False otherwise.
 
         """
         try:
             model = self.get_model(model_name)
-            return capability in model.capabilities
         except InvalidModelError:
             return False
+        else:
+            return capability in model.capabilities
 
 
 # Define known provider versions
@@ -141,28 +142,54 @@ ProviderVersion.GEMINI_V1 = ProviderVersion(
     name="gemini",
     version=Version(1, 0, 0),
     supported_models={
-        "gemini-pro": ModelVersion(
-            name="gemini-pro",
-            version=Version(1, 0, 0),
+        "gemini-2.0-flash-lite": ModelVersion(
+            name="gemini-2.0-flash-lite",
+            version=Version(2, 0, 0),
             capabilities=[
                 "text-generation",
                 "chat",
                 "code-generation",
                 "code-analysis",
+                "multimodal",
             ],
             min_provider_version=Version(1, 0, 0),
         ),
-        "gemini-pro-vision": ModelVersion(
-            name="gemini-pro-vision",
-            version=Version(1, 0, 0),
+        "gemini-2.0-flash": ModelVersion(
+            name="gemini-2.0-flash",
+            version=Version(2, 0, 0),
             capabilities=[
                 "text-generation",
                 "chat",
-                "image-analysis",
+                "code-generation",
+                "code-analysis",
+                "multimodal",
+            ],
+            min_provider_version=Version(1, 0, 0),
+        ),
+        "gemini-1.5-flash": ModelVersion(
+            name="gemini-1.5-flash",
+            version=Version(1, 5, 0),
+            capabilities=[
+                "text-generation",
+                "chat",
+                "code-generation",
+                "code-analysis",
+                "multimodal",
+            ],
+            min_provider_version=Version(1, 0, 0),
+        ),
+        "gemini-1.5-pro": ModelVersion(
+            name="gemini-1.5-pro",
+            version=Version(1, 5, 0),
+            capabilities=[
+                "text-generation",
+                "chat",
+                "code-generation",
+                "code-analysis",
                 "multimodal",
             ],
             min_provider_version=Version(1, 0, 0),
         ),
     },
-    default_model="gemini-pro",
+    default_model="gemini-2.0-flash-lite",
 )

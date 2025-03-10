@@ -1,13 +1,17 @@
 """LLM provider factory utilities."""
+from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from dotenv import load_dotenv
+from typing_extensions import Self
 
-from src.llm_providers.providers.base import BaseLLMProvider
 from src.llm_providers.providers.gemini import GeminiProvider
+
+if TYPE_CHECKING:
+    from src.llm_providers.providers.base import BaseLLMProvider
 
 # Error messages
 API_KEY_ERROR = "GEMINI_API_KEY not found in .env file"
@@ -33,11 +37,11 @@ class ProviderNotFoundError(ValueError):
 class LLMProviderFactory:
     """Factory for creating LLM providers."""
 
-    _instance: ClassVar[type["LLMProviderFactory"] | None] = None
+    _instance: ClassVar[type[LLMProviderFactory] | None] = None
     _initialized: ClassVar[bool] = False
     _providers: ClassVar[dict[str, type[BaseLLMProvider]]] = {}
 
-    def __new__(cls) -> "LLMProviderFactory":
+    def __new__(cls) -> Self:
         """Create or return singleton instance.
 
         Returns:

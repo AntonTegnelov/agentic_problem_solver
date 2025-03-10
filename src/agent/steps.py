@@ -1,11 +1,14 @@
 """Agent step processing module."""
+from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
-from .agent_types import StepKwargs, StepResult
 from .state.base import AgentState, AgentStatus
+
+if TYPE_CHECKING:
+    from .agent_types import StepKwargs, StepResult
 
 T = TypeVar("T")
 

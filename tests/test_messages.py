@@ -8,6 +8,7 @@ from src.agent.agent_types.agent_types import Message, StepResult
 from src.exceptions import ConfigError, RetryError
 from src.messages import (
     MessagePriority,
+    MessageRouter,
     create_ai_message,
     create_human_message,
     create_message_chain,
@@ -16,7 +17,10 @@ from src.messages import (
     set_message_metadata,
     validate_message_content,
 )
-from src.messages.routing import MessageRouter
+
+
+class TestProcessingError(Exception):
+    """Error raised during test message processing."""
 
 
 class MockAgent:
@@ -42,12 +46,12 @@ class MockAgent:
             Step result.
 
         Raises:
-            Exception: If should_fail is True.
+            TestProcessingError: If should_fail is True.
 
         """
         if self.should_fail:
             msg = "Processing failed"
-            raise Exception(msg)
+            raise TestProcessingError(msg)
         self.processed_messages.append(message)
         return StepResult(success=True, message="Success")
 

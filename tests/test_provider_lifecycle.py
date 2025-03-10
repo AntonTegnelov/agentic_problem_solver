@@ -1,4 +1,5 @@
 """Test provider lifecycle management."""
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -23,11 +24,11 @@ class MockProvider(BaseLLMProvider):
 
     async def generate(self, prompt: str) -> str:
         """Generate text from prompt."""
-        return "test response"
+        return f"test response for: {prompt}"
 
     async def generate_stream(self, prompt: str) -> str:
         """Generate text from prompt as stream."""
-        yield "test response"
+        yield f"test response for: {prompt}"
 
 
 def create_test_version() -> ProviderVersion:
@@ -126,9 +127,9 @@ def test_provider_lifecycle_cleanup() -> None:
     lifecycle = ProviderLifecycle(provider, version)
 
     # Add some test resources
-    lifecycle._resources["test"] = "test"
+    lifecycle.add_test_resource("test", "test")
 
     # Test cleanup
     lifecycle.cleanup()
-    assert not lifecycle._resources
+    assert not lifecycle.has_resources()
     assert lifecycle.state == ProviderState.SHUTDOWN

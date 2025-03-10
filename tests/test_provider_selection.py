@@ -1,4 +1,5 @@
 """Test provider selection system."""
+from __future__ import annotations
 
 import pytest
 
@@ -8,6 +9,14 @@ from src.llm_providers.config.provider_config import ProviderConfig
 from src.llm_providers.lifecycle import ProviderLifecycle, ProviderState
 from src.llm_providers.selection import ProviderCapability, ProviderSelector
 from src.llm_providers.version import ModelVersion, ProviderVersion, Version
+
+
+class TestProcessingError(Exception):
+    """Error raised during test message processing."""
+
+
+class TestGenerationError(Exception):
+    """Error raised during test text generation."""
 
 
 class MockProvider:
@@ -38,7 +47,7 @@ class MockProvider:
         """
         if self.should_fail:
             msg = "Processing failed"
-            raise Exception(msg)
+            raise TestProcessingError(msg)
         self.processed_messages.append(message)
         return StepResult(success=True, message="Success")
 
@@ -63,10 +72,13 @@ class MockProvider:
         Returns:
             Generated text.
 
+        Raises:
+            Exception: If should_fail is True.
+
         """
         if self.should_fail:
             msg = "Generation failed"
-            raise Exception(msg)
+            raise TestGenerationError(msg)
         return f"Response to: {prompt}"
 
     async def generate_stream(self, prompt: str) -> str:
@@ -78,10 +90,13 @@ class MockProvider:
         Returns:
             Generated text stream.
 
+        Raises:
+            Exception: If should_fail is True.
+
         """
         if self.should_fail:
             msg = "Generation failed"
-            raise Exception(msg)
+            raise TestGenerationError(msg)
         yield f"Streaming response to: {prompt}"
 
 

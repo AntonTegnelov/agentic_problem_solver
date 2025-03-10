@@ -1,13 +1,24 @@
 """Provider lifecycle management."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.exceptions import EmptyResponseError
-from src.llm_providers.providers.base import BaseLLMProvider
-from src.llm_providers.version import ProviderVersion
+
+from .config import ConfigError
+from .providers.base import BaseLLMProvider
+from .version import ProviderVersion
+
+if TYPE_CHECKING:
+    from src.llm_providers.providers.base import BaseLLMProvider
+    from src.llm_providers.version import ProviderVersion
+
+# Constants
+MAX_ERROR_RATE = 0.2  # 20% error rate threshold
 
 
 class ProviderState(Enum):
@@ -52,7 +63,7 @@ class ProviderLifecycle:
     version: ProviderVersion
     state: ProviderState = ProviderState.INITIALIZING
     health: HealthStatus = field(
-        default_factory=lambda: HealthStatus(datetime.now(), True),
+        default_factory=lambda: HealthStatus(datetime.now(timezone.utc), is_healthy=True),
     )
     stats: ProviderStats = field(default_factory=ProviderStats)
     _resources: dict[str, Any] = field(default_factory=dict)
@@ -77,37 +88,37 @@ class ProviderLifecycle:
         """Check provider health.
 
         Returns:
-            True if provider is healthy.
+            True if provider is healthy, False otherwise.
 
         """
-        now = datetime.now()
+
+        def _raise_config_error(msg: str) -> None:
+            raise ConfigError(msg)
+
+        now = datetime.now(timezone.utc)
         try:
             # Basic health checks
-            if self.state == ProviderState.ERROR:
-                return False
+            if not self.provider.config:
+                _raise_config_error("Provider configuration missing")
 
-            # Check error rate
-            if self.health.total_requests > 0:
-                error_rate = self.health.failed_requests / self.health.total_requests
-                if error_rate > 0.2:  # More than 20% errors
-                    self.health.is_healthy = False
-                    self.health.last_error = "High error rate"
-                    return False
+            if not self.provider.config.validate():
+                _raise_config_error("Provider configuration invalid")
 
             # Update health status
             self.health.last_check = now
             self.health.is_healthy = True
-            return True
-
-        except Exception as e:
+        except (ConfigError, ValueError) as e:
             self.health.is_healthy = False
             self.health.last_error = str(e)
             return False
+        else:
+            return True
 
     def update_stats(
         self,
         tokens: int = 0,
         cost: float = 0.0,
+        *,
         success: bool = True,
         error: str | None = None,
     ) -> None:
@@ -120,7 +131,7 @@ class ProviderLifecycle:
             error: Error message if request failed.
 
         """
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # Update request stats
         self.stats.total_tokens += tokens
@@ -142,9 +153,7 @@ class ProviderLifecycle:
 
         # Update averages
         if self.health.total_requests > 0:
-            self.stats.avg_tokens_per_request = (
-                self.stats.total_tokens / self.health.total_requests
-            )
+            self.stats.avg_tokens_per_request = self.stats.total_tokens / self.health.total_requests
 
     def validate_response(self, response: str | None) -> None:
         """Validate provider response.
@@ -173,3 +182,41 @@ class ProviderLifecycle:
             self.health.last_error = f"Cleanup failed: {e!s}"
             self.state = ProviderState.ERROR
             raise
+
+    def record_usage(
+        self,
+        tokens: int = 0,
+        cost: float = 0.0,
+        *,
+        success: bool = True,
+        error: str | None = None,
+    ) -> None:
+        """Record request statistics.
+
+        Args:
+            tokens: Number of tokens used
+            cost: Request cost
+            success: Whether request was successful
+            error: Error message if request failed
+
+        """
+        now = datetime.now(timezone.utc)
+
+        # Update request stats
+        self.stats.total_requests += 1
+        self.stats.total_tokens += tokens
+        self.stats.total_cost += cost
+
+        if success:
+            self.stats.successful_requests += 1
+        else:
+            self.stats.failed_requests += 1
+            self.stats.last_error = error or "Unknown error"
+
+        # Update request rate
+        if self.stats.last_request:
+            time_diff = (now - self.stats.last_request).total_seconds()
+            if time_diff > 0:
+                self.stats.requests_per_minute = 60 / time_diff
+
+        self.stats.last_request = now

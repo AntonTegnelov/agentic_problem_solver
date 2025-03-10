@@ -93,7 +93,8 @@ def solve(
         # Create provider
         try:
             api_key = load_env_var("GEMINI_API_KEY")
-            provider_config = GeminiConfig(api_key=api_key)
+            model = load_env_var("GEMINI_MODEL")
+            provider_config = GeminiConfig(api_key=api_key, model=model)
             provider = GeminiProvider(config=provider_config)
         except ValueError as e:
             if "API key" in str(e):
@@ -135,7 +136,8 @@ def process_message(message: str) -> str:
     """
     try:
         api_key = load_env_var("GEMINI_API_KEY")
-        provider_config = GeminiConfig(api_key=api_key)
+        model = load_env_var("GEMINI_MODEL")
+        provider_config = GeminiConfig(api_key=api_key, model=model)
         provider = GeminiProvider(config=provider_config)
         agent = SolverAgent(provider=provider)
         return agent.process(message)

@@ -36,10 +36,18 @@ include = ["src*"]
 exclude = ["tests*"]
 
 [tool.ruff]
-target-version = "py312"
-line-length = 88
+line-length = 100
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["ALL"]
 extend-safe-fixes = ["ALL"]
 ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101",    # Use of assert in tests
+    "PLR2004", # Magic numbers in tests
+    "FBT001",  # Boolean positional arg in function definition
+    "FBT002",  # Boolean default value in function definition
+]

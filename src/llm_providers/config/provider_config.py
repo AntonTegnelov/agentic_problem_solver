@@ -1,5 +1,7 @@
 """Provider configuration module."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
@@ -23,40 +25,51 @@ class ProviderConfig(BaseConfig):
     # Provider version information
     PROVIDER_VERSION: ClassVar[ProviderVersion | None] = None
 
-    def validate(self) -> None:
+    def validate(self) -> bool:
         """Validate configuration.
+
+        Returns:
+            True if configuration is valid.
 
         Raises:
             ConfigError: If configuration is invalid.
-            InvalidModelError: If model is not supported.
 
         """
-        if not self.api_key:
-            msg = "API key is required"
-            raise ConfigError(msg)
 
-        if not self.model:
-            msg = "Model is required"
-            raise ConfigError(msg)
-
-        if self.PROVIDER_VERSION is None:
-            msg = "Provider version not set"
-            raise ConfigError(msg)
-
-        # Validate model is supported
-        try:
-            model_version = self.PROVIDER_VERSION.get_model(self.model)
-            if self.version and self.version < model_version.min_provider_version:
-                msg = (
-                    f"Provider version {self.version} is too old for model {self.model}. "
-                    f"Minimum required version is {model_version.min_provider_version}"
-                )
-                raise InvalidModelError(
-                    msg,
-                )
-        except InvalidModelError as e:
-            msg = f"Invalid model configuration: {e!s}"
+        def _raise_invalid_model_error(msg: str) -> None:
             raise InvalidModelError(msg)
+
+        def _raise_value_error(msg: str) -> None:
+            raise ValueError(msg)
+
+        try:
+            # Validate model version
+            model_version = self.get_model_version()
+            if model_version.min_provider_version > self.provider_version:
+                msg = (
+                    f"Model {self.model_name} requires provider version "
+                    f"{model_version.min_provider_version} or higher. "
+                    f"Current version is {self.provider_version}"
+                )
+                _raise_invalid_model_error(msg)
+
+            # Validate parameters
+            if not 0 <= self.temperature <= 1:
+                _raise_value_error("Temperature must be between 0 and 1")
+
+            if self.max_output_tokens <= 0:
+                _raise_value_error("Max tokens must be positive")
+
+            if not 0 <= self.top_p <= 1:
+                _raise_value_error("Top P must be between 0 and 1")
+
+            if self.top_k <= 0:
+                _raise_value_error("Top K must be positive")
+        except (ValueError, KeyError, InvalidModelError) as e:
+            msg = f"Invalid configuration: {e!s}"
+            raise ConfigError(msg) from e
+        else:
+            return True
 
     def required_keys(self) -> list[str]:
         """Get required environment variable keys.
@@ -91,37 +104,54 @@ class GeminiConfig(ProviderConfig):
     # Provider version information
     PROVIDER_VERSION = ProviderVersion.GEMINI_V1
 
-    def validate(self) -> None:
+    def validate(self) -> bool:
         """Validate configuration.
+
+        Returns:
+            True if configuration is valid.
 
         Raises:
             ConfigError: If configuration is invalid.
 
         """
-        try:
-            super().validate()
 
+        def _raise_invalid_model_error(msg: str) -> None:
+            raise InvalidModelError(msg)
+
+        def _raise_value_error(msg: str) -> None:
+            raise ValueError(msg)
+
+        try:
+            # Validate model version
+            model_version = self.get_model_version()
+            if model_version.min_provider_version > self.provider_version:
+                msg = (
+                    f"Model {self.model_name} requires provider version "
+                    f"{model_version.min_provider_version} or higher. "
+                    f"Current version is {self.provider_version}"
+                )
+                _raise_invalid_model_error(msg)
+
+            # Validate parameters
             if not 0 <= self.temperature <= 1:
-                msg = "Temperature must be between 0 and 1"
-                raise ValueError(msg)
+                _raise_value_error("Temperature must be between 0 and 1")
 
             if self.max_output_tokens <= 0:
-                msg = "Max tokens must be positive"
-                raise ValueError(msg)
+                _raise_value_error("Max tokens must be positive")
 
             if not 0 <= self.top_p <= 1:
-                msg = "Top P must be between 0 and 1"
-                raise ValueError(msg)
+                _raise_value_error("Top P must be between 0 and 1")
 
             if self.top_k <= 0:
-                msg = "Top K must be positive"
-                raise ValueError(msg)
-
-        except ValueError as e:
-            raise ConfigError(str(e))
+                _raise_value_error("Top K must be positive")
+        except (ValueError, KeyError, InvalidModelError) as e:
+            msg = f"Invalid configuration: {e!s}"
+            raise ConfigError(msg) from e
+        else:
+            return True
 
     @classmethod
-    def from_env(cls, env_vars: dict[str, str]) -> "GeminiConfig":
+    def from_env(cls, env_vars: dict[str, str]) -> GeminiConfig:
         """Create config from environment variables."""
         try:
             return cls(
@@ -135,4 +165,4 @@ class GeminiConfig(ProviderConfig):
             )
         except (KeyError, ValueError) as e:
             msg = f"Invalid configuration: {e!s}"
-            raise ConfigError(msg)
+            raise ConfigError(msg) from e

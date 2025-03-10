@@ -1,15 +1,19 @@
 """Solver agent module."""
+from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from src.agent.agent_types.agent_types import Message
 from src.agent.base import BaseAgent
-from src.agent.state.base import AgentState
 from src.common_types.enums import MessageRole
-from src.config.agent import AgentConfig
-from src.llm_providers.interface import LLMProvider
 from src.prompts import get_step_prompt
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from src.agent.state.base import AgentState
+    from src.config.agent import AgentConfig
+    from src.llm_providers.interface import LLMProvider
 
 T = TypeVar("T")
 

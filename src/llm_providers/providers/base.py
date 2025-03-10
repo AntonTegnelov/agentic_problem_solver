@@ -1,10 +1,13 @@
 """Base provider interface."""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from src.llm_providers.config.provider_config import ProviderConfig
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from src.llm_providers.config.provider_config import ProviderConfig
 
 
 @runtime_checkable

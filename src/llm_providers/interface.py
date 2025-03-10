@@ -1,10 +1,13 @@
 """LLM provider interface definitions."""
+from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from src.agent.agent_types.agent_types import Message
-from src.llm_providers.type_defs import GenerationConfig
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from src.agent.agent_types.agent_types import Message
+    from src.llm_providers.type_defs import GenerationConfig
 
 
 @runtime_checkable

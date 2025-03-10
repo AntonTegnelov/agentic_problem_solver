@@ -1,19 +1,26 @@
 """Message routing and priority handling."""
 
-import asyncio
-from collections.abc import Callable, Coroutine
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
+from __future__ import annotations
 
-from src.agent.agent_types.agent_types import Agent, Message, StepResult
+import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Callable
+
+from src.agent.errors import AgentError
 from src.exceptions import RetryError
+from src.llm_providers.config.errors import ConfigError
 from src.messages import (
     MessageChain,
     MessagePriority,
     get_message_metadata,
     set_message_metadata,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
+    from src.agent.agent_types.agent_types import Agent, Message, StepResult
 
 
 @dataclass
@@ -95,6 +102,69 @@ class MessageRouter:
 
         return results
 
+    async def _try_process_once(
+        self,
+        process_fn: Callable[[Message], Coroutine[Any, Any, StepResult]],
+        message: Message,
+        attempt: int,
+    ) -> StepResult:
+        """Try to process message once.
+
+        Args:
+            process_fn: Message processing function.
+            message: Message to process.
+            attempt: Current attempt number.
+
+        Returns:
+            Step result from processing.
+
+        Raises:
+            ConfigError: If processing fails.
+            ValueError: If processing fails.
+            AgentError: If processing fails.
+
+        """
+        try:
+            return await process_fn(message)
+        except (ConfigError, ValueError, AgentError):
+            # Add retry metadata
+            set_message_metadata(message, "retries", attempt)
+            set_message_metadata(
+                message,
+                "last_retry",
+                datetime.now(timezone.utc).isoformat(),
+            )
+            raise
+
+    async def _try_process_once_with_delay(
+        self,
+        process_fn: Callable[[Message], Coroutine[Any, Any, StepResult]],
+        message: Message,
+        attempt: int,
+        *,
+        is_last_attempt: bool,
+    ) -> tuple[bool, StepResult | None, Exception | None]:
+        """Try to process message once with delay on failure.
+
+        Args:
+            process_fn: Message processing function.
+            message: Message to process.
+            attempt: Current attempt number.
+            is_last_attempt: Whether this is the last attempt.
+
+        Returns:
+            Tuple of (success, result, error).
+
+        """
+        try:
+            result = await self._try_process_once(process_fn, message, attempt)
+        except (ConfigError, ValueError, AgentError) as e:
+            if not is_last_attempt:
+                await asyncio.sleep(self.retry_delay)
+            return False, None, e
+        else:
+            return True, result, None
+
     async def _process_with_retry(
         self,
         process_fn: Callable[[Message], Coroutine[Any, Any, StepResult]],
@@ -114,23 +184,17 @@ class MessageRouter:
 
         """
         last_error = None
-        for _ in range(self.retry_count):
-            try:
-                return await process_fn(message)
-            except Exception as e:
-                last_error = e
-                # Add retry metadata
-                retries = get_message_metadata(message, "retries", 0)
-                set_message_metadata(message, "retries", retries + 1)
-                set_message_metadata(
-                    message,
-                    "last_retry",
-                    datetime.now().isoformat(),
-                )
-                # Wait before retry
-                await asyncio.sleep(self.retry_delay)
+        for attempt in range(self.retry_count):
+            is_last_attempt = attempt == self.retry_count - 1
+            success, result, error = await self._try_process_once_with_delay(
+                process_fn,
+                message,
+                attempt + 1,
+                is_last_attempt=is_last_attempt,
+            )
+            if success:
+                return result
+            last_error = error
 
-        msg = (
-            f"Message processing failed after {self.retry_count} retries: {last_error}"
-        )
+        msg = f"Message processing failed after {self.retry_count} retries: {last_error}"
         raise RetryError(msg)

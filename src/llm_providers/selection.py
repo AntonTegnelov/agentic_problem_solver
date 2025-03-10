@@ -1,11 +1,18 @@
 """Provider selection and routing."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.exceptions import ConfigError, RetryError, TemperatureError
 from src.llm_providers.lifecycle import ProviderLifecycle, ProviderState
-from src.llm_providers.version import ProviderVersion
+
+if TYPE_CHECKING:
+    from src.llm_providers.version import ProviderVersion
+
+# Constants
+TEMPERATURE_TOLERANCE = 0.1  # Maximum allowed difference in temperature
 
 
 @dataclass
@@ -116,21 +123,24 @@ class ProviderSelector:
         providers: list[ProviderLifecycle],
         temperature: float,
     ) -> list[ProviderLifecycle]:
-        """Filter providers by temperature requirement.
+        """Filter providers by temperature.
 
         Args:
-            providers: List of providers to filter.
-            temperature: Required temperature.
+            providers: List of provider lifecycles.
+            temperature: Target temperature.
 
         Returns:
-            List of providers supporting the temperature.
+            List of providers matching temperature.
 
         """
         result = []
         for lifecycle in providers:
             if hasattr(lifecycle.provider.config, "temperature"):
                 config_temp = lifecycle.provider.config.temperature
-                if 0 <= temperature <= 1 and abs(config_temp - temperature) <= 0.1:
+                if (
+                    0 <= temperature <= 1
+                    and abs(config_temp - temperature) <= TEMPERATURE_TOLERANCE
+                ):
                     result.append(lifecycle)
         return result
 
