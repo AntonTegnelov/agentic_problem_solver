@@ -1,14 +1,14 @@
 """Gemini LLM provider implementation."""
 
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
-from pathlib import Path
 from typing import ClassVar
 
 import google.generativeai as genai
 from google.generativeai import GenerativeModel
 from google.generativeai.types import AsyncGenerateContentResponse
 
+from src.agent.agent_types.agent_types import Message
+from src.config.utils import load_env_var
 from src.exceptions import (
     APIKeyError,
     ConfigError,
@@ -17,28 +17,15 @@ from src.exceptions import (
     RetryError,
     TemperatureError,
 )
-from src.llm_providers.interface import LLMProvider
+from src.llm_providers.config.provider_config import GeminiConfig
+from src.llm_providers.providers.base import BaseLLMProvider
 from src.llm_providers.type_defs import GenerationConfig
 from src.utils.log_utils import get_logger
-from src.validation import Message
 
 logger = get_logger(__name__)
 
 
-@dataclass
-class GeminiConfig:
-    """Gemini configuration."""
-
-    api_key: str | None = None
-
-    def validate(self) -> None:
-        """Validate configuration."""
-        if not self.api_key:
-            msg = "API key is required"
-            raise APIKeyError(msg)
-
-
-class GeminiProvider(LLMProvider):
+class GeminiProvider(BaseLLMProvider):
     """Gemini provider implementation.
 
     A provider that uses the Google Generative AI API with the Gemini model.
@@ -55,22 +42,38 @@ class GeminiProvider(LLMProvider):
     _config: GeminiConfig | None = None
     _default_model: ClassVar[str] = "gemini-2.0-flash-lite"
 
-    def __init__(
-        self,
-        model: str = "gemini-2.0-flash-lite",
-        api_key: str | None = None,
-    ) -> None:
+    def __init__(self, config: GeminiConfig) -> None:
         """Initialize provider.
 
         Args:
-            model: Model name.
-            api_key: API key.
+            config: Provider configuration.
 
         """
-        super().__init__()
-        self._model_name = model
-        self._config = self._load_config(api_key)
+        super().__init__(config)
+        self._config = config
         self._initialize()
+
+    def _create_config(self, api_key: str | None = None) -> GeminiConfig:
+        """Create provider configuration.
+
+        Args:
+            api_key: Optional API key.
+
+        Returns:
+            Provider configuration.
+
+        Raises:
+            APIKeyError: If API key is not found.
+
+        """
+        if api_key:
+            return GeminiConfig(api_key=api_key)
+
+        try:
+            api_key = load_env_var("GEMINI_API_KEY")
+            return GeminiConfig(api_key=api_key)
+        except ConfigError as e:
+            raise APIKeyError(str(e)) from e
 
     def _initialize(self) -> None:
         """Initialize provider."""
@@ -78,8 +81,17 @@ class GeminiProvider(LLMProvider):
             msg = "Provider not configured"
             raise ConfigError(msg)
 
+        if not self._config.api_key:
+            msg = "API key not found"
+            raise ConfigError(msg)
+
         genai.configure(api_key=self._config.api_key)
-        self._model = genai.GenerativeModel(self._model_name)
+        model_name = self._config.model or self._default_model
+        try:
+            self._model = genai.GenerativeModel(model_name)
+        except Exception as e:
+            msg = f"Failed to initialize model: {e}"
+            raise ConfigError(msg) from e
 
     def _load_config(self, api_key: str | None = None) -> GeminiConfig:
         """Load configuration.
@@ -98,21 +110,11 @@ class GeminiProvider(LLMProvider):
         if api_key:
             return GeminiConfig(api_key=api_key)
 
-        env_path = Path(".env")
-        if not env_path.exists():
-            msg = "No .env file found"
-            raise ConfigError(msg)
-
-        with env_path.open() as f:
-            for line in f:
-                if line.startswith("GEMINI_API_KEY="):
-                    api_key = line.split("=")[1].strip()
-                    break
-            else:
-                msg = "GEMINI_API_KEY not found in .env file"
-                raise APIKeyError(msg)
-
-        return GeminiConfig(api_key=api_key)
+        try:
+            api_key = load_env_var("GEMINI_API_KEY")
+            return GeminiConfig(api_key=api_key)
+        except ConfigError as e:
+            raise APIKeyError(str(e)) from e
 
     def _validate_response(self, response: AsyncGenerateContentResponse) -> None:
         """Validate response.

@@ -5,6 +5,11 @@ from typing import Any, Protocol, TypeVar
 
 from src.agent.agent_types.agent_types import Message
 from src.common_types.enums import AgentStep
+from src.messages import (
+    get_message_at_index,
+    get_metadata_at_index,
+    set_metadata_at_index,
+)
 
 T = TypeVar("T")
 
@@ -80,7 +85,7 @@ class AgentState:
             IndexError: If index is out of range.
 
         """
-        return self.messages[index]
+        return get_message_at_index(self.messages, index)
 
     def get_message_metadata(
         self,
@@ -99,11 +104,7 @@ class AgentState:
             Message metadata value.
 
         """
-        message = self.get_message(index)
-        if hasattr(message, "metadata"):
-            metadata = getattr(message, "metadata", {})
-            return metadata.get(key, default)
-        return default
+        return get_metadata_at_index(self.messages, index, key, default)
 
     def set_message_metadata(
         self,
@@ -119,11 +120,7 @@ class AgentState:
             value: Metadata value.
 
         """
-        message = self.get_message(index)
-        if not hasattr(message, "metadata"):
-            message.metadata = {}
-        metadata = message.metadata
-        metadata[key] = value
+        set_metadata_at_index(self.messages, index, key, value)
 
     def get_context(self, key: str, default: T | None = None) -> T | None:
         """Get context value.

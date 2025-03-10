@@ -29,10 +29,16 @@ To switch between different LLM providers:
 Control the agent's creativity vs determinism:
 
 ```python
-from src.agents.solver_agent import SolverAgent
+from src.agent.solver import SolverAgent
+from src.llm_providers.providers.gemini import GeminiProvider
 
-agent = SolverAgent(config={"temperature": 0.7})  # More creative
-agent = SolverAgent(config={"temperature": 0.2})  # More deterministic
+# Create provider and agent
+provider = GeminiProvider()
+agent = SolverAgent(provider=provider)
+
+# Process a task
+result = agent.process("Create a simple calculator in Python")
+print(result)
 ```
 
 ### Setting Token Limits

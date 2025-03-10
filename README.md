@@ -77,16 +77,16 @@ Available options:
 ### Python API
 
 ```python
-from src.agents.solver_agent import SolverAgent
-from langchain_core.messages import HumanMessage
+from src.agent.solver import SolverAgent
+from src.llm_providers.providers.gemini import GeminiProvider
 
-# Create an agent
-agent = SolverAgent()
+# Create provider and agent
+provider = GeminiProvider()
+agent = SolverAgent(provider=provider)
 
 # Process a task
-message = HumanMessage(content="Write a Python function to calculate factorial")
-response = await agent._process_message_impl(message)
-print(response.content)
+result = agent.process("Create a simple calculator in Python")
+print(result)
 ```
 
 ## Documentation

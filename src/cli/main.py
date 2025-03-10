@@ -6,9 +6,11 @@ from pathlib import Path
 
 import click
 
+from src.agent.solver import SolverAgent
 from src.agent.state.base import InMemoryStateManager
-from src.agents.solver_agent import SolverAgent
 from src.config import AgentConfig
+from src.config.utils import load_env_var
+from src.llm_providers.config.provider_config import GeminiConfig
 from src.llm_providers.providers.gemini import GeminiProvider
 from src.utils.log_utils import setup_logging
 
@@ -90,7 +92,9 @@ def solve(
 
         # Create provider
         try:
-            provider = GeminiProvider(model=model)
+            api_key = load_env_var("GEMINI_API_KEY")
+            provider_config = GeminiConfig(api_key=api_key)
+            provider = GeminiProvider(config=provider_config)
         except ValueError as e:
             if "API key" in str(e):
                 click.echo(API_KEY_ERROR, err=True)
@@ -130,7 +134,10 @@ def process_message(message: str) -> str:
 
     """
     try:
-        agent = SolverAgent()
+        api_key = load_env_var("GEMINI_API_KEY")
+        provider_config = GeminiConfig(api_key=api_key)
+        provider = GeminiProvider(config=provider_config)
+        agent = SolverAgent(provider=provider)
         return agent.process(message)
     except Exception as err:
         logger.exception(MESSAGE_ERROR)
