@@ -13,6 +13,7 @@ class BaseConfig:
 
         Returns:
             Configuration as dictionary.
+
         """
         return {
             k: v.to_dict() if isinstance(v, BaseConfig) else v
@@ -28,6 +29,7 @@ class BaseConfig:
 
         Returns:
             Configuration instance.
+
         """
         return cls(**data)
 
@@ -36,6 +38,7 @@ class BaseConfig:
 
         Args:
             other: Dictionary with updates.
+
         """
         for k, v in other.items():
             if hasattr(self, k):

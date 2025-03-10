@@ -29,6 +29,7 @@ Examples:
     0
     >>> 'Agentic Problem Solver' in result.output
     True
+
 """
 
 import sys
@@ -37,7 +38,7 @@ from src.cli.main import cli
 
 
 def usage() -> None:
-    """Print usage instructions for the CLI.
+    r"""Print usage instructions for the CLI.
 
     Examples:
         >>> usage() # doctest: +NORMALIZE_WHITESPACE
@@ -64,6 +65,7 @@ def usage() -> None:
         <BLANKLINE>
             # Check version information
             python -m src.cli.main version
+
     """
     import click
 
@@ -95,7 +97,7 @@ Examples:
 
 
 def main() -> None:
-    """Entry point for the examples module.
+    r"""Entry point for the examples module.
 
     Examples:
         >>> import sys
@@ -128,6 +130,7 @@ def main() -> None:
             # Check version information
             python -m src.cli.main version
         Exit code: 1
+
     """
     if len(sys.argv) == 1:
         usage()

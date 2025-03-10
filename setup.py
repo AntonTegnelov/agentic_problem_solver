@@ -1,8 +1,10 @@
 """Setup script for the Agentic Problem Solver package."""
 
+from pathlib import Path
+
 from setuptools import find_packages, setup
 
-with open("README.md", encoding="utf-8") as f:
+with Path("README.md").open(encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
@@ -12,7 +14,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "click>=8.0.0",
-        "python-dotenv",
+        "python-dotenv>=1.0.0",
         "langchain>=0.1.0",
         "langchain-core",
         "google-generativeai>=0.3.0",

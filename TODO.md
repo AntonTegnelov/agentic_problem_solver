@@ -1,5 +1,31 @@
 ##TODO
 
+- URGENT: Fix Code Duplication
+
+  - [x] Consolidate State Management
+
+    - [x] Keep single AgentState class in src/agent/state/base.py
+    - [x] Remove duplicate from src/agent/agent_types/**init**.py
+    - [x] Update all imports to use single source
+
+  - [x] Unify Configuration System
+
+    - [x] Create single configuration hierarchy
+    - [x] Move provider-specific config to be extensions of base config
+    - [x] Implement proper inheritance to avoid duplication
+
+  - [x] Clean up Provider Implementation
+
+    - [x] Move common functionality to base class
+    - [x] Create proper abstractions for error handling and retries
+    - [x] Standardize configuration handling
+
+  - [x] Reorganize Configuration Files
+    - [x] Move src/config.py contents to src/config/defaults.py
+    - [x] Move enums (MessageRoles, AgentStep) to src/types/enums.py
+    - [x] Update all imports to use new file locations
+    - [x] Remove old config.py file
+
 - Install langraph + langchain
 
   - [x] Install langraph
@@ -94,30 +120,37 @@
     - [ ] Reorganize provider directory structure
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Remove method duplication
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Standardize provider interfaces
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Improve configuration handling
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add better error handling
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Create proper provider factory
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Implement provider-specific validation
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
 
   - [ ] Message System Improvements
@@ -125,22 +158,27 @@
     - [ ] Create dedicated messaging module
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Implement proper message schemas
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add message validation
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Create message handlers
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Improve message flow
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add message transformation utilities
 
@@ -149,52 +187,64 @@
     - [ ] Add unit tests for new structure
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Create integration tests
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add documentation for new architecture
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Create architecture diagrams
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add code examples
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Update existing documentation
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
 
   - [ ] Code Quality
     - [ ] Run type checking
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Fix all linter warnings
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add proper error messages
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Improve logging
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Add performance monitoring
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
     - [ ] Create debug utilities
       - [ ] Do the task
       - [ ] ruff check .
+      - [ ] try running APS solve "say hello"
       - [ ] add, commit and push git
 
 - create a top level agent that recieves a prompt

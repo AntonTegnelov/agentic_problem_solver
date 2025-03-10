@@ -1,181 +1,138 @@
-"""Base agent implementation."""
+"""Base agent module."""
 
+import logging
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator
+from typing import Any, TypeVar
 
-from src.config import AgentConfig
-from src.llm_providers import LLMProviderFactory
+from src.agent.agent_types.agent_types import Agent
+from src.agent.agent_types.agent_types import Result as StepResult
+from src.agent.state.base import AgentState
+from src.config.agent import AgentConfig
+from src.utils.log_utils import setup_logging
 
-from .state.base import AgentState, AgentStatus, InMemoryStateManager, StateManager
-from .steps import BaseStepExecutor, Step, StepExecutor
-from .types import StepKwargs, StepResult
+logger = logging.getLogger(__name__)
 
-
-def _check_max_steps(state: AgentState) -> None:
-    """Check if maximum number of steps has been exceeded.
-
-    Args:
-        state: Current agent state.
-
-    Raises:
-        RuntimeError: If maximum number of steps exceeded.
-    """
-    if state.step_count >= state.config.max_steps:
-        error_msg = "Maximum number of steps exceeded"
-        raise RuntimeError(error_msg)
+T = TypeVar("T")
+U = TypeVar("U")
 
 
-def _handle_execution_failure(state: AgentState) -> None:
-    """Handle agent execution failure.
+class BaseAgent(Agent[T, U], ABC):
+    """Base agent implementation."""
 
-    Args:
-        state: Current agent state.
-
-    Raises:
-        RuntimeError: Always raised with error details.
-    """
-    error_msg = f"Agent execution failed: {state.error}"
-    raise RuntimeError(error_msg) from state.error
-
-
-def _handle_execution_success(
-    state: AgentState, results: list[StepResult]
-) -> list[StepResult]:
-    """Handle successful agent execution.
-
-    Args:
-        state: Current agent state.
-        results: List of step results.
-
-    Returns:
-        List of step results.
-    """
-    state.status = AgentStatus.COMPLETED
-    return results
-
-
-class BaseAgent(ABC):
-    """Abstract base class for agents."""
-
-    def __init__(
-        self,
-        config: AgentConfig,
-        steps: Sequence[Step] | None = None,
-        state_manager: StateManager | None = None,
-        step_executor: StepExecutor | None = None,
-    ) -> None:
+    def __init__(self, config: AgentConfig | None = None) -> None:
         """Initialize agent.
 
         Args:
-            config: Agent configuration.
-            steps: Sequence of execution steps.
-            state_manager: State manager instance.
-            step_executor: Step executor instance.
+            config: Optional agent configuration.
+
         """
-        self.config = config
-        self.steps = list(steps) if steps else []
+        self.config = config or AgentConfig()
+        self.state = AgentState()
+        self.step_executor = None
+        self._provider = None
+        self._config = None
+        setup_logging()
 
-        # Initialize components
-        self.llm = LLMProviderFactory().get_provider()
-        self.llm.update_config(config.llm.to_dict())
-
-        # Create default state manager if none provided
-        if state_manager is None:
-            initial_state = AgentState(config=config)
-            state_manager = InMemoryStateManager(state=initial_state)
-        self.state_manager = state_manager
-
-        # Create default step executor if none provided
-        self.step_executor = step_executor or BaseStepExecutor()
-
-    @property
-    def state(self) -> AgentState:
-        """Get current agent state.
-
-        Returns:
-            Current agent state.
-        """
-        return self.state_manager.get_state()
-
-    def add_step(self, step: Step) -> None:
-        """Add execution step.
+    def add_step(self, step: StepResult[T]) -> None:
+        """Add a processing step.
 
         Args:
             step: Step to add.
-        """
-        self.steps.append(step)
 
-    def add_steps(self, steps: Sequence[Step]) -> None:
-        """Add multiple execution steps.
-
-        Args:
-            steps: Steps to add.
         """
-        self.steps.extend(steps)
+        if self.step_executor is None:
+            msg = "Step executor not initialized"
+            raise ValueError(msg)
+        self.step_executor.add_step(step)
 
     def clear_steps(self) -> None:
-        """Clear all execution steps."""
-        self.steps.clear()
+        """Clear all processing steps."""
+        if self.step_executor is None:
+            msg = "Step executor not initialized"
+            raise ValueError(msg)
+        self.step_executor.clear_steps()
 
     @abstractmethod
-    def setup(self) -> None:
-        """Set up agent before execution."""
+    def process(self, input_data: T) -> U:
+        """Process input data.
+
+        Args:
+            input_data: Input data to process.
+
+        Returns:
+            Processed output.
+
+        """
+        ...
 
     @abstractmethod
-    def cleanup(self) -> None:
-        """Clean up after execution."""
-
-    def execute_step(self, step: Step, **kwargs: StepKwargs) -> StepResult:
-        """Execute a single step.
+    async def process_stream(self, input_data: str) -> AsyncGenerator[str, None]:
+        """Process input data and stream results.
 
         Args:
-            step: Step to execute.
-            **kwargs: Additional arguments.
+            input_data: Input data to process.
 
-        Returns:
-            Step result.
+        Yields:
+            Processed output chunks.
+
         """
-        return self.step_executor.execute_step(step, self.state, **kwargs)
+        yield ""
 
-    def execute(self, **kwargs: StepKwargs) -> list[StepResult]:
-        """Execute all steps.
+    def get_message_metadata(
+        self,
+        index: int,
+        key: str,
+        default: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Get metadata from a message at the specified index.
 
         Args:
-            **kwargs: Additional arguments passed to each step.
+            index: Message index.
+            key: Metadata key.
+            default: Default value if key not found.
 
         Returns:
-            List of step results.
+            Message metadata value.
 
-        Raises:
-            RuntimeError: If execution fails.
         """
-        error_msg: str
-        results: list[StepResult] = []
+        return self.state.get_message_metadata(index, key, default)
 
-        try:
-            # Setup
-            self.setup()
-            self.state_manager.reset_state()
+    def set_message_metadata(
+        self,
+        index: int,
+        key: str,
+        value: dict[str, Any],
+    ) -> None:
+        """Set metadata for a message at the specified index.
 
-            # Execute steps
-            for step in self.steps:
-                _check_max_steps(self.state)
-                result = self.execute_step(step, **kwargs)
-                results.append(result)
+        Args:
+            index: Message index.
+            key: Metadata key.
+            value: Metadata value.
 
-                if self.state.status == AgentStatus.FAILED:
-                    _handle_execution_failure(self.state)
+        """
+        self.state.set_message_metadata(index, key, value)
 
-            # Handle success
-            return _handle_execution_success(self.state, results)
+    def update_state(self, **kwargs: dict[str, Any]) -> None:
+        """Update agent state.
 
-        except Exception as err:
-            # Update state on failure
-            self.state.error = err
-            self.state.status = AgentStatus.FAILED
-            error_msg = f"Agent execution failed: {err}"
-            raise RuntimeError(error_msg) from err
+        Args:
+            **kwargs: State updates.
 
-        finally:
-            # Always run cleanup
-            self.cleanup()
+        """
+        for key, value in kwargs.items():
+            setattr(self.state, key, value)
+
+    def clear_state(self) -> None:
+        """Clear agent state."""
+        self.state.clear()
+
+    def update_config(self, **kwargs: dict[str, Any]) -> None:
+        """Update agent configuration.
+
+        Args:
+            **kwargs: Configuration updates.
+
+        """
+        self.config.update(kwargs)

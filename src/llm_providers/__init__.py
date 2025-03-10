@@ -1,7 +1,21 @@
-"""LLM providers package initialization."""
+"""LLM providers package.
 
-from .base import BaseLLMProvider as LLMProvider
-from .factory import LLMProviderFactory
-from .gemini import GeminiProvider
+This package provides a unified interface for interacting with various LLM providers.
+The default model used throughout the application is 'gemini-2.0-flash-lite'.
+"""
 
-__all__ = ["LLMProvider", "GeminiProvider", "LLMProviderFactory"]
+from src.llm_providers.interface import LLMProvider
+from src.llm_providers.providers import (
+    BaseLLMProvider,
+    GeminiProvider,
+    ProviderProtocol,
+)
+from src.llm_providers.type_defs import GenerationConfig
+
+__all__ = [
+    "BaseLLMProvider",
+    "GeminiProvider",
+    "GenerationConfig",
+    "LLMProvider",
+    "ProviderProtocol",
+]

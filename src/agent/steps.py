@@ -1,11 +1,13 @@
 """Agent step processing module."""
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
+from .agent_types import StepKwargs, StepResult
 from .state.base import AgentState, AgentStatus
-from .types import StepKwargs, StepResult
+
+T = TypeVar("T")
 
 
 @runtime_checkable
@@ -21,6 +23,7 @@ class StepFunction(Protocol):
 
         Returns:
             Step result.
+
         """
         ...
 
@@ -44,6 +47,7 @@ class Step:
 
         Raises:
             ValueError: If required keys are missing.
+
         """
         error_msg: str
         missing_keys = [key for key in self.required_keys if key not in kwargs]
@@ -52,23 +56,21 @@ class Step:
             raise ValueError(error_msg)
 
 
-class StepExecutor(ABC):
-    """Abstract base class for step executors."""
+class StepExecutor(Protocol[T]):
+    """Step executor protocol."""
 
     @abstractmethod
-    def execute_step(
-        self, step: Step, state: AgentState, **kwargs: StepKwargs
-    ) -> StepResult:
-        """Execute a single step.
+    def execute(self, step: Step) -> StepResult[T]:
+        """Execute a step.
 
         Args:
             step: Step to execute.
-            state: Current agent state.
-            **kwargs: Additional arguments.
 
         Returns:
             Step result.
+
         """
+        ...
 
 
 def _handle_step_success(state: AgentState, result: StepResult) -> StepResult:
@@ -80,17 +82,70 @@ def _handle_step_success(state: AgentState, result: StepResult) -> StepResult:
 
     Returns:
         Step result.
+
     """
     state.retry_count = 0
     state.status = AgentStatus.COMPLETED
     return result
 
 
-class BaseStepExecutor(StepExecutor):
-    """Base step executor implementation."""
+class BaseStepExecutor(StepExecutor[T]):
+    """Base step executor."""
+
+    def __init__(self) -> None:
+        """Initialize executor."""
+        self.steps: list[Step] = []
+        self.current_step: Step | None = None
+        self.last_result: StepResult[T] | None = None
+
+    def add_step(self, step: Step) -> None:
+        """Add a step to execute.
+
+        Args:
+            step: Step to add.
+
+        """
+        self.steps.append(step)
+
+    def clear_steps(self) -> None:
+        """Clear all steps."""
+        self.steps.clear()
+        self.current_step = None
+        self.last_result = None
+
+    def execute(self, step: Step) -> StepResult[T]:
+        """Execute a step.
+
+        Args:
+            step: Step to execute.
+
+        Returns:
+            Step result.
+
+        """
+        self.current_step = step
+        result = self._execute_step(step)
+        self.last_result = result
+        return result
+
+    @abstractmethod
+    def _execute_step(self, step: Step) -> StepResult[T]:
+        """Execute a step.
+
+        Args:
+            step: Step to execute.
+
+        Returns:
+            Step result.
+
+        """
+        ...
 
     def execute_step(
-        self, step: Step, state: AgentState, **kwargs: StepKwargs
+        self,
+        step: Step,
+        state: AgentState,
+        **kwargs: StepKwargs,
     ) -> StepResult:
         """Execute a single step.
 
@@ -104,6 +159,7 @@ class BaseStepExecutor(StepExecutor):
 
         Raises:
             RuntimeError: If step execution fails.
+
         """
         error_msg: str
 

@@ -1,6 +1,6 @@
 """LLM provider configuration."""
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from .base import BaseConfig
@@ -33,6 +33,7 @@ class LLMConfig(BaseConfig):
 
         Raises:
             ValueError: If configuration is invalid.
+
         """
         error_msg: str
 
@@ -55,3 +56,14 @@ class LLMConfig(BaseConfig):
         if self.top_k <= 0:
             error_msg = "Top K must be positive"
             raise ValueError(error_msg)
+
+    def dict(self) -> dict[str, Any]:
+        """Convert configuration to dictionary.
+
+        Returns:
+            Dictionary representation.
+
+        """
+        config_dict = asdict(self)
+        config_dict.update(self.extra_params)
+        return config_dict

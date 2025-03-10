@@ -1,189 +1,112 @@
-# System Architecture and Design
-
-This document explains the architecture and design decisions behind the Agentic Problem Solver.
+# APS (Agentic Problem Solver) Architecture
 
 ## Overview
 
-The Agentic Problem Solver is designed as a modular system that uses language models to break down, solve, and verify programming tasks. The system follows a step-by-step approach to ensure reliable and maintainable code generation.
+APS is designed as a hierarchical multi-agent system that breaks down and solves complex problems through coordinated agent interactions. The system follows clean architecture principles with clear separation of concerns and well-defined interfaces between components.
 
 ## Core Components
 
-### 1. Agent System
+### 1. Configuration System (`src/config/`)
 
-The agent system is built around the concept of a workflow with distinct steps:
+- `defaults.py`: System-wide default values and constants
+- `types.py`: Configuration-related type definitions
+- `validation.py`: Configuration validation rules
+- Each subsystem has its own config that extends the base configurations
 
-1. **Understanding**: Analyzes and breaks down task requirements
-2. **Planning**: Creates a structured plan for implementation
-3. **Execution**: Generates the actual code solution
-4. **Verification**: Tests and validates the solution
+### 2. Agent System (`src/agent/`)
 
-This step-based approach ensures:
+- `base.py`: Core agent abstractions and interfaces
+- `state/`: Agent state management
+  - `base.py`: Base state classes and interfaces
+  - `memory.py`: Agent memory implementations
+- `steps/`: Step execution framework
+  - `base.py`: Step abstractions
+  - `executors/`: Step execution implementations
+- `types/`: Type definitions for agent system
+  - `enums.py`: Enumerations (MessageRoles, StepTypes, etc.)
+  - `messages.py`: Message type definitions
+  - `states.py`: State type definitions
 
-- Clear separation of concerns
-- Predictable behavior
-- Easy debugging and monitoring
-- Ability to retry specific steps
+### 3. Provider System (`src/llm_providers/`)
 
-### 2. LLM Provider System
+- `base.py`: Provider interface definition
+- `factory.py`: Provider instantiation logic
+- Each provider in its own module (e.g., `gemini.py`, `openai.py`)
+- Consistent error handling and retry logic across providers
 
-The LLM (Language Learning Model) provider system is designed for flexibility and reliability:
+### 4. Message System (`src/messages/`)
 
-- **Factory Pattern**: Uses a factory to create and manage providers
-- **Abstract Base Class**: Defines a common interface for all providers
-- **Configuration System**: Supports easy switching between providers
-- **Error Handling**: Includes retry logic and fallback mechanisms
+- `base.py`: Message abstractions
+- `handlers/`: Message processing logic
+- `schemas/`: Message structure definitions
+- `transformers/`: Message transformation utilities
 
-### 3. Message System
+### 5. CLI System (`src/cli/`)
 
-Messages are the primary data structure for communication:
-
-- **Typed Messages**: Different types for different purposes (Human, AI, System)
-- **Metadata Support**: Carries additional context and state information
-- **Immutable Design**: Prevents accidental state modifications
-
-### 4. State Management
-
-State is managed at multiple levels:
-
-1. **Agent State**:
-
-   - Current step
-   - Message history
-   - Error state
-   - Results
-
-2. **Graph State**:
-   - Message flow
-   - Step transitions
-   - Context information
-
-## Design Decisions
-
-### 1. Async First
-
-The system is built with async/await from the ground up:
-
-- Enables efficient handling of I/O operations
-- Supports streaming responses
-- Allows for future scalability
-- Maintains responsiveness
-
-### 2. Type Safety
-
-Strong typing is used throughout:
-
-- TypedDict for structured data
-- Enums for state management
-- Optional types for nullable values
-- Type hints for better IDE support
-
-### 3. Error Handling
-
-Comprehensive error handling strategy:
-
-- Early validation
-- Graceful degradation
-- Clear error messages
-- State recovery mechanisms
-
-### 4. Modularity
-
-The system is built with modular components:
-
-- Clear separation of concerns
-- Easy to test individual components
-- Simple to extend or modify
-- Pluggable architecture
-
-### 5. Configuration
-
-Flexible configuration system:
-
-- Environment variables for deployment
-- Runtime configuration for dynamic changes
-- Defaults for easy startup
-- Per-instance customization
+- Clean command structure
+- Consistent error handling
+- Progress feedback
+- Configuration management
 
 ## Data Flow
 
 1. User Input → CLI
-2. CLI → Agent
-3. Agent → LLM Provider
-4. LLM Provider → Response
-5. Agent → State Update
-6. Agent → Output
+2. CLI → Top-level Agent
+3. Top-level Agent:
+   - Breaks down problem into tasks
+   - Creates sub-agents as needed
+   - Manages task delegation
+4. Sub-agents:
+   - Execute specific tasks
+   - Report progress
+   - Handle failures gracefully
+5. Results aggregation
+6. Final output → User
+
+## Key Design Principles
+
+1. **Single Responsibility**: Each module has one clear purpose
+2. **Interface Segregation**: Clean interfaces between components
+3. **Dependency Inversion**: High-level modules don't depend on low-level modules
+4. **Open/Closed**: Extend functionality without modifying existing code
+5. **DRY**: No code duplication across modules
+
+## Configuration Management
+
+- Hierarchical configuration system
+- Environment-based overrides
+- Type-safe configurations
+- Validation at load time
+- Sensible defaults
+
+## Error Handling
+
+- Consistent error types
+- Proper error propagation
+- Retry mechanisms
+- Graceful degradation
+- Detailed logging
 
 ## Testing Strategy
 
-1. **Unit Tests**:
+- Unit tests for each component
+- Integration tests for workflows
+- End-to-end tests for critical paths
+- Performance benchmarks
+- Stress testing
 
-   - Individual component testing
-   - Mock external dependencies
-   - Focus on edge cases
+## Monitoring and Observability
 
-2. **Integration Tests**:
+- Structured logging
+- Performance metrics
+- Error tracking
+- Resource usage monitoring
+- Task progress tracking
 
-   - Component interaction testing
-   - Real LLM provider testing
-   - End-to-end workflows
+## Security Considerations
 
-3. **Property Tests**:
-   - State transition validation
-   - Data structure invariants
-   - Error handling verification
-
-## Future Considerations
-
-1. **Scalability**:
-
-   - Multiple concurrent agents
-   - Distributed processing
-   - Load balancing
-
-2. **Extensibility**:
-
-   - New LLM providers
-   - Custom steps
-   - Plugin system
-
-3. **Monitoring**:
-
-   - Performance metrics
-   - Usage statistics
-   - Error tracking
-
-4. **Security**:
-   - Input validation
-   - Code execution sandboxing
-   - API key management
-
-## Dependencies
-
-Key external dependencies:
-
-- langchain: Agent and LLM framework
-- google-generativeai: Gemini API
-- pytest: Testing framework
-- python-dotenv: Configuration management
-
-## Best Practices
-
-1. **Code Generation**:
-
-   - Always validate generated code
-   - Include error handling
-   - Follow language conventions
-   - Add appropriate comments
-
-2. **State Management**:
-
-   - Clear state between runs
-   - Validate state transitions
-   - Handle edge cases
-   - Maintain immutability
-
-3. **Error Handling**:
-   - Provide clear error messages
-   - Include recovery steps
-   - Log relevant information
-   - Maintain system stability
+- API key management
+- Rate limiting
+- Input validation
+- Output sanitization
+- Secure configuration handling

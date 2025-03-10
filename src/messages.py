@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 
 def create_system_message(
-    content: str, metadata: dict[str, object] | None = None
+    content: str, metadata: dict[str, object] | None = None,
 ) -> SystemMessage:
     """Create a SystemMessage with proper initialization.
 
@@ -14,6 +14,7 @@ def create_system_message(
 
     Returns:
         A SystemMessage instance.
+
     """
     if metadata is None:
         metadata = {}
@@ -21,7 +22,7 @@ def create_system_message(
 
 
 def create_human_message(
-    content: str, metadata: dict[str, object] | None = None
+    content: str, metadata: dict[str, object] | None = None,
 ) -> HumanMessage:
     """Create a HumanMessage with proper initialization.
 
@@ -31,6 +32,7 @@ def create_human_message(
 
     Returns:
         A HumanMessage instance.
+
     """
     if metadata is None:
         metadata = {}
@@ -38,7 +40,7 @@ def create_human_message(
 
 
 def create_ai_message(
-    content: str, metadata: dict[str, object] | None = None
+    content: str, metadata: dict[str, object] | None = None,
 ) -> AIMessage:
     """Create an AIMessage with proper initialization.
 
@@ -48,6 +50,7 @@ def create_ai_message(
 
     Returns:
         An AIMessage instance.
+
     """
     if metadata is None:
         metadata = {}
@@ -55,7 +58,7 @@ def create_ai_message(
 
 
 def create_tool_message(
-    content: str, tool_call_id: str, metadata: dict[str, object] | None = None
+    content: str, tool_call_id: str, metadata: dict[str, object] | None = None,
 ) -> ToolMessage:
     """Create a ToolMessage with proper initialization.
 
@@ -66,6 +69,7 @@ def create_tool_message(
 
     Returns:
         A ToolMessage instance.
+
     """
     if metadata is None:
         metadata = {}
@@ -90,6 +94,7 @@ def get_message_metadata(
 
     Returns:
         The metadata value or default if not found.
+
     """
     if key == "content":
         return message.content
@@ -111,6 +116,7 @@ def set_message_metadata(
         message: The message to set metadata for.
         key: The metadata key to set.
         value: The value to set.
+
     """
     if key == "content":
         message.content = str(value)

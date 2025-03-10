@@ -1,108 +1,143 @@
-"""Command-line interface for the Agentic Problem Solver."""
+"""Command line interface for the problem solver."""
 
-import asyncio
-import os
+import logging
 import sys
-from typing import NoReturn
+from pathlib import Path
 
 import click
-from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
 
+from src.agent.state.base import InMemoryStateManager
 from src.agents.solver_agent import SolverAgent
-from src.config import VERSION
-from src.utils.logging import get_logger
+from src.config import AgentConfig
+from src.llm_providers.providers.gemini import GeminiProvider
+from src.utils.log_utils import setup_logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+
+# Constants
+CONFIG_FILE = Path("config.yaml")
+DEFAULT_MODEL = (
+    "gemini-2.0-flash-lite"  # Standard model for all operations - matches AgentConfig
+)
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_MAX_TOKENS = 1000
 
 # Error messages
-TASK_ERROR = "Error processing task: {}"
-API_KEY_ERROR = "GEMINI_API_KEY environment variable not set"
+TASK_ERROR = "Error processing task"
+MESSAGE_ERROR = "Error processing message"
+API_KEY_ERROR = """
+API key not found. Please follow these steps:
 
-DEFAULT_TEMPERATURE = 0.7
+1. Copy .env.example to .env in the project root:
+   cp .env.example .env
+
+2. Get your API key from: https://makersuite.google.com/app/apikey
+
+3. Add your API key to .env:
+   GEMINI_API_KEY=your_api_key_here
+
+4. Try running the command again
+"""
+
+
+class TaskError(RuntimeError):
+    """Raised when task processing fails."""
+
+    def __init__(self, message: str) -> None:
+        """Initialize error."""
+        super().__init__(message)
 
 
 @click.group()
 def cli() -> None:
     """Agentic Problem Solver CLI."""
-    load_dotenv()
-    # Suppress gRPC warnings
-    os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "false"
-    os.environ["GRPC_POLL_STRATEGY"] = "epoll1"
-
-
-@cli.command()
-def version() -> None:
-    """Show version information."""
-    click.echo(f"Version: {VERSION}")
+    setup_logging(level=logging.INFO)
 
 
 @cli.command()
 @click.argument("task")
-@click.option("--stream", is_flag=True, help="Stream output")
-@click.option("--temperature", type=float, help="Temperature for text generation")
-@click.option("--max-tokens", type=int, help="Maximum number of tokens to generate")
-@click.option("--model", type=str, help="Model name")
+@click.option(
+    "--model",
+    default=DEFAULT_MODEL,
+    help="Model to use for generation.",
+)
+@click.option(
+    "--temperature",
+    default=DEFAULT_TEMPERATURE,
+    type=float,
+    help="Temperature for generation.",
+)
+@click.option(
+    "--max-tokens",
+    default=DEFAULT_MAX_TOKENS,
+    type=int,
+    help="Maximum tokens to generate.",
+)
 def solve(
     task: str,
-    stream: bool = False,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    model: str | None = None,
+    model: str = DEFAULT_MODEL,
+    temperature: float = DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> None:
-    """Solve a task using the agent."""
+    """Solve a programming task."""
     try:
-        if not os.getenv("GEMINI_API_KEY"):
-            logger.error("GEMINI_API_KEY environment variable not set")
-            sys.exit(1)
+        # Create configuration
+        config = AgentConfig(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
-        config = {}
-        if temperature is not None:
-            config["temperature"] = temperature
-        if max_tokens is not None:
-            config["max_output_tokens"] = max_tokens
-        if model is not None:
-            config["model"] = model
+        # Create provider
+        try:
+            provider = GeminiProvider(model=model)
+        except ValueError as e:
+            if "API key" in str(e):
+                click.echo(API_KEY_ERROR, err=True)
+                sys.exit(1)
+            raise
 
-        agent = SolverAgent(config)
-        logger.info("Initialized solver agent with %s", agent.llm.__class__.__name__)
+        # Create state manager
+        state_manager = InMemoryStateManager()
 
-        if stream:
-            try:
-                asyncio.run(process_stream(agent, task))
-            except Exception as err:
-                error_msg = f"Error processing task: {err}"
-                logger.error("Error processing task\n%s", err, exc_info=True)
-                raise RuntimeError(error_msg) from err
-        else:
-            response = asyncio.run(agent.process_message(HumanMessage(content=task)))
-            click.echo(response.content)
+        # Create agent
+        agent = SolverAgent(
+            provider=provider,
+            state_manager=state_manager,
+            config=config,
+        )
 
-    except Exception as err:
-        logger.error("Error processing task\n%s", err, exc_info=True)
-        click.echo(f"Error: {err}", err=True)
+        # Process task
+        result = agent.process(task)
+        click.echo(result)
+
+    except Exception:
+        logger.exception(TASK_ERROR)
         sys.exit(1)
 
 
-async def process_stream(agent: SolverAgent, task: str) -> None:
-    """Process task in streaming mode.
+def process_message(message: str) -> str:
+    """Process a message using the solver agent.
 
     Args:
-        agent: Solver agent instance.
-        task: Task to process.
+        message: The message to process.
+
+    Returns:
+        The processed response.
 
     Raises:
-        RuntimeError: If an error occurs during processing.
+        TaskError: If an error occurs during processing.
+
     """
     try:
-        async for response in agent.process_message_stream(HumanMessage(content=task)):
-            click.echo(response.content, nl=False)
+        agent = SolverAgent()
+        return agent.process(message)
     except Exception as err:
-        error_msg = f"Error processing task: {err}"
-        logger.error("Error processing message\n%s", err, exc_info=True)
-        raise RuntimeError(error_msg) from err
+        logger.exception(MESSAGE_ERROR)
+        error_msg = f"{MESSAGE_ERROR}: {err}"
+        raise TaskError(error_msg) from err
 
 
-def main() -> NoReturn:
-    """Entry point for the CLI."""
+def main() -> None:
+    """Run the CLI application."""
     cli()
