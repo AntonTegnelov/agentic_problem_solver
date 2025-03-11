@@ -43,56 +43,6 @@ from .utils import (
 
 T = TypeVar("T")
 
-
-def create_structured_message(
-    role: str,
-    content: str | dict[str, object],
-    metadata: dict[str, object] | None = None,
-) -> Message:
-    """Create structured message.
-
-    Args:
-        role: Message role.
-        content: Message content (string or dictionary).
-        metadata: Optional message metadata.
-
-    Returns:
-        Message instance.
-
-    Raises:
-        ConfigError: If role is invalid.
-
-    """
-    # Import here to avoid circular imports
-    import json
-
-    from src.exceptions import ConfigError
-
-    # Convert dictionary content to JSON string
-    if isinstance(content, dict):
-        content = json.dumps(content)
-
-    # Initialize metadata if None
-    if metadata is None:
-        metadata = {}
-
-    additional_kwargs = {"metadata": metadata} if metadata else {}
-
-    if role == "system":
-        return SystemMessage(content=content, additional_kwargs=additional_kwargs)
-    if role == "human":
-        return HumanMessage(content=content, additional_kwargs=additional_kwargs)
-    if role == "ai":
-        return AIMessage(content=content, additional_kwargs=additional_kwargs)
-    if role == "tool":
-        if "tool_call_id" not in metadata:
-            msg = "Tool messages require a tool_call_id in metadata"
-            raise ConfigError(msg)
-        return ToolMessage(content=content, tool_call_id=metadata["tool_call_id"], additional_kwargs=additional_kwargs)
-    msg = f"Invalid message role: {role}"
-    raise ConfigError(msg)
-
-
 __all__ = [
     "AIMessage",
     "HumanMessage",

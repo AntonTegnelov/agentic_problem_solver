@@ -198,12 +198,13 @@ class AgentCoordinator:
             Agent ID or None if no suitable agent found.
 
         """
-        for agent_id, info in self._registry._agent_info.items():
-            if info and info.can_handle_task(task):
+        for agent_id in self._registry.get_agents():
+            info = self._registry.get_agent_info(agent_id)
+            if info and hasattr(info, "can_handle_task") and info.can_handle_task(task):
                 return agent_id
         return None
 
-    def create_agent(self, agent_type: str, config: dict, **kwargs: Any) -> Agent:
+    def create_agent(self, agent_type: str, config: dict, **kwargs: dict[str, Any]) -> Agent:
         """Create agent.
 
         Args:
@@ -268,12 +269,11 @@ class AgentFactory:
         """
         self._factories[agent_type] = factory
 
-    def create_agent(self, agent_type: str, agent_id: str, **kwargs: Any) -> Agent:
+    def create_agent(self, agent_type: str, **kwargs: dict[str, Any]) -> Agent:
         """Create agent.
 
         Args:
             agent_type: Agent type.
-            agent_id: Agent ID.
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -292,10 +292,6 @@ class AgentFactory:
         return agent
 
 
-# No longer needed as we're using the proper class name
-# InMemoryAgentRegistry = AgentRegistry
-SimpleAgentCoordinator = AgentCoordinator
-
 # Export symbols
 __all__ = [
     "Agent",
@@ -306,3 +302,6 @@ __all__ = [
     "InMemoryAgentRegistry",
     "SimpleAgentCoordinator",
 ]
+
+# For backward compatibility
+SimpleAgentCoordinator = AgentCoordinator

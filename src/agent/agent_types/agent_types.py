@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus
+from src.messages.creation import create_human_message
 from src.messages.utils import set_message_metadata
 
 T = TypeVar("T")
