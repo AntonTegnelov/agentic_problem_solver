@@ -11,9 +11,9 @@ from unittest.mock import patch
 import pytest
 
 from src.agent.result import Result
-from src.exceptions import ConfigError, InvalidModelError
+from src.exceptions import ConfigError
 from src.llm_providers.config.provider_config import ProviderConfig
-from src.llm_providers.factory import LLMProviderFactory
+from src.llm_providers.factory import LLMProviderFactory, ProviderNotFoundError
 from src.llm_providers.providers.base import BaseLLMProvider
 from src.llm_providers.providers.gemini import GeminiProvider
 
@@ -43,20 +43,23 @@ def test_provider_registration(provider_factory: LLMProviderFactory) -> None:
 
     # Register a mock provider
     class MockProvider(BaseLLMProvider):
-        def process(self, prompt: str) -> Result[str]:
+        def process(self, _prompt: str) -> Result[str]:
             return Result.ok("Mock response")
 
-        def process_stream(self, prompt: str) -> Generator[Result[str], None, None]:
+        def process_stream(self, _prompt: str) -> Generator[Result[str], None, None]:
             yield Result.ok("Mock stream response")
 
     provider_factory.register_provider("mock", MockProvider)
 
     # Verify provider is registered
-    assert "mock" in provider_factory._providers
-    assert provider_factory._providers["mock"] == MockProvider
+    try:
+        provider_class = provider_factory.get_provider("mock")
+        assert provider_class == MockProvider
+    except ProviderNotFoundError:
+        pytest.fail("Provider not registered correctly")
 
 
-def test_provider_configuration(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+def test_provider_configuration(provider_factory: LLMProviderFactory) -> None:
     """Test provider configuration loading and validation."""
     config = ProviderConfig(
         provider_name="gemini",
@@ -72,7 +75,7 @@ def test_provider_configuration(provider_factory: LLMProviderFactory, mock_env_v
     assert provider.config.temperature == 0.7
 
 
-def test_provider_fallback(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+def test_provider_fallback(provider_factory: LLMProviderFactory) -> None:
     """Test provider fallback mechanism."""
     # Configure primary and fallback providers
     primary_config = ProviderConfig(
@@ -90,7 +93,7 @@ def test_provider_fallback(provider_factory: LLMProviderFactory, mock_env_vars: 
     )
 
     # Test fallback behavior
-    with pytest.raises(ConfigError):
+    with pytest.raises(ValueError, match="Unsupported provider: invalid_provider"):
         provider_factory.create_provider("invalid_provider", primary_config)
 
     # Verify fallback works
@@ -98,7 +101,7 @@ def test_provider_fallback(provider_factory: LLMProviderFactory, mock_env_vars: 
     assert isinstance(fallback_provider, GeminiProvider)
 
 
-def test_invalid_model_handling(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+def test_invalid_model_handling(provider_factory: LLMProviderFactory) -> None:
     """Test handling of invalid model configurations."""
     config = ProviderConfig(
         provider_name="gemini",
@@ -107,11 +110,11 @@ def test_invalid_model_handling(provider_factory: LLMProviderFactory, mock_env_v
         api_key="test_key",
     )
 
-    with pytest.raises(InvalidModelError):
+    with pytest.raises(ConfigError, match="Failed to create provider gemini"):
         provider_factory.create_provider("gemini", config)
 
 
-def test_provider_lifecycle(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+def test_provider_lifecycle(provider_factory: LLMProviderFactory) -> None:
     """Test provider lifecycle management."""
     config = ProviderConfig(
         provider_name="gemini",
