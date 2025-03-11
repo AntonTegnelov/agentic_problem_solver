@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.base import Agent
+from src.agent.result import Result
 from src.common_types.enums import MessageRole
 from src.messages import Message
 from src.prompts import get_step_prompt
@@ -39,6 +40,93 @@ class SolverAgent(Agent):
         super().__init__(config)
         self._provider = provider
         self._state_manager = state_manager
+        self._agent_id = "solver_agent"
+
+    def get_agent_id(self) -> str:
+        """Get agent ID.
+
+        Returns:
+            Agent ID.
+
+        """
+        return self._agent_id
+
+    def get_capabilities(self) -> list[str]:
+        """Get agent capabilities.
+
+        Returns:
+            List of capabilities.
+
+        """
+        return ["solve", "code", "explain", "plan"]
+
+    def can_handle(self, _task: str) -> bool:
+        """Check if agent can handle task.
+
+        Args:
+            _task: Task to check.
+
+        Returns:
+            True if agent can handle task.
+
+        """
+        # This agent can handle any task
+        return True
+
+    async def process_message(self, message: Message) -> Result:
+        """Process message.
+
+        Args:
+            message: Message to process.
+
+        Returns:
+            Processing result.
+
+        """
+        response = self.process(message.content)
+        return Result(success=True, data=response, error=None)
+
+    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+        """Process message with streaming.
+
+        Args:
+            message: Message to process.
+
+        Yields:
+            Chunks of processed message.
+
+        """
+        self._validate_provider()
+        messages = self._prepare_state(message.content)
+
+        async for chunk in self._provider.generate_stream(messages):
+            yield chunk
+
+    def send_message(self, message: Message) -> Result[Any]:
+        """Send message to agent.
+
+        Args:
+            message: Message to send.
+
+        Returns:
+            Result of message processing.
+
+        """
+        response = self.process(message.content)
+        return Result(success=True, data=response, error=None)
+
+    def receive_message(self, message: Message) -> Result[Any]:
+        """Receive message from another agent.
+
+        Args:
+            message: Message to receive.
+
+        Returns:
+            Result of message processing.
+
+        """
+        response = self.process(message.content)
+        return Result(success=True, data=response, error=None)
 
     def _prepare_messages(self, messages: list[Message]) -> list[Message]:
         """Prepare messages for provider.
@@ -116,22 +204,3 @@ class SolverAgent(Agent):
         self.state.add_message(Message(role=MessageRole.ASSISTANT, content=response))
 
         return response
-
-    async def process_stream(self, input_data: str) -> AsyncGenerator[str, None]:
-        """Process input data and stream results.
-
-        Args:
-            input_data: Input data to process.
-
-        Yields:
-            Processed output chunks.
-
-        Raises:
-            ValueError: If provider is not initialized.
-
-        """
-        self._validate_provider()
-        messages = self._prepare_state(input_data)
-
-        async for chunk in self._provider.generate_stream(messages):
-            yield chunk
