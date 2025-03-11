@@ -11,7 +11,7 @@ from langchain.schema import HumanMessage
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus, AgentStep
 from src.config.base import ConfigError
-from src.exceptions import ConfigError
+from src.exceptions import AgentNotFoundError
 from src.prompts import get_retry_prompt, get_step_prompt
 
 if TYPE_CHECKING:
@@ -272,7 +272,7 @@ def validate_step_result(step: AgentStep, result: StepResult[Any]) -> None:
 
 
 def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int = 3) -> Result:
-    """Execute step with retry mechanism.
+    """Execute step with retry.
 
     Args:
         state: Agent state.
@@ -282,22 +282,17 @@ def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int
     Returns:
         Step result.
 
-    Raises:
-        ConfigError: If no agent registered.
-
     """
-    agent = state.get_agent_for_step(step)
-    if not agent:
-        msg = "No agent registered"
-        raise ConfigError(msg)
-
     retries = 0
     last_result = None
 
-    while retries <= max_retries:  # Changed to <= to include max_retries attempt
+    while retries <= max_retries:
         try:
-            # Use retry prompt if we have a previous error, otherwise use initial prompt
-            if last_result and last_result.error:
+            # Get agent for step
+            agent = state.get_agent_for_step(step)
+
+            # Create prompt based on retry status
+            if retries > 0 and last_result and last_result.error:
                 prompt = get_retry_prompt(step, last_result.error)
             else:
                 prompt = get_step_prompt(step)
@@ -313,8 +308,21 @@ def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int
             if result.success:
                 return result
 
-        except Exception as e:
+        except (ConfigError, AgentNotFoundError) as e:
+            # Handle specific known errors
             msg = f"Error executing step: {e}"
+            last_result = Result(success=False, error=msg)
+        except ValueError as e:
+            # Handle validation errors
+            msg = f"Validation error in step execution: {e}"
+            last_result = Result(success=False, error=msg)
+        except OSError as e:
+            # Handle I/O errors
+            msg = f"I/O error in step execution: {e}"
+            last_result = Result(success=False, error=msg)
+        except RuntimeError as e:
+            # Handle runtime errors
+            msg = f"Runtime error in step execution: {e}"
             last_result = Result(success=False, error=msg)
 
         retries += 1
