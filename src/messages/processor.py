@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-def set_metadata_at_index(messages: list[Message], index: int, key: str, value: Any) -> None:
+def set_metadata_at_index(messages: list[Message], index: int, key: str, value: object) -> None:
     """Set metadata value for message at index.
 
     Args:
@@ -43,7 +43,7 @@ def set_metadata_at_index(messages: list[Message], index: int, key: str, value: 
     messages[index].metadata[key] = value
 
 
-def get_metadata_at_index(messages: list[Message], index: int, key: str) -> Any:
+def get_metadata_at_index(messages: list[Message], index: int, key: str) -> object:
     """Get metadata value from message at index.
 
     Args:
@@ -217,6 +217,20 @@ def create_message_from_dict(data: dict[str, Any]) -> Message:
     raise ConfigError(msg)
 
 
+def _raise_agent_not_found(agent_id: str) -> None:
+    """Raise AgentNotFoundError with appropriate message.
+
+    Args:
+        agent_id: Agent ID that was not found.
+
+    Raises:
+        AgentNotFoundError: Always raised with the agent ID in the message.
+
+    """
+    msg = f"Agent not found: {agent_id}"
+    raise AgentNotFoundError(msg)
+
+
 async def process_message_with_retry(
     message: Message,
     agents: dict[str, Agent],
@@ -237,7 +251,7 @@ async def process_message_with_retry(
         Processing result.
 
     Raises:
-        AgentNotFoundError: If agent is not found.
+        AgentNotFoundError: If agent not found.
         RetryError: If max retries exceeded.
 
     """
@@ -247,15 +261,27 @@ async def process_message_with_retry(
     while retries <= max_retries:
         try:
             if agent_id not in agents:
-                msg = f"Agent not found: {agent_id}"
-                raise AgentNotFoundError(msg)
+                _raise_agent_not_found(agent_id)
 
             agent = agents[agent_id]
             result = await agent.process(message)
             if result.success:
                 return result
-        except Exception as e:
+            # If result was not successful, treat as a retry case
+            last_error = f"Unsuccessful result: {result.error}"
+        except AgentNotFoundError:
+            # Re-raise agent not found errors immediately
+            raise
+        except ValueError:
+            # Re-raise validation errors immediately
+            raise
+        except (OSError, RuntimeError, ConnectionError) as e:
+            # Handle specific exception types
             last_error = str(e)
+        except (TypeError, AttributeError, KeyError, IndexError) as e:
+            # Handle other common exceptions
+            last_error = f"Unexpected error: {e!s}"
+
         retries += 1
         if retries > max_retries:
             break
@@ -267,12 +293,12 @@ async def process_message_with_retry(
 
 async def process_stream_with_retry(
     message: Message,
-    agents: dict[str, Agent],
+    agents: dict[str, object],
     agent_id: str,
     max_retries: int = 3,
-    retry_delay: float = 1.0,
+    retry_delay: float = 0.1,
 ) -> AsyncGenerator[str, None]:
-    """Process message stream with retry.
+    """Process message with streaming and retry.
 
     Args:
         message: Message to process.
@@ -282,11 +308,10 @@ async def process_stream_with_retry(
         retry_delay: Delay between retries.
 
     Yields:
-        Message chunks.
+        Processed message chunks.
 
     Raises:
-        AgentNotFoundError: If agent is not found.
-        RetryError: If max retries exceeded.
+        RetryError: If max retries exceeded or agent not found.
 
     """
     retries = 0
@@ -294,13 +319,17 @@ async def process_stream_with_retry(
     while retries <= max_retries:
         try:
             if agent_id not in agents:
+                # Wrap AgentNotFoundError in RetryError for consistent error handling
                 msg = f"Agent not found: {agent_id}"
-                raise AgentNotFoundError(msg)
+                raise RetryError(msg) from AgentNotFoundError(msg)
 
             agent = agents[agent_id]
             async for chunk in agent.process_stream(message):
                 yield chunk
-            return
+            break  # Exit the loop after successful processing
+        except ValueError:
+            # Re-raise these specific exceptions immediately
+            raise
         except Exception as e:
             retries += 1
             if retries > max_retries:
@@ -308,5 +337,7 @@ async def process_stream_with_retry(
                 raise RetryError(msg) from e
             await asyncio.sleep(retry_delay)
 
-    msg = "Max retries exceeded"
-    raise RetryError(msg)
+    # If we've exhausted retries without success
+    if retries > max_retries:
+        msg = "Max retries exceeded"
+        raise RetryError(msg)
