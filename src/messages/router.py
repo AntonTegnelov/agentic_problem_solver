@@ -1,3 +1,9 @@
+"""Message routing module for directing messages between agents.
+
+This module provides functionality for routing messages between different agents,
+handling retries, and managing message flow in the system.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -5,7 +11,7 @@ from typing import TYPE_CHECKING, Callable
 
 from src.agent.errors import AgentNotFoundError
 from src.exceptions import ConfigError, RetryError
-from src.messages import set_message_metadata
+from src.messages.utils import set_message_metadata
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

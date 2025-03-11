@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from src.common_types.error_types import AgentNotFoundError, RetryError
 from src.common_types.message_types import Message
-from src.messages import set_message_metadata
 from src.messages.chain import MessageChain
 from src.messages.router import MessageRouter
+from src.messages.utils import set_message_metadata
 
 if TYPE_CHECKING:
     from src.common_types import Message

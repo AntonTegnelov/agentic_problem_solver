@@ -13,10 +13,9 @@ from langchain_core.messages import BaseMessage as Message
 if TYPE_CHECKING:
     from src.common_types import Message
 
-
 from src.common_types.message_types import AIMessage, HumanMessage
 from src.exceptions import ConfigError
-from src.messages import get_message_metadata, set_message_metadata
+from src.messages.utils import get_message_metadata, set_message_metadata
 
 MessageValue = str | int | float | bool | dict[str, "MessageValue"] | list["MessageValue"] | None
 CriteriaValue = Union[str, int, bool, None]
@@ -175,8 +174,7 @@ class MessageChain:
                 msg
                 for msg in filtered
                 if all(
-                    (key == "type" and isinstance(msg, value))
-                    or (get_message_metadata(msg, key) == value)
+                    (key == "type" and isinstance(msg, value)) or (get_message_metadata(msg, key) == value)
                     for key, value in criteria.items()
                 )
             ]
@@ -237,8 +235,7 @@ class MessageChain:
         results = []
         for msg in self._messages:
             if (field is None and query.lower() in str(msg.content).lower()) or (
-                field is not None
-                and query.lower() in str(get_message_metadata(msg, field, "")).lower()
+                field is not None and query.lower() in str(get_message_metadata(msg, field, "")).lower()
             ):
                 results.append(msg)
         return results
