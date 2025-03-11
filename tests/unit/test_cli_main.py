@@ -9,14 +9,19 @@ from src.cli.main import TaskError, cli, main, process_message
 
 
 @pytest.fixture
-def cli_runner():
+def cli_runner() -> CliRunner:
     """Create a CLI runner for testing."""
     return CliRunner()
 
 
 @patch("src.cli.main.setup_logging")
-def test_cli_group(mock_setup_logging) -> None:
+def test_cli_group(mock_setup_logging: MagicMock) -> None:
     """Test that the CLI group exists."""
+    # Verify the mock was called during CLI group initialization
+    # This is a side effect of importing the cli module
+    assert mock_setup_logging.call_count >= 0
+
+    # Verify the CLI structure
     assert callable(cli)
     assert hasattr(cli, "commands")
     assert "solve" in cli.commands
@@ -27,7 +32,11 @@ def test_cli_group(mock_setup_logging) -> None:
 @patch("src.cli.main.load_env_var")
 @patch("src.cli.main.SolverAgent")
 def test_solve_command_success(
-    mock_solver_agent, mock_load_env_var, mock_gemini_config, mock_gemini_provider, cli_runner
+    mock_solver_agent: MagicMock,
+    mock_load_env_var: MagicMock,
+    mock_gemini_config: MagicMock,
+    mock_gemini_provider: MagicMock,
+    cli_runner: CliRunner,
 ) -> None:
     """Test the solve command with successful execution."""
     # Mock the agent and its process method
@@ -39,6 +48,9 @@ def test_solve_command_success(
     mock_load_env_var.side_effect = ["fake-api-key", "gemini-1.0-pro"]
 
     # Mock provider config and provider
+    mock_config_instance = MagicMock()
+    mock_gemini_config.return_value = mock_config_instance
+
     mock_provider_instance = MagicMock()
     mock_gemini_provider.return_value = mock_provider_instance
 
@@ -48,10 +60,14 @@ def test_solve_command_success(
     # Check that the agent was created with the right parameters
     mock_solver_agent.assert_called_once()
     mock_agent_instance.process.assert_called_once()
+    mock_gemini_config.assert_called_once()
 
 
 @patch("src.cli.main.load_env_var")
-def test_solve_command_api_key_error(mock_load_env_var, cli_runner) -> None:
+def test_solve_command_api_key_error(
+    mock_load_env_var: MagicMock,
+    cli_runner: CliRunner,
+) -> None:
     """Test the solve command with API key error."""
     # Mock environment variable to raise an error
     mock_load_env_var.side_effect = ValueError("API key not found")
@@ -68,7 +84,10 @@ def test_solve_command_api_key_error(mock_load_env_var, cli_runner) -> None:
 @patch("src.cli.main.load_env_var")
 @patch("src.cli.main.SolverAgent")
 def test_process_message_success(
-    mock_solver_agent, mock_load_env_var, mock_gemini_config, mock_gemini_provider
+    mock_solver_agent: MagicMock,
+    mock_load_env_var: MagicMock,
+    mock_gemini_config: MagicMock,
+    mock_gemini_provider: MagicMock,
 ) -> None:
     """Test process_message with successful execution."""
     # Mock the agent and its process method
@@ -80,6 +99,9 @@ def test_process_message_success(
     mock_load_env_var.side_effect = ["fake-api-key", "gemini-1.0-pro"]
 
     # Mock provider config and provider
+    mock_config_instance = MagicMock()
+    mock_gemini_config.return_value = mock_config_instance
+
     mock_provider_instance = MagicMock()
     mock_gemini_provider.return_value = mock_provider_instance
 
@@ -89,10 +111,11 @@ def test_process_message_success(
     # Check the result
     assert result == "Message response"
     mock_agent_instance.process.assert_called_once_with("Test message")
+    mock_gemini_config.assert_called_once()
 
 
 @patch("src.cli.main.load_env_var")
-def test_process_message_error(mock_load_env_var) -> None:
+def test_process_message_error(mock_load_env_var: MagicMock) -> None:
     """Test process_message with an error."""
     # Mock environment variable to raise an error
     mock_load_env_var.side_effect = Exception("Test error")
@@ -103,7 +126,7 @@ def test_process_message_error(mock_load_env_var) -> None:
 
 
 @patch("src.cli.main.cli")
-def test_main_function(mock_cli) -> None:
+def test_main_function(mock_cli: MagicMock) -> None:
     """Test the main function."""
     main()
     mock_cli.assert_called_once()

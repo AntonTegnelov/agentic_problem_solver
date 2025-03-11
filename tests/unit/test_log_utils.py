@@ -1,7 +1,6 @@
 """Tests for log utilities."""
 
 import logging
-import os
 import tempfile
 from pathlib import Path
 
@@ -33,19 +32,19 @@ def test_setup_logging_with_file() -> None:
 
     # Create a temporary log file
     with tempfile.TemporaryDirectory() as temp_dir:
-        log_file = os.path.join(temp_dir, "test.log")
+        log_file = Path(temp_dir) / "test.log"
 
         # Set up logging with the file
-        setup_logging(log_file=log_file)
+        setup_logging(log_file=str(log_file))
 
         # Check that the file handler was added
         file_handlers = [
-            h for h in root_logger.handlers if isinstance(h, logging.FileHandler) and h.baseFilename == log_file
+            h for h in root_logger.handlers if isinstance(h, logging.FileHandler) and h.baseFilename == str(log_file)
         ]
         assert file_handlers
 
         # Check that the log file was created
-        assert Path(log_file).exists()
+        assert log_file.exists()
 
         # Close and remove the file handler before the temp directory is deleted
         for handler in file_handlers:
