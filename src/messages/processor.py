@@ -217,18 +217,18 @@ def create_message_from_dict(data: dict[str, Any]) -> Message:
     raise ConfigError(msg)
 
 
-def _raise_agent_not_found(agent_id: str) -> None:
-    """Raise AgentNotFoundError with appropriate message.
+def _raise_agent_not_found_error(agent_id: str) -> None:
+    """Raise RetryError for agent not found.
 
     Args:
         agent_id: Agent ID that was not found.
 
     Raises:
-        AgentNotFoundError: Always raised with the agent ID in the message.
+        RetryError: Wrapped AgentNotFoundError.
 
     """
     msg = f"Agent not found: {agent_id}"
-    raise AgentNotFoundError(msg)
+    raise RetryError(msg) from AgentNotFoundError(msg)
 
 
 async def process_message_with_retry(
@@ -261,7 +261,7 @@ async def process_message_with_retry(
     while retries <= max_retries:
         try:
             if agent_id not in agents:
-                _raise_agent_not_found(agent_id)
+                _raise_agent_not_found_error(agent_id)
 
             agent = agents[agent_id]
             result = await agent.process(message)
@@ -320,8 +320,7 @@ async def process_stream_with_retry(
         try:
             if agent_id not in agents:
                 # Wrap AgentNotFoundError in RetryError for consistent error handling
-                msg = f"Agent not found: {agent_id}"
-                raise RetryError(msg) from AgentNotFoundError(msg)
+                _raise_agent_not_found_error(agent_id)
 
             agent = agents[agent_id]
             async for chunk in agent.process_stream(message):
