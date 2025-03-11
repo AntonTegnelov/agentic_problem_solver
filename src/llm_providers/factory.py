@@ -401,6 +401,52 @@ class LLMProviderFactory:
             self._selector.reset_fallback_chain()
 
     @classmethod
+    def _get_cached_provider(cls, name: str, config: ProviderConfig | None) -> BaseLLMProvider | None:
+        """Get cached provider if available.
+
+        Args:
+            name: Provider name.
+            config: Provider configuration.
+
+        Returns:
+            Cached provider instance or None if not found.
+
+        """
+        if name in cls._provider_lifecycles:
+            lifecycle = cls._provider_lifecycles[name]
+            if lifecycle.provider.config == config:
+                return lifecycle.provider
+        return None
+
+    @classmethod
+    def _create_provider_instance(cls, name: str, config: ProviderConfig) -> BaseLLMProvider:
+        """Create a new provider instance.
+
+        Args:
+            name: Provider name.
+            config: Provider configuration.
+
+        Returns:
+            New provider instance.
+
+        Raises:
+            ConfigError: If provider creation fails.
+
+        """
+        provider_cls = cls._providers[name]
+        try:
+            provider = provider_cls(config=config)
+            version = cls._provider_versions.get(name) or ProviderVersion(name)
+            lifecycle = ProviderLifecycle(provider, version)
+            lifecycle.initialize()
+            cls._provider_lifecycles[name] = lifecycle
+        except Exception as e:
+            msg = f"Failed to create provider {name}: {e}"
+            raise ConfigError(msg) from e
+        else:
+            return provider
+
+    @classmethod
     def create_provider(
         cls,
         name: str,
@@ -432,6 +478,11 @@ class LLMProviderFactory:
             if name not in cls._providers:
                 _raise_unsupported_provider(name)
 
+            # Check if we have a cached provider
+            cached_provider = cls._get_cached_provider(name, config)
+            if cached_provider:
+                return cached_provider
+
             # Create configuration if not provided
             if not config:
                 api_key = load_config_from_env(["API_KEY"])
@@ -442,21 +493,14 @@ class LLMProviderFactory:
                 config = provider_cls.create_config(api_key)
 
             # Create provider instance
-            provider = cls._providers[name](config)
+            return cls._create_provider_instance(name, config)
 
-            # Create lifecycle
-            version = provider.get_version()
-            lifecycle = ProviderLifecycle(provider, version)
-
-            # Store in cache
-            cls._provider_lifecycles[name] = lifecycle
-        except APIKeyError:
+        except (ValueError, APIKeyError):
+            # Re-raise these specific exceptions
             raise
         except Exception as e:
-            msg = f"Failed to create provider {name}: {e!s}"
+            msg = f"Failed to create provider {name}: {e}"
             raise ConfigError(msg) from e
-        else:
-            return provider
 
     @classmethod
     def cleanup_provider(cls, name: str) -> None:
