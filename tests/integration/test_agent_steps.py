@@ -91,7 +91,7 @@ def test_validate_step_result() -> None:
         "This is a comprehensive understanding of the problem with key insights and analysis.",
         error=None,
     )
-    assert validate_step_result(AgentStep.UNDERSTAND, result, state) is None
+    assert validate_step_result(AgentStep.UNDERSTAND, result) is None
 
     # Test planning step
     state.current_step = AgentStep.PLAN
@@ -101,7 +101,7 @@ def test_validate_step_result() -> None:
         "This includes key insights and comprehensive analysis of the requirements.",
         error=None,
     )
-    assert validate_step_result(AgentStep.PLAN, result, state) is None
+    assert validate_step_result(AgentStep.PLAN, result) is None
 
     # Test verification step
     state.current_step = AgentStep.VERIFY
@@ -110,17 +110,17 @@ def test_validate_step_result() -> None:
         data=True,  # Verification result must be boolean
         error=None,
     )
-    assert validate_step_result(AgentStep.VERIFY, result, state) is None
+    assert validate_step_result(AgentStep.VERIFY, result) is None
 
     # Test failed result
     result = Result(success=False, data=None, error="Test error")
     with pytest.raises(ConfigError, match="Step failed: Test error"):
-        validate_step_result(AgentStep.VERIFY, result, state)
+        validate_step_result(AgentStep.VERIFY, result)
 
     # Test short response
     result = Result(success=True, data="Too short", error=None)
     with pytest.raises(ConfigError, match="Understanding is too brief"):
-        validate_step_result(AgentStep.UNDERSTAND, result, state)
+        validate_step_result(AgentStep.UNDERSTAND, result)
 
 
 def test_execute_step_with_retry() -> None:
