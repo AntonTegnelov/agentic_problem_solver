@@ -1,11 +1,12 @@
 """Solver agent module."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
-from src.agent.agent_types.agent_types import Message
 from src.agent.base import BaseAgent
 from src.common_types.enums import MessageRole
+from src.messages import Message
 from src.prompts import get_step_prompt
 
 if TYPE_CHECKING:
