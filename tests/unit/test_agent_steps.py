@@ -148,7 +148,7 @@ def test_validate_step_result() -> None:
 
 @patch("src.agent.steps.get_step_prompt")
 @patch("src.agent.steps.get_retry_prompt")
-def test_execute_step_with_retry(mock_get_retry_prompt, mock_get_step_prompt) -> None:
+def test_execute_step_with_retry(mock_get_retry_prompt: MagicMock, mock_get_step_prompt: MagicMock) -> None:
     """Test execute_step_with_retry function."""
     # Setup mocks
     mock_get_step_prompt.return_value = "Test prompt"
@@ -274,19 +274,21 @@ def test_execute_step_with_config_error() -> None:
     mock_agent.process.side_effect = ConfigError("Config error")
 
     # Mock the get_step_prompt and get_retry_prompt functions
-    with patch("src.agent.steps.get_step_prompt", return_value="Test prompt") as mock_get_step_prompt:
-        with patch("src.agent.steps.get_retry_prompt", return_value="Test retry prompt") as mock_get_retry_prompt:
-            # Execute step with retry with max_retries=0 to ensure only one call to get_step_prompt
-            result = execute_step_with_retry(state, AgentStep.UNDERSTAND, max_retries=0)
+    with (
+        patch("src.agent.steps.get_step_prompt", return_value="Test prompt") as mock_get_step_prompt,
+        patch("src.agent.steps.get_retry_prompt", return_value="Test retry prompt") as mock_get_retry_prompt,
+    ):
+        # Execute step with retry with max_retries=0 to ensure only one call to get_step_prompt
+        result = execute_step_with_retry(state, AgentStep.UNDERSTAND, max_retries=0)
 
-            # Verify the result
-            assert result.success is False
-            # The error message will be "Max retries exceeded" because that's what the function returns
-            assert "Max retries exceeded" in result.error
-            # Verify that get_step_prompt was called once
-            assert mock_get_step_prompt.call_count == 1
-            # Verify that get_retry_prompt was not called
-            assert mock_get_retry_prompt.call_count == 0
+        # Verify the result
+        assert result.success is False
+        # The error message will be "Max retries exceeded" because that's what the function returns
+        assert "Max retries exceeded" in result.error
+        # Verify that get_step_prompt was called once
+        assert mock_get_step_prompt.call_count == 1
+        # Verify that get_retry_prompt was not called
+        assert mock_get_retry_prompt.call_count == 0
 
 
 class TestBaseStepExecutor:
@@ -295,7 +297,7 @@ class TestBaseStepExecutor:
     class ConcreteStepExecutor(BaseStepExecutor):
         """Concrete implementation of BaseStepExecutor for testing."""
 
-        def _execute_step(self, step):
+        def _execute_step(self, _step: Step) -> Result:
             """Implement abstract method."""
             return Result(success=True, data="test_result", error=None)
 
@@ -348,7 +350,7 @@ class TestBaseStepExecutor:
         assert result.data == "test_result"
 
     @patch("src.agent.steps.AgentStatus")
-    def test_execute_step_success(self, mock_agent_status) -> None:
+    def test_execute_step_success(self, mock_agent_status: MagicMock) -> None:
         """Test execute_step method with successful execution."""
         # Setup mock AgentStatus
         mock_agent_status.BUSY = AgentStatus.BUSY
@@ -357,7 +359,7 @@ class TestBaseStepExecutor:
         executor = self.ConcreteStepExecutor()
 
         # Create a mock step function that returns a successful result
-        def mock_step_func(state, **kwargs):
+        def mock_step_func(_: AgentState, **_kwargs: dict) -> Result:
             return Result(success=True, data="test_result", error=None)
 
         step = Step(name="test_step", func=mock_step_func, required_keys=["key1"])
@@ -374,7 +376,7 @@ class TestBaseStepExecutor:
         assert state.step_count == 1
 
     @patch("src.agent.steps.AgentStatus")
-    def test_execute_step_failure_with_retry(self, mock_agent_status) -> None:
+    def test_execute_step_failure_with_retry(self, mock_agent_status: MagicMock) -> None:
         """Test execute_step method with failure and retry."""
         # Setup mock AgentStatus
         mock_agent_status.BUSY = AgentStatus.BUSY
@@ -417,7 +419,7 @@ class TestBaseStepExecutor:
         assert mock_func.call_count == 2
 
     @patch("src.agent.steps.AgentStatus")
-    def test_execute_step_failure_max_retries_exceeded(self, mock_agent_status) -> None:
+    def test_execute_step_failure_max_retries_exceeded(self, mock_agent_status: MagicMock) -> None:
         """Test execute_step method with failure and max retries exceeded."""
         # Setup mock AgentStatus
         mock_agent_status.BUSY = AgentStatus.BUSY
@@ -453,7 +455,7 @@ class TestBaseStepExecutor:
         assert state.error is not None
 
     @patch("src.agent.steps.AgentStatus")
-    def test_execute_step_failure_no_retry(self, mock_agent_status) -> None:
+    def test_execute_step_failure_no_retry(self, mock_agent_status: MagicMock) -> None:
         """Test execute_step method with failure and no retry."""
         # Setup mock AgentStatus
         mock_agent_status.BUSY = AgentStatus.BUSY
