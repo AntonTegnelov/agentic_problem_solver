@@ -13,7 +13,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from src.common_types.enums import AgentStep
 from src.exceptions import AgentNotFoundError, ConfigError
-from src.messages import (
+from src.messages.creation import create_structured_message
+from src.messages.utils import (
     get_message_at_index,
     get_metadata_at_index,
     set_metadata_at_index,
@@ -401,8 +402,6 @@ class AgentState:
         """
         try:
             # Handle message deserialization
-            from src.messages import create_structured_message
-
             messages = []
             for msg in data.get("messages", []):
                 role = msg.get("role", "unknown")

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.common_types.enums import AgentStep
 from src.exceptions import ConfigError
-from src.messages import create_human_message
+from src.messages.creation import create_human_message
 
 if TYPE_CHECKING:
     from src.agent.agent_types.agent_types import StepResult

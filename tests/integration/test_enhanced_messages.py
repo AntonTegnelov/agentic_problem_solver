@@ -1,25 +1,27 @@
-"""Test enhanced message system functionality."""
+"""Integration tests for enhanced message functionality."""
 
 from datetime import UTC, datetime
 
 import pytest
-
-from src.agent.errors import AgentNotFoundError
-from src.common_types.message_types import (
+from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
+
+from src.agent.errors import AgentNotFoundError
+from src.common_types.enums import MessagePriority
 from src.exceptions import ConfigError, RetryError
-from src.messages import (
-    MessageHandler,
-    MessagePriority,
-    MessageRouter,
+from src.messages.chain import create_message_chain
+from src.messages.creation import (
     create_ai_message,
     create_human_message,
-    create_message_chain,
     create_structured_message,
     create_system_message,
     create_tool_message,
+)
+from src.messages.handler import MessageHandler
+from src.messages.router import MessageRouter
+from src.messages.utils import (
     get_message_metadata,
     parse_structured_content,
     set_message_metadata,

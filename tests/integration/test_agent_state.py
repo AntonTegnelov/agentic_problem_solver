@@ -15,8 +15,8 @@ from src.agent.state.base import (
     InMemoryStateManager,
 )
 from src.common_types.enums import AgentStep
-from src.config import ConfigError
-from src.messages import create_human_message, create_system_message
+from src.exceptions import ConfigError
+from src.messages.creation import create_human_message, create_system_message
 
 
 def test_context_validation() -> None:

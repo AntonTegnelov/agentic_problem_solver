@@ -8,19 +8,16 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
 from src.agent.errors import AgentError
+from src.common_types.enums import MessagePriority
 from src.exceptions import RetryError
 from src.llm_providers.config.errors import ConfigError
-from src.messages import (
-    MessageChain,
-    MessagePriority,
-    get_message_metadata,
-    set_message_metadata,
-)
+from src.messages.utils import get_message_metadata, set_message_metadata
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
     from src.agent.agent_types.agent_types import Agent, Message, StepResult
+    from src.messages.chain import MessageChain
 
 
 @dataclass

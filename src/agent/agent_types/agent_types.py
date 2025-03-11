@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 from src.agent.errors import AgentError, AgentNotFoundError
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus
-from src.messages import create_human_message, set_message_metadata
+from src.messages.utils import set_message_metadata
 
 T = TypeVar("T")
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from src.common_types.message_types import Message
+    from langchain_core.messages import BaseMessage as Message
 
 
 @dataclass
@@ -330,41 +330,69 @@ class AgentCoordinator(Protocol):
         """
         ...
 
-    def delegate_task(self, task: str, agent_id: str) -> Result[Any]:
+    async def delegate_task(self, agent_id: str, task: str) -> Result:
         """Delegate task to agent.
 
         Args:
+            agent_id: Agent ID.
             task: Task to delegate.
-            agent_id: Target agent ID.
 
         Returns:
-            Result of task delegation.
+            Task result.
 
         Raises:
             ValueError: If agent not found.
 
         """
-        agent = self._registry.get_agent(agent_id)
+        if agent_id not in self._agents:
+            msg = f"Agent not found: {agent_id}"
+            raise ValueError(msg)
 
         # Create task message
         message = create_human_message(task)
         set_message_metadata(message, "receiver_id", agent_id)
 
-        # Send message to agent
-        return agent.receive_message(message)
+        return await self._agents[agent_id].process(message)
 
-    def broadcast_task(self, task: str, capability: str) -> dict[str, Result[Any]]:
-        """Broadcast task to all agents with capability.
+    def delegate_task_sync(self, agent_id: str, task: str) -> Result:
+        """Delegate task to agent synchronously.
+
+        Args:
+            agent_id: Agent ID.
+            task: Task to delegate.
+
+        Returns:
+            Task result.
+
+        Raises:
+            ValueError: If agent not found.
+
+        """
+        if agent_id not in self._agents:
+            msg = f"Agent not found: {agent_id}"
+            raise ValueError(msg)
+
+        message = create_human_message(task)
+        return self._agents[agent_id].process(message)
+
+    async def broadcast_task(self, task: str) -> dict[str, Result]:
+        """Broadcast task to all agents.
 
         Args:
             task: Task to broadcast.
-            capability: Required capability.
 
         Returns:
             Dictionary of agent IDs to results.
 
         """
-        ...
+        self._update_agents()  # Ensure we have the latest agents
+        results = {}
+        message = create_human_message(task)
+
+        for agent_id, agent in self._agents.items():
+            results[agent_id] = await agent.process(message)
+
+        return results
 
     def route_message(self, message: Message) -> Result[Any]:
         """Route message to target agent.

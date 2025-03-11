@@ -1,17 +1,12 @@
-"""Test agent coordination."""
+"""Integration tests for agent coordination."""
 
 import pytest
+from langchain_core.messages import HumanMessage
 
-from src.agent.agent_types.agent_types import (
-    Agent,
-    AgentInfo,
-    InMemoryAgentRegistry,
-    Result,
-    SimpleAgentCoordinator,
-)
-from src.agent.errors import AgentNotFoundError
-from src.common_types.message_types import Message
-from src.messages import create_human_message
+from src.agent.agent_types.agent_types import Agent, AgentInfo, StepResult
+from src.agent.coordination import AgentCoordinator, AgentRegistry
+from src.exceptions import AgentNotFoundError
+from src.messages.creation import create_human_message
 from tests.unit.test_utils import MockProcessingError
 
 
@@ -35,9 +30,9 @@ class MockAgent:
         self.agent_id = agent_id
         self.capabilities = capabilities
         self.should_fail = should_fail
-        self.processed_messages: list[Message] = []
+        self.processed_messages: list[HumanMessage] = []
 
-    async def process(self, message: Message) -> Result:
+    async def process(self, message: HumanMessage) -> StepResult:
         """Process a message.
 
         Args:
@@ -54,7 +49,7 @@ class MockAgent:
             msg = f"Error processing message: {message.content}"
             raise MockProcessingError(msg)
         self.processed_messages.append(message)
-        return Result(success=True, data=f"Processed by {self.agent_id}", error="")
+        return StepResult(success=True, data=f"Processed by {self.agent_id}", error="")
 
     def get_agent_id(self) -> str:
         """Get agent ID.
@@ -86,7 +81,7 @@ class MockAgent:
         """
         return any(capability in task.lower() for capability in self.capabilities)
 
-    def send_message(self, message: Message) -> Result[str]:
+    def send_message(self, message: HumanMessage) -> StepResult:
         """Send message to agent.
 
         Args:
@@ -98,7 +93,7 @@ class MockAgent:
         """
         return self.process(message)
 
-    def receive_message(self, message: Message) -> Result[str]:
+    def receive_message(self, message: HumanMessage) -> StepResult:
         """Receive message from another agent.
 
         Args:
@@ -113,7 +108,7 @@ class MockAgent:
 
 def test_agent_registry() -> None:
     """Test agent registry functionality."""
-    registry = InMemoryAgentRegistry()
+    registry = AgentRegistry()
 
     # Test registering agents
     agent1 = MockAgent("agent1", ["math", "logic"])
@@ -171,8 +166,8 @@ def test_agent_registry() -> None:
 @pytest.mark.asyncio
 async def test_agent_coordinator() -> None:
     """Test agent coordinator functionality."""
-    registry = InMemoryAgentRegistry()
-    SimpleAgentCoordinator(registry)
+    registry = AgentRegistry()
+    AgentCoordinator(registry)
 
     # Register agents
     agent1 = MockAgent("agent1", ["math"])
@@ -217,8 +212,8 @@ async def test_agent_coordinator() -> None:
 
 def test_agent_factory() -> None:
     """Test agent factory functionality."""
-    registry = InMemoryAgentRegistry()
-    coordinator = SimpleAgentCoordinator(registry)
+    registry = AgentRegistry()
+    coordinator = AgentCoordinator(registry)
 
     # Register agent factories
     def create_math_agent(config: dict) -> Agent:
@@ -255,7 +250,7 @@ def test_agent_factory() -> None:
 @pytest.mark.asyncio
 async def test_agent_communication() -> None:
     """Test agent communication."""
-    registry = InMemoryAgentRegistry()
+    registry = AgentRegistry()
 
     # Create agents
     agent1 = MockAgent("agent1", ["math"])
@@ -290,7 +285,7 @@ async def test_agent_communication() -> None:
 
 def test_agent_registry_new() -> None:
     """Test agent registry."""
-    registry = InMemoryAgentRegistry()
+    registry = AgentRegistry()
 
     # Test registering agents
     agent1 = MockAgent("agent1", ["math"])
@@ -325,8 +320,8 @@ def test_agent_registry_new() -> None:
 @pytest.mark.asyncio
 async def test_agent_coordinator_new() -> None:
     """Test agent coordinator."""
-    registry = InMemoryAgentRegistry()
-    SimpleAgentCoordinator(registry)
+    registry = AgentRegistry()
+    AgentCoordinator(registry)
 
     # Test delegating task
     agent1 = MockAgent("agent1", ["math"])

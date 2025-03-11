@@ -6,19 +6,17 @@ from datetime import UTC, datetime
 import pytest
 
 from src.agent.agent_types.agent_types import StepResult
+from src.common_types.enums import MessagePriority
 from src.common_types.message_types import Message
 from src.exceptions import ConfigError, RetryError
-from src.messages import (
-    MessagePriority,
-    MessageRouter,
+from src.messages.chain import create_message_chain
+from src.messages.creation import (
     create_ai_message,
     create_human_message,
-    create_message_chain,
     create_tool_message,
-    get_message_metadata,
-    set_message_metadata,
-    validate_message_content,
 )
+from src.messages.router import MessageRouter
+from src.messages.utils import get_message_metadata, set_message_metadata, validate_message_content
 from tests.unit.test_utils import MockProcessingError
 
 

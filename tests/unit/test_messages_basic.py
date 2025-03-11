@@ -3,42 +3,40 @@
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+from src.common_types.enums import MessagePriority
 from src.config import ConfigError
-from src.messages import (
-    MessageChain,
-    MessagePriority,
+from src.messages.chain import MessageChain, create_message_chain
+from src.messages.creation import (
     create_ai_message,
     create_human_message,
-    create_message_chain,
     create_system_message,
     create_tool_message,
-    get_message_metadata,
-    set_message_metadata,
 )
+from src.messages.utils import get_message_metadata, set_message_metadata
 
 
 def test_message_creation() -> None:
-    """Test message creation functions."""
-    # Test system message
+    """Test message creation."""
+    # Test human message creation
+    human_msg = create_human_message("Hello")
+    assert isinstance(human_msg, HumanMessage)
+    assert human_msg.content == "Hello"
+
+    # Test AI message creation
+    ai_msg = create_ai_message("Hi there")
+    assert isinstance(ai_msg, AIMessage)
+    assert ai_msg.content == "Hi there"
+
+    # Test system message creation
     system_msg = create_system_message("System instruction")
     assert isinstance(system_msg, SystemMessage)
     assert system_msg.content == "System instruction"
 
-    # Test human message
-    human_msg = create_human_message("Human query")
-    assert isinstance(human_msg, HumanMessage)
-    assert human_msg.content == "Human query"
-
-    # Test AI message
-    ai_msg = create_ai_message("AI response")
-    assert isinstance(ai_msg, AIMessage)
-    assert ai_msg.content == "AI response"
-
-    # Test tool message
-    tool_msg = create_tool_message("Tool output", "tool-123")
+    # Test tool message creation
+    tool_msg = create_tool_message("Tool output", "tool_123")
     assert isinstance(tool_msg, ToolMessage)
     assert tool_msg.content == "Tool output"
-    assert tool_msg.tool_call_id == "tool-123"
+    assert tool_msg.tool_call_id == "tool_123"
 
 
 def test_message_metadata() -> None:
