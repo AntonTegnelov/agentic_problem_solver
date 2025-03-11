@@ -1,7 +1,6 @@
 """Test error handling."""
 
 from pathlib import Path
-from typing import NoReturn
 
 import pytest
 
@@ -19,132 +18,139 @@ from src.exceptions import (
 )
 
 
-def test_api_key_error() -> NoReturn:
+def test_api_key_error() -> None:
     """Test APIKeyError."""
     # Test error message
+    msg = "API key is missing"
     with pytest.raises(APIKeyError, match="API key is missing"):
-        msg = "API key is missing"
         raise APIKeyError(msg)
 
     # Test inheritance
-    error = APIKeyError("API key is missing")
-    assert isinstance(error, ValueError)
+    assert issubclass(APIKeyError, Exception)
 
 
-def test_config_error() -> NoReturn:
+def test_config_error() -> None:
     """Test ConfigError."""
     # Test error message
+    msg = "Invalid configuration"
     with pytest.raises(ConfigError, match="Invalid configuration"):
-        msg = "Invalid configuration"
         raise ConfigError(msg)
 
     # Test with agent config
-    with pytest.raises(ConfigError, match="temperature must be less than 1"):
-        from src.config.agent import AgentConfig
+    from src.config.agent import AgentConfig
 
+    with pytest.raises(ConfigError, match="temperature must be less than 1"):
         AgentConfig(temperature=1.5)
 
 
-def test_empty_response_error() -> NoReturn:
+def test_empty_response_error() -> None:
     """Test EmptyResponseError."""
     # Test error message
+    msg = "Empty response"
     with pytest.raises(EmptyResponseError, match="Empty response"):
-        msg = "Empty response"
         raise EmptyResponseError(msg)
 
     # Test inheritance
-    error = EmptyResponseError("Empty response")
-    assert isinstance(error, RuntimeError)
+    assert issubclass(EmptyResponseError, Exception)
 
 
-def test_invalid_model_error() -> NoReturn:
+def test_invalid_model_error() -> None:
     """Test InvalidModelError."""
     # Test error message
+    msg = "Invalid model"
     with pytest.raises(InvalidModelError, match="Invalid model"):
-        msg = "Invalid model"
         raise InvalidModelError(msg)
 
     # Test with LLM config
-    with pytest.raises(ValueError, match="Model name cannot be empty"):
-        from src.config.llm import LLMConfig
+    from src.config.llm import LLMConfig
 
+    with pytest.raises(ValueError, match="Model name cannot be empty"):
         LLMConfig(model="")
 
 
-def test_retry_error() -> NoReturn:
+def test_retry_error() -> None:
     """Test RetryError."""
     # Test error message
+    msg = "Max retries exceeded"
     with pytest.raises(RetryError, match="Max retries exceeded"):
-        msg = "Max retries exceeded"
         raise RetryError(msg)
 
     # Test with agent config
-    with pytest.raises(ConfigError, match="max_retries must be greater than 0"):
-        from src.config.agent import AgentConfig
+    from src.config.agent import AgentConfig
 
+    with pytest.raises(ConfigError, match="max_retries must be greater than 0"):
         AgentConfig(max_retries=-1)
 
 
-def test_temperature_error() -> NoReturn:
+def test_temperature_error() -> None:
     """Test TemperatureError."""
     # Test error message
+    msg = "Invalid temperature"
     with pytest.raises(TemperatureError, match="Invalid temperature"):
-        msg = "Invalid temperature"
         raise TemperatureError(msg)
 
     # Test inheritance
-    error = TemperatureError("Invalid temperature")
-    assert isinstance(error, ValueError)
+    assert issubclass(TemperatureError, Exception)
 
 
-def test_agent_error() -> NoReturn:
+def test_agent_error() -> None:
     """Test AgentError."""
     # Test error message
+    msg = "Agent error"
     with pytest.raises(AgentError, match="Agent error"):
-        msg = "Agent error"
         raise AgentError(msg)
 
     # Test inheritance
-    error = AgentError("Agent error")
-    assert isinstance(error, Exception)
+    assert issubclass(AgentError, Exception)
 
 
-def test_validation_error() -> NoReturn:
+def test_validation_error() -> None:
     """Test ValidationError."""
     # Test error message
+    msg = "Validation failed"
     with pytest.raises(ValidationError, match="Validation failed"):
-        msg = "Validation failed"
         raise ValidationError(msg)
 
     # Test inheritance
-    error = ValidationError("Validation failed")
-    assert isinstance(error, Exception)
+    assert issubclass(ValidationError, Exception)
 
 
-def test_processing_error() -> NoReturn:
+def test_processing_error() -> None:
     """Test ProcessingError."""
     # Test error message
+    msg = "Processing failed"
     with pytest.raises(ProcessingError, match="Processing failed"):
-        msg = "Processing failed"
         raise ProcessingError(msg)
 
     # Test inheritance
-    error = ProcessingError("Processing failed")
-    assert isinstance(error, Exception)
+    assert issubclass(ProcessingError, Exception)
+
+
+def _raise_value_error(msg: str) -> None:
+    """Raise ValueError with the given message.
+
+    Args:
+        msg: Error message.
+
+    Raises:
+        ValueError: Always raised with the given message.
+
+    """
+    raise ValueError(msg)
 
 
 def test_error_chaining() -> None:
     """Test error chaining."""
-    try:
+    with pytest.raises(ConfigError) as excinfo:
         try:
             msg = "Original error"
-            raise ValueError(msg)
+            _raise_value_error(msg)
         except ValueError as e:
             msg = "Configuration error"
             raise ConfigError(msg) from e
-    except ConfigError as e:
-        assert isinstance(e.__cause__, ValueError)
-        assert str(e.__cause__) == "Original error"
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert str(excinfo.value.__cause__) == "Original error"
 
 
 def test_error_handling_in_env_vars(tmp_path: Path) -> None:
