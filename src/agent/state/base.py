@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -13,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from src.common_types.enums import AgentStep
-from src.exceptions import ConfigError
+from src.exceptions import AgentNotFoundError, ConfigError
 from src.messages import (
     get_message_at_index,
     get_metadata_at_index,
@@ -21,7 +20,7 @@ from src.messages import (
 )
 
 if TYPE_CHECKING:
-    from src.agent.agent_types.agent_types import Message, StepResult
+    from src.agent.agent_types.agent_types import Agent, Message, Result, StepResult
 
 T = TypeVar("T")
 
@@ -96,15 +95,15 @@ class StateManager(Protocol):
 
         # Generate path if not provided
         if path is None:
-            path = os.path.join(self.base_dir, f"{self.state.agent_id}.json")
+            path = str(Path(self.base_dir) / f"{self.state.agent_id}.json")
 
         # Convert state to dict
         state_dict = self.state.to_dict()
 
         # Save to file
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(state_dict, f, indent=2)
+        path_obj = Path(path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        path_obj.write_text(json.dumps(state_dict, indent=2), encoding="utf-8")
 
         return path
 
@@ -473,7 +472,11 @@ class AgentState:
             msg = "No agents registered"
             raise ConfigError(msg)
 
-        # For now, just return the first agent
+        # In the future, we could have different agents for different steps
+        # For now, log the step and return the first agent
+        step.name if hasattr(step, "name") else str(step)
+
+        # Return the first agent regardless of step
         return next(iter(self._agents.values()))
 
     def register_agent(self, agent_id: str, agent: Agent) -> None:
@@ -524,6 +527,9 @@ class AgentState:
             raise ConfigError(msg)
 
         # Get step prompt and process
+        # Import here to avoid circular imports
+        from src.agent.steps import get_step_prompt
+
         prompt = get_step_prompt(step)
         self.add_message(prompt)
         return agent.process(prompt)
@@ -585,7 +591,9 @@ class InMemoryStateManager(StateManager):
         state_dict = self._state.to_dict()
 
         # Save to file
-        Path(path).write_text(json.dumps(state_dict, indent=2), encoding="utf-8")
+        path_obj = Path(path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        path_obj.write_text(json.dumps(state_dict, indent=2), encoding="utf-8")
 
         # Store state in memory
         self._states[self._state.agent_id] = self._state
@@ -608,8 +616,7 @@ class InMemoryStateManager(StateManager):
         try:
             # Check if file exists
             if not Path(path).exists():
-                msg = f"State file not found: {path}"
-                raise ConfigError(msg)
+                self._raise_file_not_found(path)
 
             # Load from file
             state_dict = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -623,11 +630,24 @@ class InMemoryStateManager(StateManager):
             # Set as current state
             self._state = state
             self._states[state.agent_id] = state
-
-            return state
         except Exception as e:
             msg = f"Failed to load state: {e}"
             raise ConfigError(msg) from e
+        else:
+            return state
+
+    def _raise_file_not_found(self, path: str) -> None:
+        """Raise ConfigError for file not found.
+
+        Args:
+            path: Path to state file.
+
+        Raises:
+            ConfigError: Always raised.
+
+        """
+        msg = f"State file not found: {path}"
+        raise ConfigError(msg)
 
     def list_states(self) -> list[str]:
         """List available states.
@@ -662,8 +682,8 @@ class FileStateManager(StateManager):
             base_dir: Base directory for state files.
 
         """
-        self.base_dir = base_dir or os.path.join(os.getcwd(), "state")
-        os.makedirs(self.base_dir, exist_ok=True)
+        self.base_dir = Path(base_dir) if base_dir else Path.cwd() / "state"
+        self.base_dir.mkdir(parents=True, exist_ok=True)
         self.state = None
 
     def set_state(self, state: AgentState) -> None:
@@ -701,14 +721,13 @@ class FileStateManager(StateManager):
             raise ConfigError(msg)
 
         # Create base directory if it doesn't exist
-        os.makedirs(self.base_dir, exist_ok=True)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
 
         # Get path for state file
         state_path = self.get_state_path()
 
         # Save state to file
-        with open(state_path, "w", encoding="utf-8") as f:
-            json.dump(self.state.to_dict(), f)
+        Path(state_path).write_text(json.dumps(self.state.to_dict()), encoding="utf-8")
 
         return state_path
 
@@ -719,13 +738,13 @@ class FileStateManager(StateManager):
             path: Path to state file.
 
         """
-        if not os.path.exists(path):
+        state_path = Path(path)
+        if not state_path.exists():
             msg = f"State file not found: {path}"
             raise ConfigError(msg)
 
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-            self.state = AgentState.from_dict(data)
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        self.state = AgentState.from_dict(data)
 
     def list_states(self) -> list[str]:
         """List available states.
@@ -734,15 +753,10 @@ class FileStateManager(StateManager):
             List of state IDs.
 
         """
-        if not os.path.exists(self.base_dir):
+        if not self.base_dir.exists():
             return []
 
-        states = []
-        for file in os.listdir(self.base_dir):
-            if file.endswith(".json"):
-                # Remove .json extension to get agent ID
-                states.append(os.path.splitext(file)[0])
-        return states
+        return [file.stem for file in self.base_dir.glob("*.json")]
 
     def delete_state(self, agent_id: str) -> None:
         """Delete state file.
@@ -751,9 +765,9 @@ class FileStateManager(StateManager):
             agent_id: Agent ID.
 
         """
-        path = self.get_state_path(agent_id)
-        if os.path.exists(path):
-            os.remove(path)
+        path = Path(self.get_state_path(agent_id))
+        if path.exists():
+            path.unlink()
 
     def get_state_path(self) -> str:
         """Get path for state file.
@@ -769,7 +783,7 @@ class FileStateManager(StateManager):
             msg = "No state to save"
             raise ConfigError(msg)
 
-        return os.path.join(self.base_dir, f"{self.state.agent_id}.json")
+        return str(self.base_dir / f"{self.state.agent_id}.json")
 
     def get_state_by_id(self, agent_id: str) -> AgentState:
         """Get state by agent ID.
@@ -784,11 +798,10 @@ class FileStateManager(StateManager):
             ConfigError: If state not found.
 
         """
-        state_path = os.path.join(self.base_dir, f"{agent_id}.json")
-        if not os.path.exists(state_path):
+        state_path = self.base_dir / f"{agent_id}.json"
+        if not state_path.exists():
             msg = f"State not found: {agent_id}"
             raise ConfigError(msg)
 
-        with open(state_path, encoding="utf-8") as f:
-            state_dict = json.load(f)
-            return AgentState.from_dict(state_dict)
+        state_dict = json.loads(state_path.read_text(encoding="utf-8"))
+        return AgentState.from_dict(state_dict)
