@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
-from src.agent.base import BaseAgent
+from src.agent.base import Agent
 from src.common_types.enums import MessageRole
 from src.messages import Message
 from src.prompts import get_step_prompt
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-class SolverAgent(BaseAgent[str, str]):
+class SolverAgent(Agent):
     """Agent that solves programming problems."""
 
     def __init__(
