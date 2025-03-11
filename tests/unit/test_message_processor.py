@@ -6,9 +6,12 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from src.agent.result import Result
-from src.exceptions import ConfigError, RetryError
+from src.common_types.message_types import Message
+from src.exceptions import AgentNotFoundError, ConfigError, RetryError
 from src.messages.processor import (
     DefaultMessageProcessor,
+    MessageProcessor,
+    _raise_agent_not_found_error,
     create_message_from_dict,
     get_metadata_at_index,
     parse_structured_content,
@@ -53,6 +56,12 @@ def test_parse_structured_content() -> None:
     result = parse_structured_content(message)
     assert result == {"key": "value", "number": 42}
 
+    # Test with dictionary content directly
+    message = MagicMock()
+    message.content = {"key": "value", "number": 42}
+    result = parse_structured_content(message)
+    assert result == {"key": "value", "number": 42}
+
     # Test with invalid JSON content
     message = HumanMessage(content="Not a JSON string")
     with pytest.raises(ConfigError):
@@ -60,6 +69,12 @@ def test_parse_structured_content() -> None:
 
     # Test with empty content
     message = HumanMessage(content="")
+    with pytest.raises(ConfigError):
+        parse_structured_content(message)
+
+    # Test with None content to trigger AttributeError
+    message = MagicMock()
+    message.content = None
     with pytest.raises(ConfigError):
         parse_structured_content(message)
 
@@ -89,8 +104,9 @@ def test_validate_message_content() -> None:
     message = HumanMessage(content='{"field1": "value1"}')
 
     # We need to patch the metadata access with missing required field
-    with patch.object(message, "metadata", {"field1": "value1"}, create=True), pytest.raises(ConfigError):
-        validate_message_content(message, required_fields=["field1", "field2"])
+    with patch.object(message, "metadata", {"field1": "value1"}, create=True):
+        with pytest.raises(ConfigError, match="Missing required metadata field"):
+            validate_message_content(message, required_fields=["field1", "field2"])
 
 
 def test_default_message_processor_process() -> None:
@@ -122,6 +138,28 @@ def test_default_message_processor_validate() -> None:
     with patch("src.messages.processor.validate_message_content", side_effect=ConfigError("Invalid message")):
         with pytest.raises(ConfigError):
             processor.validate(message)
+
+
+def test_message_processor_protocol() -> None:
+    """Test MessageProcessor protocol."""
+
+    # Create a class that implements the MessageProcessor protocol
+    class TestProcessor(MessageProcessor):
+        def process(self, message: Message) -> Message:
+            return message
+
+        def validate(self, message: Message) -> bool:
+            return True
+
+    # Create an instance of the class
+    processor = TestProcessor()
+
+    # Test the process method
+    message = HumanMessage(content="Test message")
+    assert processor.process(message) == message
+
+    # Test the validate method
+    assert processor.validate(message) is True
 
 
 @patch("langchain_core.messages.HumanMessage")
@@ -184,6 +222,15 @@ def test_create_message_from_dict(mock_tool, mock_system, mock_ai, mock_human) -
     data = {"role": "invalid", "content": "Message with invalid role"}
     with pytest.raises(ConfigError, match="Invalid message role: invalid"):
         create_message_from_dict(data)
+
+
+def test_raise_agent_not_found_error() -> None:
+    """Test _raise_agent_not_found_error function."""
+    with pytest.raises(RetryError) as exc_info:
+        _raise_agent_not_found_error("test_agent")
+
+    assert "Agent not found: test_agent" in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, AgentNotFoundError)
 
 
 @pytest.mark.asyncio
@@ -254,6 +301,57 @@ async def test_process_message_with_retry_exception() -> None:
 
 
 @pytest.mark.asyncio
+async def test_process_message_with_retry_value_error() -> None:
+    """Test process_message_with_retry function with ValueError."""
+    # Create mock agent that raises ValueError
+    agent = AsyncMock()
+    agent.process.side_effect = ValueError("Test error")
+    agents = {"test_agent": agent}
+    message = HumanMessage(content="Test message")
+
+    # Call function and check exception
+    with pytest.raises(ValueError):
+        await process_message_with_retry(message, agents, "test_agent")
+
+    # Check agent was called once
+    agent.process.assert_called_once_with(message)
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_retry_type_error() -> None:
+    """Test process_message_with_retry function with TypeError."""
+    # Create mock agent that raises TypeError
+    agent = AsyncMock()
+    agent.process.side_effect = TypeError("Test error")
+    agents = {"test_agent": agent}
+    message = HumanMessage(content="Test message")
+
+    # Call function and check exception
+    with pytest.raises(RetryError):
+        await process_message_with_retry(message, agents, "test_agent", max_retries=1)
+
+    # Check agent was called multiple times (initial + retry)
+    assert agent.process.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_retry_connection_error() -> None:
+    """Test process_message_with_retry function with ConnectionError."""
+    # Create mock agent that raises ConnectionError
+    agent = AsyncMock()
+    agent.process.side_effect = ConnectionError("Test error")
+    agents = {"test_agent": agent}
+    message = HumanMessage(content="Test message")
+
+    # Call function and check exception
+    with pytest.raises(RetryError):
+        await process_message_with_retry(message, agents, "test_agent", max_retries=1)
+
+    # Check agent was called multiple times (initial + retry)
+    assert agent.process.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_process_stream_with_retry_success() -> None:
     """Test process_stream_with_retry function with successful processing."""
     # Create mock agent with streaming
@@ -309,3 +407,42 @@ async def test_process_stream_with_retry_exception() -> None:
     with pytest.raises(RetryError):
         async for _ in process_stream_with_retry(message, agents, "test_agent", max_retries=1):
             pass
+
+
+@pytest.mark.asyncio
+async def test_process_stream_with_retry_value_error() -> None:
+    """Test process_stream_with_retry function with ValueError."""
+    # Create mock agent that raises ValueError
+    agent = MagicMock()
+
+    async def mock_stream_with_error(*args, **kwargs):
+        yield "Chunk 1"
+        msg = "Test error"
+        raise ValueError(msg)
+
+    agent.process_stream = mock_stream_with_error
+    agents = {"test_agent": agent}
+    message = HumanMessage(content="Test message")
+
+    # Call function and check exception
+    with pytest.raises(ValueError):
+        async for _ in process_stream_with_retry(message, agents, "test_agent"):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_process_stream_with_retry_max_retries_exceeded() -> None:
+    """Test process_stream_with_retry function with max retries exceeded."""
+    # Create mock agent that raises an exception
+    agent = MagicMock()
+    agent.process_stream = AsyncMock(side_effect=Exception("Test error"))
+    agents = {"test_agent": agent}
+    message = HumanMessage(content="Test message")
+
+    # Call function and check exception
+    with pytest.raises(RetryError, match="Max retries exceeded"):
+        async for _ in process_stream_with_retry(message, agents, "test_agent", max_retries=1, retry_delay=0.01):
+            pass
+
+    # Check agent was called multiple times (initial + retry)
+    assert agent.process_stream.call_count == 2
