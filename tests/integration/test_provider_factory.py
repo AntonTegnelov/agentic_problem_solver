@@ -1,7 +1,7 @@
 """Integration tests for the LLM provider factory.
 
-These tests verify that the provider factory can properly initialize and manage different LLM providers,
-handle configuration changes, and manage provider lifecycle events.
+These tests verify that the provider factory can properly initialize and manage
+different LLM providers, handle configuration changes, and manage provider lifecycle events.
 """
 
 import os
