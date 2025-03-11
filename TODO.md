@@ -120,7 +120,7 @@
       - [x] Write tests for agent state management
       - [x] Write tests for agent step processing
       - [x] Write tests for agent coordination
-      - [ ] Write tests for configuration system
+      - [x] Write tests for configuration system
       - [ ] Write tests for error handling
       - [x] ruff check .
         - [x] Fixed import error in messages.py (moved Generic from collections.abc to typing)
