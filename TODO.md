@@ -121,7 +121,7 @@
       - [x] Write tests for agent step processing
       - [x] Write tests for agent coordination
       - [x] Write tests for configuration system
-      - [ ] Write tests for error handling
+      - [x] Write tests for error handling
       - [x] ruff check .
         - [x] Fixed import error in messages.py (moved Generic from collections.abc to typing)
         - [ ] Many ruff warnings in test files (S101, PLR2004, etc.) - can be addressed later
