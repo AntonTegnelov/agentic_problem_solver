@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.base import Agent
 from src.agent.result import Result
-from src.agent.state.base import AgentState
+from src.agent.state.base import AgentState, StateManager
 from src.common_types.enums import MessageRole
 from src.messages import Message
 from src.prompts import get_step_prompt
@@ -26,14 +26,14 @@ class SolverAgent(Agent):
     def __init__(
         self,
         provider: LLMProvider | None = None,
-        state_manager: AgentState | None = None,
+        state_manager: AgentState | StateManager | None = None,
         config: AgentConfig | None = None,
     ) -> None:
         """Initialize agent.
 
         Args:
             provider: LLM provider.
-            state_manager: State manager.
+            state_manager: State manager or agent state.
             config: Agent configuration.
 
         """
@@ -41,7 +41,15 @@ class SolverAgent(Agent):
         self._state_manager = state_manager
         self._agent_id = "solver_agent"
         self.config = config
-        self.state = state_manager or AgentState(agent_id=self._agent_id)
+
+        # Handle both AgentState and StateManager
+        if state_manager is None:
+            self.state = AgentState(agent_id=self._agent_id)
+        elif isinstance(state_manager, AgentState):
+            self.state = state_manager
+        else:
+            # It's a StateManager
+            self.state = state_manager.get_state()
 
     def get_agent_id(self) -> str:
         """Get agent ID.
