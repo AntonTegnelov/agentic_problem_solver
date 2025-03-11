@@ -28,8 +28,8 @@ setup(
         ],
     },
     python_requires=">=3.8",
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="Anton Tegnelöv",
+    author_email="anton.tegnelov@gmail.com",
     description="An AI-powered problem-solving system",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -39,7 +39,5 @@ setup(
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
     ],
 )

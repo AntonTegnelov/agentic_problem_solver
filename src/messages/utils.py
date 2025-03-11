@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from src.exceptions import ConfigError
 
@@ -51,14 +51,14 @@ def get_metadata_at_index(
         IndexError: If index is out of range.
 
     """
-    return messages[index].metadata.get(key, default)
+    return get_message_metadata(messages[index], key, default)
 
 
 def set_metadata_at_index(
     messages: list[Message],
     index: int,
     key: str,
-    value: Any,
+    value: object,
 ) -> None:
     """Set metadata value for message at index.
 
@@ -72,10 +72,10 @@ def set_metadata_at_index(
         IndexError: If index is out of range.
 
     """
-    messages[index].metadata[key] = value
+    set_message_metadata(messages[index], key, value)
 
 
-def get_message_metadata(message: Message, key: str, default: Any = None) -> Any:
+def get_message_metadata(message: Message, key: str, default: object = None) -> object:
     """Get message metadata.
 
     Args:
@@ -87,10 +87,15 @@ def get_message_metadata(message: Message, key: str, default: Any = None) -> Any
         Metadata value.
 
     """
-    return message.metadata.get(key, default)
+    # Ensure the message has additional_kwargs and metadata
+    if not hasattr(message, "additional_kwargs"):
+        return default
+
+    metadata = message.additional_kwargs.get("metadata", {})
+    return metadata.get(key, default)
 
 
-def set_message_metadata(message: Message, key: str, value: Any) -> None:
+def set_message_metadata(message: Message, key: str, value: object) -> None:
     """Set message metadata.
 
     Args:
@@ -99,13 +104,22 @@ def set_message_metadata(message: Message, key: str, value: Any) -> None:
         value: Metadata value.
 
     """
-    message.metadata[key] = value
+    # Ensure the message has additional_kwargs
+    if not hasattr(message, "additional_kwargs"):
+        message.additional_kwargs = {}
+
+    # Ensure the message has a metadata dict
+    if "metadata" not in message.additional_kwargs:
+        message.additional_kwargs["metadata"] = {}
+
+    # Set the metadata value
+    message.additional_kwargs["metadata"][key] = value
 
 
 def parse_structured_content(
     message: Message,
-    default: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    default: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Parse structured message content.
 
     Args:
@@ -159,7 +173,7 @@ def validate_message_content(message: Message, required_fields: list[str] | None
     # Check required fields in metadata
     if required_fields and not isinstance(message.content, dict):
         for field in required_fields:
-            if field not in message.metadata:
+            if get_message_metadata(message, field) is None:
                 msg = f"Missing required metadata field: {field}"
                 raise ConfigError(msg)
 

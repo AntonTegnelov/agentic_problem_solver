@@ -9,15 +9,15 @@ from src.agent.result import Result
 from src.common_types.message_types import Message
 
 
-class TestProcessingError(Exception):
+class MockProcessingError(Exception):
     """Test processing error."""
 
 
-class TestGenerationError(Exception):
+class MockGenerationError(Exception):
     """Test generation error."""
 
 
-class TestAgent(Agent):
+class MockAgent(Agent):
     """Test agent implementation."""
 
     def __init__(self, agent_id: str = "test", should_fail: bool = False) -> None:
@@ -41,7 +41,7 @@ class TestAgent(Agent):
         """Get agent capabilities."""
         return self.capabilities
 
-    def can_handle(self, task: str) -> bool:
+    def can_handle(self, _task: str) -> bool:
         """Check if agent can handle task."""
         return True
 
@@ -61,10 +61,10 @@ class TestAgent(Agent):
         self.processed_messages.append(message)
         yield f"Processed by {self._agent_id}"
 
-    def send_message(self, message: Message) -> Result[Any]:
+    def send_message(self, _message: Message) -> Result[Any]:
         """Send a message."""
         return Result(success=True, data=f"Sent by {self._agent_id}", error="")
 
-    def receive_message(self, message: Message) -> Result[Any]:
+    def receive_message(self, _message: Message) -> Result[Any]:
         """Receive a message."""
         return Result(success=True, data=f"Received by {self._agent_id}", error="")

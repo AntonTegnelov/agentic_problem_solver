@@ -29,6 +29,10 @@ class AgentError(Exception):
     """Base class for agent-related errors."""
 
 
+class AgentNotFoundError(AgentError):
+    """Raised when agent is not found."""
+
+
 class ValidationError(Exception):
     """Raised when validation fails."""
 

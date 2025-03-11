@@ -83,14 +83,19 @@ def create_structured_message(
     if metadata is None:
         metadata = {}
 
+    additional_kwargs = {"metadata": metadata} if metadata else {}
+
     if role == "system":
-        return SystemMessage(content=content, metadata=metadata)
+        return SystemMessage(content=content, additional_kwargs=additional_kwargs)
     if role == "human":
-        return HumanMessage(content=content, metadata=metadata)
+        return HumanMessage(content=content, additional_kwargs=additional_kwargs)
     if role == "ai":
-        return AIMessage(content=content, metadata=metadata)
+        return AIMessage(content=content, additional_kwargs=additional_kwargs)
     if role == "tool":
-        return ToolMessage(content=content, metadata=metadata)
+        if "tool_call_id" not in metadata:
+            msg = "Tool messages require a tool_call_id in metadata"
+            raise ConfigError(msg)
+        return ToolMessage(content=content, tool_call_id=metadata["tool_call_id"], additional_kwargs=additional_kwargs)
     msg = f"Invalid message role: {role}"
     raise ConfigError(msg)
 

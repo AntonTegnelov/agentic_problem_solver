@@ -1,5 +1,12 @@
 """Message handling module."""
 
+# TODO(@dev): This file duplicates functionality in src/messages/chain.py. Issue: #123
+# The project should consolidate these implementations to avoid confusion and bugs.
+# The plan should be to:
+# 1. Ensure all tests pass with both implementations
+# 2. Gradually migrate all code to use the modular implementation in src/messages/chain.py
+# 3. Remove the duplicate implementation in this file
+
 from __future__ import annotations
 
 import time
@@ -83,18 +90,14 @@ class MessageChain:
                 current_msg,
                 AIMessage | ToolMessage,
             ):
-                error_msg = (
-                    "Invalid message sequence: Human message must be followed by AI or Tool message"
-                )
+                error_msg = "Invalid message sequence: Human message must be followed by AI or Tool message"
                 raise ConfigError(error_msg)
 
             if isinstance(prev, AIMessage) and not isinstance(
                 current_msg,
                 HumanMessage | ToolMessage,
             ):
-                error_msg = (
-                    "Invalid message sequence: AI message must be followed by Human or Tool message"
-                )
+                error_msg = "Invalid message sequence: AI message must be followed by Human or Tool message"
                 raise ConfigError(error_msg)
 
             # Validate timestamps are sequential
@@ -760,10 +763,7 @@ class MessageRouter(Generic[T, U]):
                         set_message_metadata(message, "error", result.error)
 
                         # If critical priority, retry regardless of retry count
-                        if (
-                            get_message_metadata(message, "priority")
-                            == MessagePriority.CRITICAL.value
-                        ):
+                        if get_message_metadata(message, "priority") == MessagePriority.CRITICAL.value:
                             retries += 1
                             last_error = result.error
                             continue
@@ -1208,8 +1208,5 @@ class MessageProcessor:
                 time.sleep(self.retry_delay)
 
         # Max retries exceeded
-        msg = (
-            f"Max retries ({self.max_retries}) exceeded for agent {agent_name}. "
-            f"Last error: {last_error}"
-        )
+        msg = f"Max retries ({self.max_retries}) exceeded for agent {agent_name}. Last error: {last_error}"
         raise RetryError(msg)

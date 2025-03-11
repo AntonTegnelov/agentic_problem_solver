@@ -1,11 +1,12 @@
 """Tests for configuration system."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from src.config.agent import AgentConfig, NumericValidation
+from src.config.agent import AgentConfig, NumericValidation, validate_numeric_field
 from src.config.base import BaseConfig
 from src.config.llm import LLMConfig
 from src.config.utils import load_config_from_env, load_env_var
@@ -13,7 +14,7 @@ from src.exceptions import ConfigError
 
 
 @dataclass
-class TestConfig(BaseConfig):
+class MockConfig(BaseConfig):
     """Test configuration class."""
 
     name: str
@@ -23,7 +24,7 @@ class TestConfig(BaseConfig):
 
 def test_base_config_to_dict() -> None:
     """Test BaseConfig.to_dict()."""
-    config = TestConfig(name="test", value=42, nested={"key": "value"})
+    config = MockConfig(name="test", value=42, nested={"key": "value"})
     config_dict = config.to_dict()
     assert config_dict == {
         "name": "test",
@@ -34,12 +35,12 @@ def test_base_config_to_dict() -> None:
 
 def test_base_config_from_dict() -> None:
     """Test BaseConfig.from_dict()."""
-    data = {
+    config_dict = {
         "name": "test",
         "value": 42,
         "nested": {"key": "value"},
     }
-    config = TestConfig.from_dict(data)
+    config = MockConfig.from_dict(config_dict)
     assert config.name == "test"
     assert config.value == 42
     assert config.nested == {"key": "value"}
@@ -47,7 +48,7 @@ def test_base_config_from_dict() -> None:
 
 def test_base_config_update() -> None:
     """Test BaseConfig.update()."""
-    config = TestConfig(name="test", value=42, nested={"key": "value"})
+    config = MockConfig(name="test", value=42, nested={"key": "value"})
     config.update({"name": "updated", "value": 100})
     assert config.name == "updated"
     assert config.value == 100
@@ -88,22 +89,22 @@ def test_agent_config_validation() -> None:
 
 def test_agent_config_numeric_validation() -> None:
     """Test AgentConfig numeric field validation."""
-    config = AgentConfig()
+    AgentConfig()
 
     # Test min value validation
     with pytest.raises(ConfigError, match="test must be greater than 5"):
-        config._validate_numeric_field("test", 3, min_value=5)
+        validate_numeric_field("test", 3, min_value=5)
 
     # Test max value validation
     with pytest.raises(ConfigError, match="test must be less than 10"):
-        config._validate_numeric_field("test", 15, max_value=10)
+        validate_numeric_field("test", 15, max_value=10)
 
     # Test zero validation
     with pytest.raises(ConfigError, match="test must be non-zero"):
-        config._validate_numeric_field("test", 0, validation_type=NumericValidation.DISALLOW_ZERO)
+        validate_numeric_field("test", 0, validation_type=NumericValidation.DISALLOW_ZERO)
 
     # Test allow zero
-    config._validate_numeric_field("test", 0, validation_type=NumericValidation.ALLOW_ZERO)
+    validate_numeric_field("test", 0, validation_type=NumericValidation.ALLOW_ZERO)
 
 
 def test_llm_config_validation() -> None:
@@ -158,7 +159,7 @@ def test_llm_config_dict() -> None:
     assert config_dict["custom_param"] == "value"
 
 
-def test_load_env_var(tmp_path) -> None:
+def test_load_env_var(tmp_path: Path) -> None:
     """Test load_env_var utility."""
     # Create a temporary .env file
     env_file = tmp_path / ".env"
@@ -175,7 +176,7 @@ def test_load_env_var(tmp_path) -> None:
         load_env_var("TEST_REQUIRED", env_file=env_file, required=True)
 
 
-def test_load_config_from_env(tmp_path) -> None:
+def test_load_config_from_env(tmp_path: Path) -> None:
     """Test load_config_from_env utility."""
     # Create a temporary .env file
     env_file = tmp_path / ".env"

@@ -34,83 +34,131 @@ def create_message(role: str, content: str, metadata: dict[str, Any] | None = No
     if metadata is None:
         metadata = {}
 
+    additional_kwargs = {"metadata": metadata} if metadata else {}
+
     if role == "human":
-        return HumanMessage(content=content, metadata=metadata)
+        return HumanMessage(content=content, additional_kwargs=additional_kwargs)
     if role == "ai":
-        return AIMessage(content=content, metadata=metadata)
+        return AIMessage(content=content, additional_kwargs=additional_kwargs)
     if role == "system":
-        return SystemMessage(content=content, metadata=metadata)
+        return SystemMessage(content=content, additional_kwargs=additional_kwargs)
     if role == "tool":
         if "tool_call_id" not in metadata:
-            msg = "tool_call_id is required for tool messages"
+            msg = "Tool messages require a tool_call_id in metadata"
             raise ConfigError(msg)
         return ToolMessage(
             content=content,
             tool_call_id=metadata["tool_call_id"],
-            metadata=metadata,
+            additional_kwargs=additional_kwargs,
         )
 
-    msg = f"Invalid role: {role}"
+    msg = f"Invalid message role: {role}"
     raise ConfigError(msg)
 
 
-def create_human_message(content: str, **kwargs: Any) -> HumanMessage:
+def create_human_message(content: str, metadata: dict[str, Any] | None = None, **kwargs: object) -> HumanMessage:
     """Create human message.
 
     Args:
         content: Message content.
-        **kwargs: Additional message metadata.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
 
     Returns:
         Human message.
 
     """
-    return HumanMessage(content=content, metadata=kwargs)
+    if metadata is None:
+        metadata = {}
+
+    # Add any kwargs to metadata
+    if kwargs:
+        metadata.update(kwargs)
+
+    additional_kwargs = {"metadata": metadata} if metadata else {}
+
+    return HumanMessage(content=content, additional_kwargs=additional_kwargs)
 
 
-def create_ai_message(content: str, **kwargs: Any) -> AIMessage:
+def create_ai_message(content: str, metadata: dict[str, Any] | None = None, **kwargs: object) -> AIMessage:
     """Create AI message.
 
     Args:
         content: Message content.
-        **kwargs: Additional message metadata.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
 
     Returns:
         AI message.
 
     """
-    return AIMessage(content=content, metadata=kwargs)
+    if metadata is None:
+        metadata = {}
+
+    # Add any kwargs to metadata
+    if kwargs:
+        metadata.update(kwargs)
+
+    additional_kwargs = {"metadata": metadata} if metadata else {}
+
+    return AIMessage(content=content, additional_kwargs=additional_kwargs)
 
 
-def create_system_message(content: str, **kwargs: Any) -> SystemMessage:
+def create_system_message(content: str, metadata: dict[str, Any] | None = None, **kwargs: object) -> SystemMessage:
     """Create system message.
 
     Args:
         content: Message content.
-        **kwargs: Additional message metadata.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
 
     Returns:
         System message.
 
     """
-    return SystemMessage(content=content, metadata=kwargs)
+    if metadata is None:
+        metadata = {}
+
+    # Add any kwargs to metadata
+    if kwargs:
+        metadata.update(kwargs)
+
+    additional_kwargs = {"metadata": metadata} if metadata else {}
+
+    return SystemMessage(content=content, additional_kwargs=additional_kwargs)
 
 
-def create_tool_message(content: str, tool_call_id: str, **kwargs: Any) -> ToolMessage:
+def create_tool_message(
+    content: str,
+    tool_call_id: str,
+    metadata: dict[str, Any] | None = None,
+    **kwargs: object,
+) -> ToolMessage:
     """Create tool message.
 
     Args:
         content: Message content.
         tool_call_id: Tool call ID.
-        **kwargs: Additional message metadata.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
 
     Returns:
         Tool message.
 
     """
-    metadata = kwargs.copy()
+    if metadata is None:
+        metadata = {}
+
+    # Add tool_call_id to metadata
     metadata["tool_call_id"] = tool_call_id
-    return ToolMessage(content=content, tool_call_id=tool_call_id, metadata=metadata)
+
+    # Add any kwargs to metadata
+    if kwargs:
+        metadata.update(kwargs)
+
+    additional_kwargs = {"metadata": metadata} if metadata else {}
+
+    return ToolMessage(content=content, tool_call_id=tool_call_id, additional_kwargs=additional_kwargs)
 
 
 def create_structured_message(
@@ -121,12 +169,15 @@ def create_structured_message(
     """Create structured message.
 
     Args:
-        role: Message role
-        content: Message content
-        metadata: Optional metadata
+        role: Message role.
+        content: Message content.
+        metadata: Optional metadata.
 
     Returns:
-        Structured message
+        Message instance.
+
+    Raises:
+        ConfigError: If role is invalid.
 
     """
     if metadata is None:

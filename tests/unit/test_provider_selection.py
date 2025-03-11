@@ -16,7 +16,7 @@ from src.llm_providers.selection import (
     ProviderSelector,
 )
 from src.llm_providers.version import ModelVersion, ProviderVersion, Version
-from tests.unit.test_utils import TestGenerationError, TestProcessingError
+from tests.unit.test_utils import MockGenerationError, MockProcessingError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -57,15 +57,13 @@ class MockProvider(Provider):
             Processing result.
 
         Raises:
-            TestProcessingError: If processing fails.
+            MockProcessingError: If processing fails.
 
         """
         if self.should_fail:
-            msg = "Processing failed"
-            raise TestProcessingError(msg)
-
-        self.processed_messages.append(message)
-        return Result(success=True, data="Processed by mock")
+            msg = f"Error processing message: {message.content}"
+            raise MockProcessingError(msg)
+        return Result.ok(f"Processed message: {message.content}")
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
         """Process message with streaming.
@@ -77,15 +75,15 @@ class MockProvider(Provider):
             Chunks of processed message.
 
         Raises:
-            TestGenerationError: If streaming fails.
+            MockGenerationError: If streaming fails.
 
         """
         if self.should_fail:
-            msg = "Streaming failed"
-            raise TestGenerationError(msg)
+            msg = f"Error generating streaming response: {message.content}"
+            raise MockGenerationError(msg)
 
         self.processed_messages.append(message)
-        yield "Processed by mock"
+        yield f"Processed by mock: {message.content}"
 
     def _create_config(self, api_key: str | None = None) -> ProviderConfig:
         """Create provider configuration.
@@ -103,43 +101,43 @@ class MockProvider(Provider):
         """Generate response.
 
         Args:
-            prompt: Input prompt.
+            prompt: Prompt to generate response for.
 
         Returns:
             Generated response.
 
         Raises:
-            TestGenerationError: If should_fail is True.
+            MockGenerationError: If should_fail is True.
 
         """
         if self.should_fail:
-            msg = "Generation failed"
-            raise TestGenerationError(msg)
-        return "Test response"
+            msg = f"Error generating response: {prompt}"
+            raise MockGenerationError(msg)
+        return f"Response to: {prompt}"
 
     async def generate_stream(self, prompt: str) -> str:
-        """Generate text from prompt as stream.
+        """Generate streaming response.
 
         Args:
-            prompt: Input prompt.
+            prompt: Prompt to generate response for.
 
         Returns:
-            Generated text stream.
+            Generated response.
 
         Raises:
-            Exception: If should_fail is True.
+            MockGenerationError: If should_fail is True.
 
         """
         if self.should_fail:
-            msg = "Generation failed"
-            raise TestGenerationError(msg)
-        yield f"Streaming response to: {prompt}"
+            msg = f"Error generating streaming response: {prompt}"
+            raise MockGenerationError(msg)
+        return f"Streaming response to: {prompt}"
 
-    def supports_temperature(self, temperature: float) -> bool:
+    def supports_temperature(self, _temperature: float) -> bool:
         """Check if provider supports temperature.
 
         Args:
-            temperature: Temperature to check.
+            _temperature: Temperature to check.
 
         Returns:
             Whether temperature is supported.
@@ -176,8 +174,8 @@ def create_test_version(capabilities: list[str]) -> ProviderVersion:
 def test_provider_capability_matching() -> None:
     """Test provider capability matching."""
     # Create providers with different capabilities
-    provider1 = MockProvider(True)
-    provider2 = MockProvider(True)
+    provider1 = MockProvider(supports_temp=True)
+    provider2 = MockProvider(supports_temp=True)
 
     version1 = create_test_version(["text", "chat", "function_calling"])
     version2 = create_test_version(["text", "code", "streaming"])
@@ -281,8 +279,8 @@ def test_provider_temperature_filtering() -> None:
 def test_provider_fallback_chain() -> None:
     """Test provider fallback chain."""
     # Create providers
-    provider1 = MockProvider(True)
-    provider2 = MockProvider(True)
+    provider1 = MockProvider(supports_temp=True)
+    provider2 = MockProvider(supports_temp=True)
 
     version = create_test_version(["text"])
 
@@ -314,9 +312,9 @@ def test_provider_fallback_chain() -> None:
 def test_provider_load_balancing() -> None:
     """Test provider load balancing."""
     # Create providers
-    provider1 = MockProvider("provider1", True)
-    provider2 = MockProvider("provider2", True)
-    provider3 = MockProvider("provider3", True)
+    provider1 = MockProvider(name="provider1", supports_temp=True)
+    provider2 = MockProvider(name="provider2", supports_temp=True)
+    provider3 = MockProvider(name="provider3", supports_temp=True)
 
     version = create_test_version(["text"])
 

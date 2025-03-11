@@ -101,15 +101,21 @@ class MessageRouter:
         agent = self.agents[actual_target_id]
         retries = 0
         set_message_metadata(message, "retry_count", 0)
+        last_result = None
 
         while retries <= self.max_retries:
             try:
-                result = await agent.process(message)
+                last_result = await agent.process(message)
+                # Process successful, add to chain if needed
                 if chain is not None:
                     chain.add_message(message)
                 if hasattr(agent, "processed_messages"):
                     agent.processed_messages.append(message)
-                return result
+                # Exit the loop with the result
+                break
+            except AgentNotFoundError:
+                # Re-raise immediately
+                raise
             except Exception as e:
                 retries += 1
                 set_message_metadata(message, "retry_count", retries)
@@ -118,6 +124,11 @@ class MessageRouter:
                     raise RetryError(msg) from e
                 await asyncio.sleep(self.retry_delay)
 
+        # If we have a result, return it
+        if last_result is not None:
+            return last_result
+
+        # This should never be reached due to the exception above, but added for completeness
         msg = "Max retries exceeded"
         raise RetryError(msg)
 
@@ -131,9 +142,7 @@ class MessageRouter:
             List of results from each agent.
 
         """
-        tasks = []
-        for agent in self.agents.values():
-            tasks.append(agent.process(message))
+        tasks = [agent.process(message) for agent in self.agents.values()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return [r for r in results if not isinstance(r, Exception)]
 
@@ -195,13 +204,15 @@ class MessageRouter:
             try:
                 async for chunk in agent.process_stream(message):
                     yield chunk
-                return
+                break  # Exit the loop after successful processing
             except Exception as e:
                 retries += 1
                 if retries > self.max_retries:
                     msg = f"Max retries exceeded: {e}"
-                    raise RetryError(msg)
+                    raise RetryError(msg) from e
                 await asyncio.sleep(self.retry_delay)
 
-        msg = "Max retries exceeded"
-        raise RetryError(msg)
+        # This should never be reached due to the break above, but added for completeness
+        if retries > self.max_retries:
+            msg = "Max retries exceeded"
+            raise RetryError(msg)

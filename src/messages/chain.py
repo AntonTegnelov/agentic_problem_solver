@@ -1,5 +1,12 @@
 """Message chain module."""
 
+# TODO(@dev): This file duplicates functionality in src/messages.py. Issue: #123
+# The project should consolidate these implementations to avoid confusion and bugs.
+# The plan should be to:
+# 1. Ensure all tests pass with both implementations
+# 2. Gradually migrate all code to use this modular implementation
+# 3. Remove the duplicate implementation in src/messages.py
+
 from __future__ import annotations
 
 import uuid
@@ -156,12 +163,14 @@ class MessageChain:
         self,
         criteria: dict[str, Any] | None = None,
         filter_fn: Callable[[Message], bool] | None = None,
+        **kwargs: CriteriaValue,
     ) -> list[Message]:
         """Filter messages by criteria.
 
         Args:
             criteria: Filter criteria.
             filter_fn: Custom filter function.
+            **kwargs: Additional keyword criteria.
 
         Returns:
             Filtered messages.
@@ -169,13 +178,20 @@ class MessageChain:
         """
         filtered = self._messages
 
+        # Combine dictionary and keyword criteria
+        all_criteria = {}
         if criteria:
+            all_criteria.update(criteria)
+        if kwargs:
+            all_criteria.update(kwargs)
+
+        if all_criteria:
             filtered = [
                 msg
                 for msg in filtered
                 if all(
                     (key == "type" and isinstance(msg, value)) or (get_message_metadata(msg, key) == value)
-                    for key, value in criteria.items()
+                    for key, value in all_criteria.items()
                 )
             ]
 
@@ -232,13 +248,12 @@ class MessageChain:
             List of matching messages.
 
         """
-        results = []
-        for msg in self._messages:
-            if (field is None and query.lower() in str(msg.content).lower()) or (
-                field is not None and query.lower() in str(get_message_metadata(msg, field, "")).lower()
-            ):
-                results.append(msg)
-        return results
+        return [
+            msg
+            for msg in self._messages
+            if (field is None and query.lower() in str(msg.content).lower())
+            or (field is not None and query.lower() in str(get_message_metadata(msg, field, "")).lower())
+        ]
 
     def validate_message_chain(self) -> bool:
         """Validate message chain.
@@ -252,10 +267,10 @@ class MessageChain:
         """
         # Check for required metadata
         for message in self._messages:
-            if not message.metadata.get("timestamp"):
+            if not get_message_metadata(message, "timestamp"):
                 msg = "Missing timestamp metadata"
                 raise ConfigError(msg)
-            if not message.metadata.get("priority"):
+            if not get_message_metadata(message, "priority"):
                 msg = "Missing priority metadata"
                 raise ConfigError(msg)
 

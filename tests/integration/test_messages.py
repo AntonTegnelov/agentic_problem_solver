@@ -19,11 +19,7 @@ from src.messages import (
     set_message_metadata,
     validate_message_content,
 )
-from tests.test_utils import TestProcessingError
-
-
-class TestProcessingError(Exception):
-    """Error raised during test message processing."""
+from tests.unit.test_utils import MockProcessingError
 
 
 class MockAgent:
@@ -42,40 +38,40 @@ class MockAgent:
         self.processed_messages: list[Message] = []
 
     async def process(self, message: Message) -> StepResult:
-        """Process message.
+        """Process a message.
 
         Args:
             message: Message to process.
 
         Returns:
-            Step result.
+            Processing result.
 
         Raises:
-            TestProcessingError: If should_fail is True.
+            MockProcessingError: If should_fail is True.
 
         """
         if self.should_fail:
-            msg = "Processing failed"
-            raise TestProcessingError(msg)
+            msg = f"Error processing message: {message.content}"
+            raise MockProcessingError(msg)
         self.processed_messages.append(message)
-        return StepResult(success=True, data=f"Processed by {self.agent_id}", error="")
+        return StepResult(success=True, data=f"Processed by {self.agent_id}")
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
-        """Process message with streaming.
+        """Process a message in streaming mode.
 
         Args:
             message: Message to process.
 
-        Yields:
-            Chunks of processed message.
+        Returns:
+            Processing result stream.
 
         Raises:
-            TestProcessingError: If should_fail is True.
+            MockProcessingError: If should_fail is True.
 
         """
         if self.should_fail:
-            msg = "Processing failed"
-            raise TestProcessingError(msg)
+            msg = f"Error streaming message: {message.content}"
+            raise MockProcessingError(msg)
         self.processed_messages.append(message)
         yield f"Processed by {self.agent_id}"
 

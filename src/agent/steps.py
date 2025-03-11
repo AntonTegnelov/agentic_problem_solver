@@ -10,8 +10,7 @@ from langchain.schema import HumanMessage
 
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus, AgentStep
-from src.config.base import ConfigError
-from src.exceptions import AgentNotFoundError
+from src.exceptions import AgentNotFoundError, ConfigError
 from src.prompts import get_retry_prompt, get_step_prompt
 
 if TYPE_CHECKING:
@@ -184,7 +183,7 @@ class BaseStepExecutor(StepExecutor[T]):
         step.validate_inputs(**kwargs)
 
         # Update state
-        state.status = AgentStatus.RUNNING
+        state.status = AgentStatus.BUSY
         state.step_count += 1
 
         try:
@@ -198,14 +197,12 @@ class BaseStepExecutor(StepExecutor[T]):
 
             # Handle retries
             if step.retry_on_error:
-                max_retries = (
-                    step.max_retries if step.max_retries is not None else state.config.max_retries
-                )
+                max_retries = step.max_retries if step.max_retries is not None else state.config.max_retries
                 if state.retry_count <= max_retries:
                     return self.execute_step(step, state, **kwargs)
 
             # Update state on failure
-            state.status = AgentStatus.FAILED
+            state.status = AgentStatus.ERROR
             error_msg = f"Step '{step.name}' failed: {err}"
             raise RuntimeError(error_msg) from err
 

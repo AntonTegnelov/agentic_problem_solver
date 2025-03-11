@@ -1,4 +1,5 @@
 """Agent configuration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,6 +21,39 @@ class NumericValidation(Enum):
 
     ALLOW_ZERO = auto()
     DISALLOW_ZERO = auto()
+
+
+def validate_numeric_field(
+    field_name: str,
+    value: float,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    validation_type: NumericValidation = NumericValidation.DISALLOW_ZERO,
+) -> None:
+    """Validate a numeric field.
+
+    Args:
+        field_name: Name of the field being validated.
+        value: Value to validate.
+        min_value: Minimum allowed value (inclusive).
+        max_value: Maximum allowed value (inclusive).
+        validation_type: Type of validation to perform.
+
+    Raises:
+        ConfigError: If validation fails.
+
+    """
+    if min_value is not None and value < min_value:
+        msg = f"{field_name} must be greater than {min_value}"
+        raise ConfigError(msg)
+
+    if max_value is not None and value > max_value:
+        msg = f"{field_name} must be less than {max_value}"
+        raise ConfigError(msg)
+
+    if validation_type == NumericValidation.DISALLOW_ZERO and value == 0:
+        msg = f"{field_name} must be non-zero"
+        raise ConfigError(msg)
 
 
 @dataclass
@@ -68,17 +102,13 @@ class AgentConfig(BaseConfig):
             ConfigError: If validation fails.
 
         """
-        if min_value is not None and value < min_value:
-            msg = f"{field_name} must be greater than {min_value}"
-            raise ConfigError(msg)
-
-        if max_value is not None and value > max_value:
-            msg = f"{field_name} must be less than {max_value}"
-            raise ConfigError(msg)
-
-        if validation_type == NumericValidation.DISALLOW_ZERO and value == 0:
-            msg = f"{field_name} must be non-zero"
-            raise ConfigError(msg)
+        validate_numeric_field(
+            field_name,
+            value,
+            min_value,
+            max_value,
+            validation_type,
+        )
 
     def validate(self) -> None:
         """Validate configuration.

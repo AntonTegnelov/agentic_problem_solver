@@ -8,9 +8,6 @@ APS is designed as a hierarchical multi-agent system that breaks down and solves
 
 ### 1. Configuration System (`src/config/`)
 
-- `defaults.py`: System-wide default values and constants
-- `types.py`: Configuration-related type definitions
-- `validation.py`: Configuration validation rules
 - Each subsystem has its own config that extends the base configurations
 
 ### 2. Agent System (`src/agent/`)
