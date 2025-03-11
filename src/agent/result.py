@@ -54,7 +54,7 @@ class Result(Generic[T]):
         return cls(success=True, data=data, message=message)
 
     @classmethod
-    def error(cls, error: Exception | str) -> Result[T]:
+    def create_error(cls, error: Exception | str) -> Result[T]:
         """Create error result.
 
         Args:
@@ -97,11 +97,11 @@ class Result(Generic[T]):
             return Result[Any](success=False, error=self.error, data=None, message=self.message)
         try:
             return Result.ok(func(self.data), self.message)
-        except Exception as e:
-            return Result.error(e)
+        except (ValueError, TypeError, AttributeError, KeyError, IndexError) as e:
+            return Result.create_error(e)
 
     @classmethod
-    def success(cls, data: Any = None, message: str | None = None) -> Result:
+    def success(cls, data: object = None, message: str | None = None) -> Result:
         """Create a success result.
 
         Args:
@@ -115,7 +115,7 @@ class Result(Generic[T]):
         return cls(success=True, data=data, message=message)
 
     @classmethod
-    def failure(cls, message: str, data: Any = None) -> Result:
+    def failure(cls, message: str, data: object = None) -> Result:
         """Create a failure result.
 
         Args:
