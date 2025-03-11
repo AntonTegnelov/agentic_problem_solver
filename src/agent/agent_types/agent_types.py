@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from src.agent.errors import AgentError, AgentNotFoundError
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus
 from src.messages.utils import set_message_metadata
@@ -212,103 +211,6 @@ class AgentRegistry(Protocol):
 
         """
         ...
-
-
-class InMemoryAgentRegistry(AgentRegistry):
-    """In-memory agent registry implementation."""
-
-    def __init__(self) -> None:
-        """Initialize registry."""
-        self._agents: dict[str, AgentEntry] = {}
-
-    def register_agent(self, agent: Agent[Any], info: AgentInfo) -> None:
-        """Register agent.
-
-        Args:
-            agent: Agent to register.
-            info: Agent information.
-
-        """
-        self._agents[info.agent_id] = AgentEntry(info=info, agent=agent)
-
-    def unregister_agent(self, agent_id: str) -> None:
-        """Unregister agent.
-
-        Args:
-            agent_id: Agent ID.
-
-        """
-        if agent_id in self._agents:
-            del self._agents[agent_id]
-
-    def get_agent(self, agent_id: str) -> Agent[Any]:
-        """Get agent by ID.
-
-        Args:
-            agent_id: Agent ID.
-
-        Returns:
-            Agent instance.
-
-        Raises:
-            AgentNotFoundError: If agent not found.
-
-        """
-        if agent_id not in self._agents:
-            msg = f"Agent not found: {agent_id}"
-            raise AgentNotFoundError(msg)
-        return self._agents[agent_id].agent
-
-    def get_agent_info(self, agent_id: str) -> AgentInfo:
-        """Get agent information.
-
-        Args:
-            agent_id: Agent ID.
-
-        Returns:
-            Agent information.
-
-        Raises:
-            AgentError: If agent not found.
-
-        """
-        if agent_id not in self._agents:
-            msg = f"Agent not found: {agent_id}"
-            raise AgentError(msg)
-        return self._agents[agent_id].info
-
-    def list_agents(self) -> list[AgentInfo]:
-        """List all registered agents.
-
-        Returns:
-            List of agent information.
-
-        """
-        return [entry.info for entry in self._agents.values()]
-
-    def find_agents_by_capability(self, capability: str) -> list[AgentInfo]:
-        """Find agents by capability.
-
-        Args:
-            capability: Capability to search for.
-
-        Returns:
-            List of matching agent information.
-
-        """
-        return [entry.info for entry in self._agents.values() if capability in entry.info.capabilities]
-
-    def find_agents_by_parent(self, parent_id: str) -> list[AgentInfo]:
-        """Find agents by parent ID.
-
-        Args:
-            parent_id: Parent agent ID.
-
-        Returns:
-            List of child agent information.
-
-        """
-        return [entry.info for entry in self._agents.values() if entry.info.parent_id == parent_id]
 
 
 class AgentCoordinator(Protocol):

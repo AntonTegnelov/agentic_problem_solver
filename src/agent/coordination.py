@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from src.agent.agent_types.agent_types import Agent, AgentInfo, Result, StepResult
+from src.agent.agent_types.agent_types import Agent, AgentInfo, AgentRegistry, Result, StepResult
 from src.common_types.message_types import Message
 from src.exceptions import AgentNotFoundError
 
 
-class AgentRegistry:
+class InMemoryAgentRegistry(AgentRegistry):
     """Agent registry for managing agents."""
 
     def __init__(self) -> None:
@@ -132,7 +132,7 @@ class AgentRegistry:
 class AgentCoordinator:
     """Agent coordinator for delegating tasks to agents."""
 
-    def __init__(self, registry: AgentRegistry) -> None:
+    def __init__(self, registry: InMemoryAgentRegistry) -> None:
         """Initialize agent coordinator.
 
         Args:
@@ -248,7 +248,7 @@ class AgentCoordinator:
 class AgentFactory:
     """Agent factory for creating agents."""
 
-    def __init__(self, registry: AgentRegistry) -> None:
+    def __init__(self, registry: InMemoryAgentRegistry) -> None:
         """Initialize agent factory.
 
         Args:
@@ -292,8 +292,8 @@ class AgentFactory:
         return agent
 
 
-# Aliases for backward compatibility
-InMemoryAgentRegistry = AgentRegistry
+# No longer needed as we're using the proper class name
+# InMemoryAgentRegistry = AgentRegistry
 SimpleAgentCoordinator = AgentCoordinator
 
 # Export symbols

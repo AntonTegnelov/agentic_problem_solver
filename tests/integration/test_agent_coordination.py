@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from src.agent.agent_types.agent_types import Agent, AgentInfo, StepResult
-from src.agent.coordination import AgentCoordinator, AgentRegistry
+from src.agent.coordination import AgentCoordinator, InMemoryAgentRegistry
 from src.exceptions import AgentNotFoundError
 from src.messages.creation import create_human_message
 from tests.unit.test_utils import MockProcessingError
@@ -108,7 +108,7 @@ class MockAgent:
 
 def test_agent_registry() -> None:
     """Test agent registry functionality."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
 
     # Test registering agents
     agent1 = MockAgent("agent1", ["math", "logic"])
@@ -166,7 +166,7 @@ def test_agent_registry() -> None:
 @pytest.mark.asyncio
 async def test_agent_coordinator() -> None:
     """Test agent coordinator functionality."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
     AgentCoordinator(registry)
 
     # Register agents
@@ -212,7 +212,7 @@ async def test_agent_coordinator() -> None:
 
 def test_agent_factory() -> None:
     """Test agent factory functionality."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
     coordinator = AgentCoordinator(registry)
 
     # Register agent factories
@@ -250,7 +250,7 @@ def test_agent_factory() -> None:
 @pytest.mark.asyncio
 async def test_agent_communication() -> None:
     """Test agent communication."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
 
     # Create agents
     agent1 = MockAgent("agent1", ["math"])
@@ -285,7 +285,7 @@ async def test_agent_communication() -> None:
 
 def test_agent_registry_new() -> None:
     """Test agent registry."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
 
     # Test registering agents
     agent1 = MockAgent("agent1", ["math"])
@@ -320,7 +320,7 @@ def test_agent_registry_new() -> None:
 @pytest.mark.asyncio
 async def test_agent_coordinator_new() -> None:
     """Test agent coordinator."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
     AgentCoordinator(registry)
 
     # Test delegating task
