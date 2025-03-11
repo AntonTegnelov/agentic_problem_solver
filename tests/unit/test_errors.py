@@ -139,15 +139,25 @@ def _raise_value_error(msg: str) -> None:
     raise ValueError(msg)
 
 
+def _raise_config_error_from_value_error() -> None:
+    """Raise ConfigError from ValueError.
+
+    Raises:
+        ConfigError: Raised with a ValueError as the cause.
+
+    """
+    try:
+        msg = "Original error"
+        _raise_value_error(msg)
+    except ValueError as e:
+        msg = "Configuration error"
+        raise ConfigError(msg) from e
+
+
 def test_error_chaining() -> None:
     """Test error chaining."""
     with pytest.raises(ConfigError) as excinfo:
-        try:
-            msg = "Original error"
-            _raise_value_error(msg)
-        except ValueError as e:
-            msg = "Configuration error"
-            raise ConfigError(msg) from e
+        _raise_config_error_from_value_error()
 
     assert isinstance(excinfo.value.__cause__, ValueError)
     assert str(excinfo.value.__cause__) == "Original error"
