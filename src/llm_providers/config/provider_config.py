@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 from src.config import BaseConfig
@@ -14,8 +14,8 @@ from src.llm_providers.version import ProviderVersion, Version
 class ProviderConfig(BaseConfig):
     """Provider configuration."""
 
-    provider_name: str
-    model: str
+    provider_name: str = "default"
+    model: str = "default"
     temperature: float = 0.7
     max_tokens: int = 100
     api_key: str | None = None
@@ -24,49 +24,7 @@ class ProviderConfig(BaseConfig):
     api_type: str | None = None
     deployment_name: str | None = None
     organization_id: str | None = None
-    additional_kwargs: dict[str, Any] = None
-
-    def __init__(
-        self,
-        name: str = "default",
-        model: str = "default",
-        temperature: float = 0.7,
-        max_tokens: int = 100,
-        api_key: str | None = None,
-        api_base: str | None = None,
-        api_version: str | None = None,
-        api_type: str | None = None,
-        deployment_name: str | None = None,
-        organization_id: str | None = None,
-        additional_kwargs: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize provider config.
-
-        Args:
-            name: Provider name.
-            model: Model name.
-            temperature: Temperature setting.
-            max_tokens: Maximum tokens.
-            api_key: API key.
-            api_base: API base URL.
-            api_version: API version.
-            api_type: API type.
-            deployment_name: Deployment name.
-            organization_id: Organization ID.
-            additional_kwargs: Additional keyword arguments.
-
-        """
-        self.provider_name = name
-        self.model = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.api_key = api_key
-        self.api_base = api_base
-        self.api_version = api_version
-        self.api_type = api_type
-        self.deployment_name = deployment_name
-        self.organization_id = organization_id
-        self.additional_kwargs = additional_kwargs or {}
+    additional_kwargs: dict[str, Any] = field(default_factory=dict)
 
     # Required environment variables
     REQUIRED_ENV_VARS: ClassVar[list[str]] = ["API_KEY", "MODEL"]
