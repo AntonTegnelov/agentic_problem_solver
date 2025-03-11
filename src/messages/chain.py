@@ -1,18 +1,14 @@
 """Message chain module."""
 
-# TODO(@dev): This file duplicates functionality in src/messages.py. Issue: #123
-# The project should consolidate these implementations to avoid confusion and bugs.
-# The plan should be to:
-# 1. Ensure all tests pass with both implementations
-# 2. Gradually migrate all code to use this modular implementation
-# 3. Remove the duplicate implementation in src/messages.py
+# This is the primary implementation of MessageChain.
+# The src/messages.py file is now a compatibility layer that imports from this file.
+# Issue: #123
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Union
 
 from langchain_core.messages import BaseMessage as Message
@@ -20,6 +16,7 @@ from langchain_core.messages import BaseMessage as Message
 if TYPE_CHECKING:
     from src.common_types import Message
 
+from src.common_types.enums import MessagePriority
 from src.common_types.message_types import AIMessage, HumanMessage
 from src.exceptions import ConfigError
 from src.messages.utils import get_message_metadata, set_message_metadata
@@ -27,15 +24,6 @@ from src.messages.utils import get_message_metadata, set_message_metadata
 MessageValue = str | int | float | bool | dict[str, "MessageValue"] | list["MessageValue"] | None
 CriteriaValue = Union[str, int, bool, None]
 CriteriaDict = dict[str, CriteriaValue]
-
-
-class MessagePriority(Enum):
-    """Message priority levels."""
-
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-    CRITICAL = 3
 
 
 def create_message_chain() -> MessageChain:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import TypeVar
 
 # Import submodules at the top to avoid E402 errors
@@ -17,6 +16,8 @@ from langchain_core.messages import (
 )
 
 # Import local modules at the top
+from src.common_types.enums import MessagePriority
+
 from .chain import MessageChain
 from .creation import (
     create_ai_message,
@@ -40,15 +41,6 @@ from .utils import (
 )
 
 T = TypeVar("T")
-
-
-class MessagePriority(Enum):
-    """Message priority."""
-
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-    CRITICAL = 3
 
 
 def create_structured_message(
