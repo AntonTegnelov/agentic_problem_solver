@@ -12,54 +12,61 @@ T = TypeVar("T")
 
 @dataclass
 class Result(Generic[T]):
-    """Result of an agent operation.
-
-    Attributes:
-        success: Whether the operation was successful.
-        value: The result value if successful.
-        error: The error if unsuccessful.
-        metadata: Additional metadata about the result.
-
-    """
+    """Result type for operations that can fail."""
 
     success: bool
-    value: T | None = None
     error: Exception | None = None
-    metadata: dict[str, Any] | None = None
+    data: T | None = None
+    message: str | None = None
 
-    @classmethod
-    def success_result(cls, value: T, metadata: dict[str, Any] | None = None) -> Result[T]:
-        """Create a successful result.
-
-        Args:
-            value: The result value.
-            metadata: Additional metadata.
+    def __bool__(self) -> bool:
+        """Convert to bool.
 
         Returns:
-            A successful result.
+            True if successful, False otherwise.
 
         """
-        return cls(success=True, value=value, metadata=metadata)
+        return self.success
 
-    @classmethod
-    def error_result(
-        cls,
-        error: Exception | str,
-        metadata: dict[str, Any] | None = None,
-    ) -> Result[T]:
-        """Create an error result.
-
-        Args:
-            error: The error that occurred.
-            metadata: Additional metadata.
+    def __str__(self) -> str:
+        """Convert to string.
 
         Returns:
-            An error result.
+            String representation.
+
+        """
+        if self.success:
+            return f"Success: {self.message or 'No message'}"
+        return f"Error: {self.error}"
+
+    @classmethod
+    def ok(cls, data: T | None = None, message: str | None = None) -> Result[T]:
+        """Create successful result.
+
+        Args:
+            data: Optional result data.
+            message: Optional success message.
+
+        Returns:
+            Successful result.
+
+        """
+        return cls(success=True, data=data, message=message)
+
+    @classmethod
+    def error(cls, error: Exception | str) -> Result[T]:
+        """Create error result.
+
+        Args:
+            error: Error that occurred.
+
+        Returns:
+            Error result.
 
         """
         if isinstance(error, str):
-            error = AgentError(error)
-        return cls(success=False, error=error, metadata=metadata)
+            error = Exception(error)
+        return cls(success=False, error=error)
 
     def unwrap(self) -> T:
         """Unwrap the result value.
@@ -71,10 +78,10 @@ class Result(Generic[T]):
             AgentError: If the result is not successful.
 
         """
-        if not self.success or self.value is None:
+        if not self.success or self.data is None:
             msg = f"Cannot unwrap unsuccessful result: {self.error}"
             raise AgentError(msg)
-        return self.value
+        return self.data
 
     def map(self, func: callable[[T], Any]) -> Result[Any]:
         """Map the result value.
@@ -86,9 +93,37 @@ class Result(Generic[T]):
             A new result with the mapped value.
 
         """
-        if not self.success or self.value is None:
-            return Result[Any](success=False, error=self.error, metadata=self.metadata)
+        if not self.success or self.data is None:
+            return Result[Any](success=False, error=self.error, data=None, message=self.message)
         try:
-            return Result.success_result(func(self.value), self.metadata)
+            return Result.ok(func(self.data), self.message)
         except Exception as e:
-            return Result.error_result(e, self.metadata)
+            return Result.error(e)
+
+    @classmethod
+    def success(cls, data: Any = None, message: str | None = None) -> Result:
+        """Create a success result.
+
+        Args:
+            data: Result data.
+            message: Optional message.
+
+        Returns:
+            Success result.
+
+        """
+        return cls(success=True, data=data, message=message)
+
+    @classmethod
+    def failure(cls, message: str, data: Any = None) -> Result:
+        """Create a failure result.
+
+        Args:
+            message: Error message.
+            data: Optional result data.
+
+        Returns:
+            Failure result.
+
+        """
+        return cls(success=False, error=message, data=data)

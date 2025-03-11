@@ -40,83 +40,101 @@ class ProviderSelector:
         capabilities: list[ProviderCapability] | None = None,
         temperature: float | None = None,
     ) -> ProviderLifecycle:
-        """Select best provider based on capabilities and health.
+        """Select provider based on capabilities and health.
 
         Args:
             capabilities: Required capabilities.
-            temperature: Required temperature setting.
+            temperature: Required temperature.
 
         Returns:
-            Selected provider lifecycle.
+            Selected provider.
 
         Raises:
-            ConfigError: If no suitable provider found.
-            TemperatureError: If temperature requirements not met.
+            ConfigError: If no provider found.
+            TemperatureError: If no provider supports temperature.
 
         """
-        candidates = self._filter_by_capabilities(capabilities or [])
+        # Filter by capabilities
+        candidates = []
+        for provider_name, lifecycle in self.providers.items():
+            if lifecycle.state != ProviderState.READY:
+                continue
+
+            version = self.versions[provider_name]
+            model_version = version.supported_models[version.default_model]
+
+            # Check if provider has all required capabilities
+            has_all_capabilities = True
+            if capabilities:
+                for capability in capabilities:
+                    if capability.required and capability.name not in model_version.capabilities:
+                        has_all_capabilities = False
+                        break
+
+            if has_all_capabilities:
+                candidates.append(lifecycle)
+
         if not candidates:
-            msg = "No provider found with required capabilities"
+            msg = "No provider found supporting required capabilities"
             raise ConfigError(msg)
 
-        # Check temperature requirements
+        # Filter by temperature
         if temperature is not None:
-            candidates = self._filter_by_temperature(candidates, temperature)
-            if not candidates:
-                msg = f"No provider supports temperature {temperature}"
+            temp_candidates = [
+                p for p in candidates if p.provider.supports_temperature(temperature)
+            ]
+            if not temp_candidates:
+                msg = f"No provider found supporting temperature {temperature}"
                 raise TemperatureError(msg)
+            candidates = temp_candidates
 
-        # Sort by health and load
+        # Sort by health (lower error count is better) and load (lower load is better)
         candidates.sort(
-            key=lambda x: (
-                x.health.is_healthy,
-                -x.health.error_count,
-                -self._load_distribution.get(x.provider.__class__.__name__, 0.0),
+            key=lambda p: (
+                p.error_count,
+                self._load_distribution.get(p.provider.name, 0.0),
             ),
-            reverse=True,
         )
 
         return candidates[0]
 
     def _filter_by_capabilities(
         self,
-        capabilities: list[ProviderCapability],
+        capabilities: list[str],
     ) -> list[ProviderLifecycle]:
-        """Filter providers by required capabilities.
+        """Filter providers by capabilities.
 
         Args:
             capabilities: Required capabilities.
 
         Returns:
-            List of providers supporting all required capabilities.
+            List of providers with required capabilities.
 
         """
-        result = []
-        for lifecycle in self.providers.values():
+        candidates = []
+        for provider_name, lifecycle in self.providers.items():
             if lifecycle.state != ProviderState.READY:
                 continue
 
-            version = self.versions.get(lifecycle.provider.__class__.__name__)
-            if not version:
+            version = self.versions[provider_name]
+            model_version = version.supported_models[version.default_model]
+
+            # If no capabilities required, include all ready providers
+            if not capabilities:
+                candidates.append(lifecycle)
                 continue
 
-            supports_all = True
-            for cap in capabilities:
-                if cap.required:
-                    # Check capability support
-                    if not version.supports_capability(cap.name):
-                        supports_all = False
-                        break
+            # Check if provider has all required capabilities
+            has_all_capabilities = True
+            for capability in capabilities:
+                if capability not in model_version.capabilities:
+                    has_all_capabilities = False
+                    break
 
-                    # Check version requirement
-                    if cap.min_version and version.version < cap.min_version:
-                        supports_all = False
-                        break
+            if has_all_capabilities:
+                candidates.append(lifecycle)
 
-            if supports_all:
-                result.append(lifecycle)
-
-        return result
+        return candidates
 
     def _filter_by_temperature(
         self,

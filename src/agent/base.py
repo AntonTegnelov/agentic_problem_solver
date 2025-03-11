@@ -1,141 +1,101 @@
-"""Base agent module."""
+"""Base agent class."""
+
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, TypeVar
-
-from src.agent.agent_types.agent_types import Agent
-from src.agent.agent_types.agent_types import Result as StepResult
-from src.agent.state.base import AgentState
-from src.config.agent import AgentConfig
-from src.utils.log_utils import setup_logging
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
-U = TypeVar("U")
+    from src.agent.result import Result
+    from src.common_types.message_types import Message
 
 
-class BaseAgent(Agent[T, U], ABC):
-    """Base agent implementation."""
-
-    def __init__(self, config: AgentConfig | None = None) -> None:
-        """Initialize agent.
-
-        Args:
-            config: Optional agent configuration.
-
-        """
-        self.config = config or AgentConfig()
-        self.state = AgentState()
-        self.step_executor = None
-        self._provider = None
-        self._config = None
-        setup_logging()
-
-    def add_step(self, step: StepResult[T]) -> None:
-        """Add a processing step.
-
-        Args:
-            step: Step to add.
-
-        """
-        if self.step_executor is None:
-            msg = "Step executor not initialized"
-            raise ValueError(msg)
-        self.step_executor.add_step(step)
-
-    def clear_steps(self) -> None:
-        """Clear all processing steps."""
-        if self.step_executor is None:
-            msg = "Step executor not initialized"
-            raise ValueError(msg)
-        self.step_executor.clear_steps()
+class Agent(ABC):
+    """Base agent class."""
 
     @abstractmethod
-    def process(self, input_data: T) -> U:
-        """Process input data.
-
-        Args:
-            input_data: Input data to process.
+    def get_agent_id(self) -> str:
+        """Get agent ID.
 
         Returns:
-            Processed output.
+            Agent ID.
 
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
-    async def process_stream(self, input_data: str) -> AsyncGenerator[str, None]:
-        """Process input data and stream results.
+    def get_capabilities(self) -> list[str]:
+        """Get agent capabilities.
+
+        Returns:
+            List of capabilities.
+
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def can_handle(self, task: str) -> bool:
+        """Check if agent can handle task.
 
         Args:
-            input_data: Input data to process.
+            task: Task to check.
+
+        Returns:
+            True if agent can handle task.
+
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def process(self, message: Message) -> Result:
+        """Process message.
+
+        Args:
+            message: Message to process.
+
+        Returns:
+            Processing result.
+
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+        """Process message with streaming.
+
+        Args:
+            message: Message to process.
 
         Yields:
-            Processed output chunks.
+            Chunks of processed message.
 
         """
-        yield ""
+        raise NotImplementedError
 
-    def get_message_metadata(
-        self,
-        index: int,
-        key: str,
-        default: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
-        """Get metadata from a message at the specified index.
+    @abstractmethod
+    def send_message(self, message: Message) -> Result[Any]:
+        """Send message to agent.
 
         Args:
-            index: Message index.
-            key: Metadata key.
-            default: Default value if key not found.
+            message: Message to send.
 
         Returns:
-            Message metadata value.
+            Result of message processing.
 
         """
-        return self.state.get_message_metadata(index, key, default)
+        raise NotImplementedError
 
-    def set_message_metadata(
-        self,
-        index: int,
-        key: str,
-        value: dict[str, Any],
-    ) -> None:
-        """Set metadata for a message at the specified index.
+    @abstractmethod
+    def receive_message(self, message: Message) -> Result[Any]:
+        """Receive message from another agent.
 
         Args:
-            index: Message index.
-            key: Metadata key.
-            value: Metadata value.
+            message: Message to receive.
+
+        Returns:
+            Result of message processing.
 
         """
-        self.state.set_message_metadata(index, key, value)
-
-    def update_state(self, **kwargs: dict[str, Any]) -> None:
-        """Update agent state.
-
-        Args:
-            **kwargs: State updates.
-
-        """
-        for key, value in kwargs.items():
-            setattr(self.state, key, value)
-
-    def clear_state(self) -> None:
-        """Clear agent state."""
-        self.state.clear()
-
-    def update_config(self, **kwargs: dict[str, Any]) -> None:
-        """Update agent configuration.
-
-        Args:
-            **kwargs: Configuration updates.
-
-        """
-        self.config.update(kwargs)
+        raise NotImplementedError

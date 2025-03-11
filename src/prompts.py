@@ -12,6 +12,11 @@ if TYPE_CHECKING:
     from src.agent.agent_types.agent_types import StepResult
     from src.agent.state.base import AgentState
 
+# Constants for validation
+MIN_UNDERSTANDING_LENGTH = 100  # Minimum length for understanding step
+MIN_PLAN_LENGTH = 100  # Minimum length for plan step
+MIN_VERIFY_LENGTH = 100
+
 # System prompts
 SYSTEM_PROMPT = """You are an AI agent tasked with solving programming problems.
 Your goal is to understand the problem, create a plan, and implement a solution.
@@ -109,11 +114,6 @@ Previous attempt:
 Task: {task}
 {context}
 """
-
-# Minimum content lengths for different steps
-MIN_UNDERSTANDING_LENGTH = 100
-MIN_PLAN_LENGTH = 200
-MIN_VERIFY_LENGTH = 100
 
 STEP_PROMPTS = {
     AgentStep.UNDERSTAND: UNDERSTAND_PROMPT,
@@ -216,15 +216,17 @@ def get_retry_prompt(state: AgentState, error: str) -> str:
 def validate_step_result(
     step: AgentStep,
     result: StepResult[Any],
+    state: AgentState | None = None,
 ) -> None:
     """Validate step result.
 
     Args:
-        step: Step to validate
-        result: Result to validate
+        step: Step to validate.
+        result: Result to validate.
+        state: Optional agent state for additional validation.
 
     Raises:
-        ConfigError: If result is invalid
+        ConfigError: If result is invalid.
 
     """
     # Check for failed result
@@ -246,8 +248,12 @@ def validate_step_result(
         if len(str(result.data)) < MIN_PLAN_LENGTH:
             msg = "Plan is too brief"
             raise ConfigError(msg)
-    elif step == AgentStep.VERIFY and len(str(result.data)) < MIN_VERIFY_LENGTH:
-        msg = "Verification is too brief"
+    elif step == AgentStep.VERIFY:
+        if not isinstance(result.data, bool):
+            msg = "Verification result must be boolean"
+            raise ConfigError(msg)
+    elif step == AgentStep.EXECUTE and not result.data:
+        msg = "Missing execution result"
         raise ConfigError(msg)
 
 

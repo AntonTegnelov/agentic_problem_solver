@@ -1,6 +1,7 @@
 """Common enumerations used throughout the application."""
 
 from enum import Enum
+from typing import Self
 
 
 class AgentStep(str, Enum):
@@ -17,6 +18,22 @@ class AgentStep(str, Enum):
     PLAN = "plan"
     EXECUTE = "execute"
     VERIFY = "verify"
+
+
+class AgentStatus(str, Enum):
+    """Agent status.
+
+    These statuses represent the current state of an agent:
+    - IDLE: Agent is not currently processing any task
+    - BUSY: Agent is actively processing a task
+    - ERROR: Agent encountered an error during processing
+    - COMPLETED: Agent has completed its task
+    """
+
+    IDLE = "idle"
+    BUSY = "busy"
+    ERROR = "error"
+    COMPLETED = "completed"
 
 
 class MessageRole(str, Enum):
@@ -51,3 +68,68 @@ class LogLevel(str, Enum):
     WARNING = "warning"
     ERROR = "error"
     CRITICAL = "critical"
+
+
+class MessagePriority(Enum):
+    """Message priority levels."""
+
+    LOW = 1
+    NORMAL = 2
+    HIGH = 3
+    CRITICAL = 4
+
+    def __lt__(self, other: Self) -> bool:
+        """Less than comparison.
+
+        Args:
+            other: Other priority.
+
+        Returns:
+            True if self < other.
+
+        """
+        if not isinstance(other, MessagePriority):
+            return NotImplemented
+        return self.value < other.value
+
+    def __le__(self, other: Self) -> bool:
+        """Less than or equal comparison.
+
+        Args:
+            other: Other priority.
+
+        Returns:
+            True if self <= other.
+
+        """
+        if not isinstance(other, MessagePriority):
+            return NotImplemented
+        return self.value <= other.value
+
+    def __gt__(self, other: Self) -> bool:
+        """Greater than comparison.
+
+        Args:
+            other: Other priority.
+
+        Returns:
+            True if self > other.
+
+        """
+        if not isinstance(other, MessagePriority):
+            return NotImplemented
+        return self.value > other.value
+
+    def __ge__(self, other: Self) -> bool:
+        """Greater than or equal comparison.
+
+        Args:
+            other: Other priority.
+
+        Returns:
+            True if self >= other.
+
+        """
+        if not isinstance(other, MessagePriority):
+            return NotImplemented
+        return self.value >= other.value

@@ -2,16 +2,58 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, TypeVar
+import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
+
+from src.common_types.error_types import AgentNotFoundError, RetryError
+from src.common_types.message_types import Message
+from src.messages import set_message_metadata
+from src.messages.chain import MessageChain
+from src.messages.router import MessageRouter
 
 if TYPE_CHECKING:
     from src.common_types import Message
+    from src.common_types.result_types import Result
 
 T = TypeVar("T")
 
 
-class MessageHandler(Protocol):
-    """Message handler protocol."""
+@dataclass
+class MessageHandler:
+    """Message handler."""
+
+    handlers: dict[str, Callable[[Message], None]] = field(default_factory=dict)
+    agents: dict[str, Any] = field(default_factory=dict)
+    message_chain: MessageChain = field(default_factory=MessageChain)
+    _sequence: int = field(default=0)
+    router: MessageRouter = field(default_factory=MessageRouter)
+
+    def register_handler(self, message_type: str, handler: Callable[[Message], None]) -> None:
+        """Register message handler.
+
+        Args:
+            message_type: Message type.
+            handler: Message handler.
+
+        """
+        self.handlers[message_type] = handler
+
+    def handle_message(self, message: Message) -> None:
+        """Handle message.
+
+        Args:
+            message: Message to handle.
+
+        """
+        handler = self.handlers.get(message.type)
+        if handler:
+            handler(message)
+        self._sequence += 1
+        set_message_metadata(message, "sequence", self._sequence)
+        set_message_metadata(message, "timestamp", datetime.now(timezone.utc).isoformat())
+        self.message_chain.messages.append(message)
 
     def handle(self, message: Message) -> Message:
         """Handle a message.
@@ -26,7 +68,6 @@ class MessageHandler(Protocol):
             ConfigError: If message handling fails.
 
         """
-        ...
 
     def validate(self, message: Message) -> bool:
         """Validate a message.
@@ -41,4 +82,70 @@ class MessageHandler(Protocol):
             ConfigError: If message validation fails.
 
         """
-        ...
+
+    def register_agent(self, agent_id: str, agent: Any) -> None:
+        """Register agent.
+
+        Args:
+            agent_id: Agent ID.
+            agent: Agent instance.
+
+        """
+        self.agents[agent_id] = agent
+        self.router.register_agent(agent_id, agent)
+
+    async def route_to_agent(self, message: Message, agent_id: str) -> Result[Any]:
+        """Route message to agent.
+
+        Args:
+            message: Message to route.
+            agent_id: Target agent ID.
+
+        Returns:
+            Result of message routing.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        if agent_id not in self.agents:
+            msg = f"Agent not found: {agent_id}"
+            raise AgentNotFoundError(msg)
+
+        self.agents[agent_id]
+        return await self.router.route_message(message, agent_id)
+
+    async def handle_message_with_retry(
+        self,
+        message: Message,
+        agent_id: str,
+        max_retries: int = 3,
+    ) -> Result[Any]:
+        """Handle message with retry.
+
+        Args:
+            message: Message to handle.
+            agent_id: Agent ID.
+            max_retries: Maximum number of retries.
+
+        Returns:
+            Step result.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+            RetryError: If max retries exceeded.
+
+        """
+        retries = 0
+        while retries <= max_retries:
+            try:
+                return await self.route_to_agent(message, agent_id)
+            except AgentNotFoundError:
+                raise
+            except Exception as e:
+                if retries == max_retries:
+                    msg = f"Max retries exceeded ({max_retries}). Last error: {e}"
+                    raise RetryError(msg) from e
+                retries += 1
+                await asyncio.sleep(0.1 * (2**retries))  # Exponential backoff
+        return None

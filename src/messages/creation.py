@@ -1,25 +1,28 @@
-"""Message creation functions."""
+"""Message creation utilities."""
 
-from datetime import UTC, datetime
-from typing import Any, Optional, Union
+from __future__ import annotations
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+import json
+from typing import Any
 
-from src.agent.agent_types.agent_types import Message
+from src.common_types.message_types import (
+    AIMessage,
+    HumanMessage,
+    Message,
+    SystemMessage,
+    ToolMessage,
+)
 from src.exceptions import ConfigError
+from src.messages.chain import MessageChain
 
 
-def create_structured_message(
-    role: str,
-    content: Union[str, dict[str, Any]],
-    metadata: Optional[dict[str, Any]] = None,
-) -> Message:
-    """Create a structured message.
+def create_message(role: str, content: str, metadata: dict[str, Any] | None = None) -> Message:
+    """Create message.
 
     Args:
-        role: Message role (human, ai, system, tool).
-        content: Message content (string or dict).
-        metadata: Optional message metadata.
+        role: Message role.
+        content: Message content.
+        metadata: Optional metadata.
 
     Returns:
         Created message.
@@ -28,112 +31,121 @@ def create_structured_message(
         ConfigError: If role is invalid.
 
     """
-    # Convert dict content to string if needed
-    if isinstance(content, dict):
-        content = str(content)
+    if metadata is None:
+        metadata = {}
 
-    # Create message based on role
     if role == "human":
-        return HumanMessage(content=content, metadata=metadata or {})
+        return HumanMessage(content=content, metadata=metadata)
     if role == "ai":
-        return AIMessage(content=content, metadata=metadata or {})
+        return AIMessage(content=content, metadata=metadata)
     if role == "system":
-        return SystemMessage(content=content, metadata=metadata or {})
+        return SystemMessage(content=content, metadata=metadata)
     if role == "tool":
-        return ToolMessage(content=content, metadata=metadata or {})
+        if "tool_call_id" not in metadata:
+            msg = "tool_call_id is required for tool messages"
+            raise ConfigError(msg)
+        return ToolMessage(
+            content=content,
+            tool_call_id=metadata["tool_call_id"],
+            metadata=metadata,
+        )
 
-    msg = f"Invalid message role: {role}"
+    msg = f"Invalid role: {role}"
     raise ConfigError(msg)
 
 
-def create_ai_message(content: str, metadata: Optional[dict[str, Any]] = None) -> Message:
-    """Create an AI message.
+def create_human_message(content: str, **kwargs: Any) -> HumanMessage:
+    """Create human message.
 
     Args:
         content: Message content.
-        metadata: Optional message metadata.
-
-    Returns:
-        AI message.
-
-    """
-    return Message(
-        content=content,
-        role="assistant",
-        metadata=metadata or {},
-        created_at=datetime.now(UTC),
-    )
-
-
-def create_human_message(content: str, metadata: Optional[dict[str, Any]] = None) -> Message:
-    """Create a human message.
-
-    Args:
-        content: Message content.
-        metadata: Optional message metadata.
+        **kwargs: Additional message metadata.
 
     Returns:
         Human message.
 
     """
-    return Message(
-        content=content,
-        role="user",
-        metadata=metadata or {},
-        created_at=datetime.now(UTC),
-    )
+    return HumanMessage(content=content, metadata=kwargs)
 
 
-def create_tool_message(content: str, metadata: Optional[dict[str, Any]] = None) -> Message:
-    """Create a tool message.
+def create_ai_message(content: str, **kwargs: Any) -> AIMessage:
+    """Create AI message.
 
     Args:
         content: Message content.
-        metadata: Optional message metadata.
+        **kwargs: Additional message metadata.
 
     Returns:
-        Tool message.
+        AI message.
 
     """
-    return Message(
-        content=content,
-        role="tool",
-        metadata=metadata or {},
-        created_at=datetime.now(UTC),
-    )
+    return AIMessage(content=content, metadata=kwargs)
 
 
-def create_system_message(content: str, metadata: Optional[dict[str, Any]] = None) -> Message:
-    """Create a system message.
+def create_system_message(content: str, **kwargs: Any) -> SystemMessage:
+    """Create system message.
 
     Args:
         content: Message content.
-        metadata: Optional message metadata.
+        **kwargs: Additional message metadata.
 
     Returns:
         System message.
 
     """
-    return Message(
-        content=content,
-        role="system",
-        metadata=metadata or {},
-        created_at=datetime.now(UTC),
-    )
+    return SystemMessage(content=content, metadata=kwargs)
 
 
-def get_message_at_index(messages: list[Message], index: int) -> Message:
-    """Get message at specified index.
+def create_tool_message(content: str, tool_call_id: str, **kwargs: Any) -> ToolMessage:
+    """Create tool message.
 
     Args:
-        messages: List of messages.
-        index: Message index.
+        content: Message content.
+        tool_call_id: Tool call ID.
+        **kwargs: Additional message metadata.
 
     Returns:
-        Message at index.
-
-    Raises:
-        IndexError: If index is out of range.
+        Tool message.
 
     """
-    return messages[index]
+    metadata = kwargs.copy()
+    metadata["tool_call_id"] = tool_call_id
+    return ToolMessage(content=content, tool_call_id=tool_call_id, metadata=metadata)
+
+
+def create_structured_message(
+    role: str,
+    content: str | dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> Message:
+    """Create structured message.
+
+    Args:
+        role: Message role
+        content: Message content
+        metadata: Optional metadata
+
+    Returns:
+        Structured message
+
+    """
+    if metadata is None:
+        metadata = {}
+
+    metadata["structured"] = True
+
+    # Convert dict content to JSON string
+    if isinstance(content, dict):
+        content = json.dumps(content)
+
+    return create_message(role, content, metadata)
+
+
+def create_message_chain() -> MessageChain:
+    """Create message chain.
+
+    Returns:
+        Created message chain.
+
+    """
+    return MessageChain()

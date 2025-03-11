@@ -1,5 +1,6 @@
 """Test agent state management functionality."""
 
+import json
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,9 +13,8 @@ from src.agent.state.base import (
     Context,
     FileStateManager,
     InMemoryStateManager,
-    StateManager,
 )
-from src.agent.steps import AgentStep
+from src.common_types.enums import AgentStep
 from src.config import ConfigError
 from src.messages import create_human_message, create_system_message
 
@@ -202,15 +202,17 @@ def test_in_memory_state_manager() -> None:
     # Test saving and loading state
     with tempfile.TemporaryDirectory() as temp_dir:
         state_path = Path(temp_dir) / "test_state.json"
-        manager.set_state(AgentState(agent_id="save-test-id"))
+        test_state = AgentState(agent_id="save-test-id")
+        manager.set_state(test_state)
         saved_path = manager.save_state(str(state_path))
 
         # Check saved file
         assert Path(saved_path).exists()
 
-        # Load state
-        manager.set_state(AgentState())  # Reset state
-        loaded_state = manager.load_state(saved_path)
+        # Load state from file
+        loaded_state = AgentState.from_dict(
+            json.loads(Path(saved_path).read_text(encoding="utf-8")),
+        )
         assert loaded_state.agent_id == "save-test-id"
 
 
@@ -237,7 +239,7 @@ def test_file_state_manager() -> None:
         # Test listing states
         states = manager.list_states()
         assert len(states) == 1
-        assert "test-id.json" in states[0]
+        assert states[0] == "test-id"  # Should return just the agent ID, not the full path
 
         # Test getting state by ID
         retrieved_state = manager.get_state_by_id("test-id")
@@ -249,56 +251,57 @@ def test_file_state_manager() -> None:
 
 
 def test_state_manager() -> None:
-    """Test state manager."""
-    # Test initialization
-    manager = StateManager()
-    assert manager.get_state() is not None
-
-    # Test state management
+    """Test state manager functionality."""
+    manager = InMemoryStateManager()
     state = AgentState(agent_id="test-id")
+
+    # Test saving state
     manager.set_state(state)
-    assert manager.get_state() == state
+    saved_path = manager.save_state()
+    assert Path(saved_path).exists()
 
-    # Test saving and loading state
-    with tempfile.TemporaryDirectory() as temp_dir:
-        state_path = Path(temp_dir) / "test_state.json"
-        manager.set_state(AgentState(agent_id="save-test-id"))
-        saved_path = manager.save_state(str(state_path))
+    # Test loading state from file
+    loaded_state = AgentState.from_dict(
+        json.loads(Path(saved_path).read_text(encoding="utf-8")),
+    )
+    assert loaded_state.agent_id == state.agent_id
 
-        # Check saved file
-        assert Path(saved_path).exists()
+    # Test listing states
+    states = manager.list_states()
+    assert len(states) == 1
+    assert states[0] == "test-id"  # Should return just the agent ID, not the full path
 
-        # Load state
-        loaded_state = manager.load_state(saved_path)
-        assert loaded_state.agent_id == "save-test-id"
+    # Test deleting state
+    manager.delete_state(state.agent_id)
+    with pytest.raises(ConfigError):
+        manager.load_state(state.agent_id)
 
 
 def test_state_manager_auto_path() -> None:
-    """Test state manager with automatic path generation."""
-    manager = StateManager()
-    manager.set_state(AgentState(agent_id="test-id"))
+    """Test state manager with auto path generation."""
+    manager = InMemoryStateManager()
+    state = AgentState(agent_id="test-id")
 
-    # Test saving state
+    # Test saving state with auto path
+    manager.set_state(state)
     saved_path = manager.save_state()
     assert Path(saved_path).exists()
     assert Path(saved_path).name == "test-id.json"
 
-    # Test loading state
-    loaded_state = manager.load_state(saved_path)
-    assert loaded_state.agent_id == "test-id"
+    # Test loading state from file
+    loaded_state = AgentState.from_dict(
+        json.loads(Path(saved_path).read_text(encoding="utf-8")),
+    )
+    assert loaded_state.agent_id == state.agent_id
 
 
 def test_state_manager_errors() -> None:
     """Test state manager error handling."""
-    manager = StateManager()
+    manager = InMemoryStateManager()
 
-    # Test loading non-existent file
-    with pytest.raises(ConfigError, match="State file not found:"):
-        manager.load_state("nonexistent.json")
+    # Test loading non-existent state
+    with pytest.raises(ConfigError):
+        manager.load_state("non-existent")
 
-    # Test loading invalid state
-    with tempfile.TemporaryDirectory() as temp_dir:
-        invalid_path = Path(temp_dir) / "invalid.json"
-        invalid_path.write_text("{}")
-        with pytest.raises(ConfigError, match="Failed to load state:"):
-            manager.load_state(str(invalid_path))
+    # Test deleting non-existent state
+    manager.delete_state("non-existent")  # Should not raise

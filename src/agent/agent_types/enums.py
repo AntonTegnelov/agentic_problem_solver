@@ -19,12 +19,3 @@ class MessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
-
-
-class StepType(str, Enum):
-    """Step types."""
-
-    UNDERSTAND = "understand"
-    PLAN = "plan"
-    IMPLEMENT = "implement"
-    VERIFY = "verify"

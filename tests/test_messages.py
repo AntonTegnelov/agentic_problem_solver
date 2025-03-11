@@ -1,10 +1,12 @@
 """Test message system functionality."""
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
 import pytest
 
-from src.agent.agent_types.agent_types import Message, StepResult
+from src.agent.agent_types.agent_types import StepResult
+from src.common_types.message_types import Message
 from src.exceptions import ConfigError, RetryError
 from src.messages import (
     MessagePriority,
@@ -26,13 +28,15 @@ class TestProcessingError(Exception):
 class MockAgent:
     """Mock agent for testing."""
 
-    def __init__(self, should_fail: bool = False) -> None:
+    def __init__(self, agent_id: str = "mock", should_fail: bool = False) -> None:
         """Initialize mock agent.
 
         Args:
+            agent_id: Agent ID.
             should_fail: Whether agent should fail processing.
 
         """
+        self.agent_id = agent_id
         self.should_fail = should_fail
         self.processed_messages: list[Message] = []
 
@@ -53,7 +57,26 @@ class MockAgent:
             msg = "Processing failed"
             raise TestProcessingError(msg)
         self.processed_messages.append(message)
-        return StepResult(success=True, message="Success")
+        return StepResult(success=True, data=f"Processed by {self.agent_id}", error="")
+
+    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+        """Process message with streaming.
+
+        Args:
+            message: Message to process.
+
+        Yields:
+            Chunks of processed message.
+
+        Raises:
+            TestProcessingError: If should_fail is True.
+
+        """
+        if self.should_fail:
+            msg = "Processing failed"
+            raise TestProcessingError(msg)
+        self.processed_messages.append(message)
+        yield f"Processed by {self.agent_id}"
 
 
 def test_message_chain_validation() -> None:
@@ -130,8 +153,8 @@ def test_message_search() -> None:
 async def test_message_routing() -> None:
     """Test message routing functionality."""
     router = MessageRouter()
-    agent1 = MockAgent()
-    agent2 = MockAgent()
+    agent1 = MockAgent("agent1")
+    agent2 = MockAgent("agent2")
 
     # Register agents and routes
     router.register_agent("agent1", agent1)
@@ -142,28 +165,29 @@ async def test_message_routing() -> None:
     message = create_human_message("Test routing")
     chain = create_message_chain()
 
-    results = await router.route_message(message, "agent1", chain)
-    assert len(results) == 1
-    assert results[0].success
+    result = await router.route_message(message, "agent1", chain)
+    assert result.success
+    assert result.data == "Processed by agent2"
     assert message in agent2.processed_messages
 
 
 @pytest.mark.asyncio
 async def test_message_retry() -> None:
     """Test message retry functionality."""
-    router = MessageRouter(retry_count=2, retry_delay=0.1)
+    router = MessageRouter(max_retries=2)
     failing_agent = MockAgent(should_fail=True)
 
+    # Register agent directly
     router.register_agent("failing", failing_agent)
-    router.add_route("source", "failing")
 
+    # Test retry logic
     message = create_human_message("Test retry")
     with pytest.raises(RetryError):
-        await router.route_message(message, "source")
+        await router.route_message(message, "failing")
 
     # Verify retry metadata
-    retries = get_message_metadata(message, "retries")
-    assert retries == 2  # Should have attempted twice
+    retries = get_message_metadata(message, "retry_count")
+    assert retries == 3  # Initial + 2 retries
 
 
 def test_message_content_validation() -> None:

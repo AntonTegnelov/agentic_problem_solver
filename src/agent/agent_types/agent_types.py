@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from src.agent.errors import (
-    AgentError,
-    AgentNotFoundError,
-)
+from src.agent.base import Agent
+from src.agent.errors import AgentError, AgentNotFoundError
 from src.agent.result import Result
-from src.common_types import Message
-from src.llm_providers.config.errors import ConfigError
+from src.common_types.enums import AgentStatus
+from src.messages import create_human_message, set_message_metadata
 
 T = TypeVar("T")
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+
+    from src.common_types.message_types import Message
 
 
 @dataclass
@@ -24,8 +24,11 @@ class AgentInfo:
     """Agent information."""
 
     agent_id: str
+    name: str
+    description: str
     capabilities: list[str]
     parent_id: str | None = None
+    status: str = field(default_factory=lambda: AgentStatus.IDLE.value)
 
 
 @dataclass
@@ -173,7 +176,7 @@ class AgentRegistry(Protocol):
             Agent information.
 
         Raises:
-            AgentNotFoundError: If agent not found.
+            AgentError: If agent not found.
 
         """
         ...
@@ -267,12 +270,12 @@ class InMemoryAgentRegistry(AgentRegistry):
             Agent information.
 
         Raises:
-            AgentNotFoundError: If agent not found.
+            AgentError: If agent not found.
 
         """
         if agent_id not in self._agents:
             msg = f"Agent not found: {agent_id}"
-            raise AgentNotFoundError(msg)
+            raise AgentError(msg)
         return self._agents[agent_id].info
 
     def list_agents(self) -> list[AgentInfo]:
@@ -340,8 +343,18 @@ class AgentCoordinator(Protocol):
         Returns:
             Result of task delegation.
 
+        Raises:
+            ValueError: If agent not found.
+
         """
-        ...
+        agent = self._registry.get_agent(agent_id)
+
+        # Create task message
+        message = create_human_message(task)
+        set_message_metadata(message, "receiver_id", agent_id)
+
+        # Send message to agent
+        return agent.receive_message(message)
 
     def broadcast_task(self, task: str, capability: str) -> dict[str, Result[Any]]:
         """Broadcast task to all agents with capability.
@@ -365,8 +378,20 @@ class AgentCoordinator(Protocol):
         Returns:
             Result of message routing.
 
+        Raises:
+            ValueError: If target agent not found.
+
         """
-        ...
+        receiver_id = message.metadata.get("receiver_id")
+        if not receiver_id:
+            msg = "No receiver_id in message metadata"
+            raise ValueError(msg)
+
+        if receiver_id not in self._agents:
+            msg = f"Agent not found: {receiver_id}"
+            raise ValueError(msg)
+
+        return self._agents[receiver_id].process(message)
 
     def get_agent_status(self, agent_id: str) -> str:
         """Get agent status.
@@ -407,8 +432,15 @@ class SimpleAgentCoordinator:
             registry: Agent registry.
 
         """
-        self._registry = registry
-        self._agent_factories: dict[str, callable] = {}
+        self.registry = registry
+        self._agents = {}
+        self._agent_factories = {}
+        self._update_agents()
+
+    def _update_agents(self) -> None:
+        """Update agents from registry."""
+        for agent_info in self.registry.list_agents():
+            self._agents[agent_info.agent_id] = self.registry.get_agent(agent_info.agent_id)
 
     def register_agent_factory(self, agent_type: str, factory: callable) -> None:
         """Register agent factory.
@@ -420,7 +452,7 @@ class SimpleAgentCoordinator:
         """
         self._agent_factories[agent_type] = factory
 
-    def create_agent(self, agent_type: str, config: dict[str, Any]) -> Agent[Any]:
+    def create_agent(self, agent_type: str, config: dict[str, Any]) -> Agent:
         """Create a new agent.
 
         Args:
@@ -449,63 +481,38 @@ class SimpleAgentCoordinator:
             agent_id: Target agent ID.
 
         Returns:
-            Result of task delegation.
+            Task result.
 
         Raises:
             ValueError: If agent not found.
 
         """
-        agent = self._registry.get_agent(agent_id)
+        self._update_agents()  # Ensure we have the latest agents
+        if agent_id not in self._agents:
+            msg = f"Agent not found: {agent_id}"
+            raise ValueError(msg)
 
-        # Create task message
-        message = Message(
-            role="user",
-            content=task,
-            receiver_id=agent_id,
-        )
-
-        # Send message to agent
-        return agent.receive_message(message)
-
-    def _delegate_task_safely(self, task: str, agent_id: str) -> Result[Any]:
-        """Delegate task to agent with error handling.
-
-        Args:
-            task: Task to delegate.
-            agent_id: Agent ID.
-
-        Returns:
-            Result of task execution.
-
-        """
-        try:
-            return self.delegate_task(task, agent_id)
-        except (ConfigError, ValueError, AgentError) as e:
-            return Result(
-                success=False,
-                data=None,
-                error=str(e),
-            )
+        message = create_human_message(task)
+        return self._agents[agent_id].process(message)
 
     def broadcast_task(self, task: str, capability: str) -> dict[str, Result[Any]]:
-        """Broadcast task to all agents with capability.
+        """Broadcast task to agents with capability.
 
         Args:
             task: Task to broadcast.
             capability: Required capability.
 
         Returns:
-            Dictionary mapping agent IDs to results.
+            Results by agent ID.
 
         """
-        results: dict[str, Result[Any]] = {}
+        self._update_agents()  # Ensure we have the latest agents
+        results = {}
+        message = create_human_message(task)
 
-        # Find agents with capability
-        agents = self._registry.find_agents_by_capability(capability)
-
-        # Delegate task to each agent
-        for agent_info in agents:
-            results[agent_info.agent_id] = self._delegate_task_safely(task, agent_info.agent_id)
+        for agent_id, agent in self._agents.items():
+            if capability in agent.capabilities:
+                results[agent_id] = agent.process(message)
 
         return results
 
@@ -522,12 +529,17 @@ class SimpleAgentCoordinator:
             ValueError: If target agent not found.
 
         """
-        if not message.receiver_id:
-            msg = "Message has no receiver ID"
+        self._update_agents()  # Ensure we have the latest agents
+        receiver_id = message.metadata.get("receiver_id")
+        if not receiver_id:
+            msg = "No receiver_id in message metadata"
             raise ValueError(msg)
 
-        agent = self._registry.get_agent(message.receiver_id)
-        return agent.receive_message(message)
+        if receiver_id not in self._agents:
+            msg = f"Agent not found: {receiver_id}"
+            raise ValueError(msg)
+
+        return self._agents[receiver_id].process(message)
 
     def get_agent_status(self, agent_id: str) -> str:
         """Get agent status.
@@ -542,7 +554,7 @@ class SimpleAgentCoordinator:
             ValueError: If agent not found.
 
         """
-        info = self._registry.get_agent_info(agent_id)
+        info = self.registry.get_agent_info(agent_id)
         return info.status
 
     def set_agent_status(self, agent_id: str, status: str) -> None:
@@ -556,5 +568,102 @@ class SimpleAgentCoordinator:
             ValueError: If agent not found.
 
         """
-        info = self._registry.get_agent_info(agent_id)
+        info = self.registry.get_agent_info(agent_id)
         info.status = status
+
+
+class MockAgent(Agent):
+    """Mock agent for testing."""
+
+    def __init__(self, agent_id: str, capabilities: list[str]) -> None:
+        """Initialize agent.
+
+        Args:
+            agent_id: Agent ID.
+            capabilities: List of capabilities.
+
+        """
+        super().__init__()
+        self.agent_id = agent_id
+        self._capabilities = capabilities
+        self.processed_messages: list[Message] = []
+
+    def get_agent_id(self) -> str:
+        """Get agent ID.
+
+        Returns:
+            Agent ID.
+
+        """
+        return self.agent_id
+
+    def get_capabilities(self) -> list[str]:
+        """Get agent capabilities.
+
+        Returns:
+            List of capabilities.
+
+        """
+        return self._capabilities
+
+    def can_handle(self, task: str) -> bool:
+        """Check if agent can handle task.
+
+        Args:
+            task: Task to check.
+
+        Returns:
+            True if agent can handle task.
+
+        """
+        return any(cap in task.lower() for cap in self._capabilities)
+
+    async def process(self, message: Message) -> Result:
+        """Process message.
+
+        Args:
+            message: Message to process.
+
+        Returns:
+            Processing result.
+
+        """
+        self.processed_messages.append(message)
+        return Result(success=True, data=f"Processed by {self.agent_id}")
+
+    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+        """Process message with streaming.
+
+        Args:
+            message: Message to process.
+
+        Yields:
+            Chunks of processed message.
+
+        """
+        self.processed_messages.append(message)
+        yield f"Processed by {self.agent_id}"
+
+    def send_message(self, message: Message) -> Result[Any]:
+        """Send message to agent.
+
+        Args:
+            message: Message to send.
+
+        Returns:
+            Result of message processing.
+
+        """
+        return self.process(message)
+
+    def receive_message(self, message: Message) -> Result[Any]:
+        """Receive message from another agent.
+
+        Args:
+            message: Message to receive.
+
+        Returns:
+            Result of message processing.
+
+        """
+        return self.process(message)

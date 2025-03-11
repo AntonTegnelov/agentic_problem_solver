@@ -5,7 +5,7 @@ class APIKeyError(ValueError):
     """Raised when API key is missing or invalid."""
 
 
-class ConfigError(ValueError):
+class ConfigError(Exception):
     """Raised when configuration is invalid."""
 
 
@@ -17,9 +17,21 @@ class InvalidModelError(ValueError):
     """Raised when model name is invalid."""
 
 
-class RetryError(RuntimeError):
-    """Raised when max retries exceeded."""
+class RetryError(Exception):
+    """Raised when retry attempts are exhausted."""
 
 
 class TemperatureError(ValueError):
     """Raised when temperature is out of range."""
+
+
+class AgentError(Exception):
+    """Base class for agent-related errors."""
+
+
+class ValidationError(Exception):
+    """Raised when validation fails."""
+
+
+class ProcessingError(Exception):
+    """Raised when message processing fails."""

@@ -5,13 +5,13 @@ import pytest
 from src.agent.agent_types.agent_types import (
     Agent,
     AgentInfo,
-    AgentNotFoundError,
     InMemoryAgentRegistry,
-    Message,
     Result,
     SimpleAgentCoordinator,
 )
-from src.agent.coordination import AgentCoordinator, AgentRegistry
+from src.agent.errors import AgentNotFoundError
+from src.common_types.message_types import Message
+from src.messages import create_human_message, set_message_metadata
 
 
 class MockAgent:
@@ -202,7 +202,7 @@ def test_agent_registry() -> None:
 
     # Test unregistering agent
     registry.unregister_agent("agent1")
-    with pytest.raises(ValueError, match="Agent not found: agent1"):
+    with pytest.raises(AgentNotFoundError, match="Agent not found: agent1"):
         registry.get_agent("agent1")
 
 
@@ -257,12 +257,10 @@ def test_agent_coordinator() -> None:
     assert results["agent2"].data == "Processed by agent2"
 
     # Test routing message
-    message = Message(
-        role="user",
-        content="Test message",
-        sender_id="user",
-        receiver_id="agent2",
-    )
+    message = create_human_message("Test message")
+    set_message_metadata(message, "sender_id", "user")
+    set_message_metadata(message, "receiver_id", "agent2")
+
     result = coordinator.route_message(message)
     assert result.success
     assert result.data == "Processed by agent2"
@@ -340,14 +338,8 @@ def test_agent_communication() -> None:
     registry.register_agent(agent2, info2)
 
     # Test direct communication
-    message = Message(
-        role="user",
-        content="Process this",
-        sender_id="agent1",
-        receiver_id="agent2",
-    )
-
-    result = agent2.receive_message(message)
+    message = create_human_message("Process this")
+    result = agent2.process(message)
     assert result.success
     assert result.data == "Processed by agent2"
     assert message in agent2.processed_messages
@@ -360,12 +352,9 @@ def test_agent_communication() -> None:
     assert result.data == "Processed by agent1"
 
     # Test message routing
-    message = Message(
-        role="system",
-        content="Route this",
-        sender_id="agent1",
-        receiver_id="agent2",
-    )
+    message = create_human_message("Route this")
+    set_message_metadata(message, "sender_id", "agent1")
+    set_message_metadata(message, "receiver_id", "agent2")
 
     result = coordinator.route_message(message)
     assert result.success
@@ -375,29 +364,53 @@ def test_agent_communication() -> None:
 
 def test_agent_registry_new() -> None:
     """Test agent registry."""
-    registry = AgentRegistry()
+    registry = InMemoryAgentRegistry()
 
-    # Test registering agent
-    agent1 = TestAgent("agent1")
-    registry.register_agent("agent1", agent1)
-    assert "agent1" in registry.list_agents()
+    # Test registering agents
+    agent1 = MockAgent("agent1", ["math"])
+    agent2 = MockAgent("agent2", ["text"])
+
+    info1 = AgentInfo(
+        agent_id="agent1",
+        name="Math Agent",
+        description="Handles math tasks",
+        capabilities=["math"],
+    )
+
+    info2 = AgentInfo(
+        agent_id="agent2",
+        name="Text Agent",
+        description="Handles text tasks",
+        capabilities=["text"],
+    )
+
+    registry.register_agent(agent1, info1)
+    registry.register_agent(agent2, info2)
+
+    # Test getting agents
     assert registry.get_agent("agent1") == agent1
+    assert registry.get_agent("agent2") == agent2
 
-    # Test unregistering agent
-    registry.unregister_agent("agent1")
-    with pytest.raises(AgentNotFoundError, match="Agent not found: agent1"):
-        registry.get_agent("agent1")
+    # Test getting agent info
+    assert registry.get_agent_info("agent1") == info1
+    assert registry.get_agent_info("agent2") == info2
 
 
 def test_agent_coordinator_new() -> None:
     """Test agent coordinator."""
-    coordinator = AgentCoordinator()
+    registry = InMemoryAgentRegistry()
+    coordinator = SimpleAgentCoordinator(registry)
 
-    # Test creating agent
-    agent1 = coordinator.create_agent("test", {"agent_id": "agent1"})
-    assert isinstance(agent1, TestAgent)
-    assert agent1.agent_id == "agent1"
+    # Test delegating task
+    agent1 = MockAgent("agent1", ["math"])
+    info1 = AgentInfo(
+        agent_id="agent1",
+        name="Math Agent",
+        description="Handles math tasks",
+        capabilities=["math"],
+    )
+    registry.register_agent(agent1, info1)
 
-    # Test invalid agent type
-    with pytest.raises(AgentNotFoundError, match="Agent type not found: invalid"):
-        coordinator.create_agent("invalid", {})
+    result = coordinator.delegate_task("Solve math problem", "agent1")
+    assert result.success
+    assert result.data == "Processed by agent1"

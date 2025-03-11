@@ -5,6 +5,7 @@ This model is chosen for its optimal balance of speed and quality for our use ca
 Any changes to this default should be discussed and documented.
 """
 
+from ..exceptions import ConfigError
 from .agent import AgentConfig
 from .base import BaseConfig
 from .constants import (
@@ -18,7 +19,6 @@ from .constants import (
     DEFAULT_TOP_P,
     VERSION,
 )
-from .llm import LLMConfig
 
 __all__ = [
     "DEFAULT_MAX_OUTPUT_TOKENS",
@@ -32,5 +32,5 @@ __all__ = [
     "VERSION",
     "AgentConfig",
     "BaseConfig",
-    "LLMConfig",
+    "ConfigError",
 ]

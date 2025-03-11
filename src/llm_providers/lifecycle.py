@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from src.exceptions import EmptyResponseError
 
-from .config import ConfigError
 from .providers.base import BaseLLMProvider
 from .version import ProviderVersion
 
@@ -19,6 +18,7 @@ if TYPE_CHECKING:
 
 # Constants
 MAX_ERROR_RATE = 0.2  # 20% error rate threshold
+MAX_RESPONSE_TIME = 10.0  # 10 seconds response time threshold
 
 
 class ProviderState(Enum):
@@ -88,31 +88,30 @@ class ProviderLifecycle:
         """Check provider health.
 
         Returns:
-            True if provider is healthy, False otherwise.
+            True if provider is healthy.
 
         """
+        self.health.last_check = datetime.now(UTC)
 
-        def _raise_config_error(msg: str) -> None:
-            raise ConfigError(msg)
+        # Check error rate
+        if self.health.total_requests > 0:
+            error_rate = self.health.failed_requests / self.health.total_requests
+            if error_rate > MAX_ERROR_RATE:
+                self.health.is_healthy = False
+                self.health.last_error = "High error rate"
+                return False
 
-        now = datetime.now(timezone.utc)
-        try:
-            # Basic health checks
-            if not self.provider.config:
-                _raise_config_error("Provider configuration missing")
-
-            if not self.provider.config.validate():
-                _raise_config_error("Provider configuration invalid")
-
-            # Update health status
-            self.health.last_check = now
-            self.health.is_healthy = True
-        except (ConfigError, ValueError) as e:
+        # Check response time
+        if self.health.avg_response_time > MAX_RESPONSE_TIME:
             self.health.is_healthy = False
-            self.health.last_error = str(e)
+            self.health.last_error = "Slow response time"
             return False
-        else:
-            return True
+
+        # Reset error count if all checks pass
+        self.health.is_healthy = True
+        self.health.error_count = 0
+        self.health.last_error = None
+        return True
 
     def update_stats(
         self,
@@ -220,3 +219,32 @@ class ProviderLifecycle:
                 self.stats.requests_per_minute = 60 / time_diff
 
         self.stats.last_request = now
+
+    def add_test_resource(self, name: str, value: Any) -> None:
+        """Add test resource.
+
+        Args:
+            name: Resource name.
+            value: Resource value.
+
+        """
+        self._resources[name] = value
+
+    def has_resources(self) -> bool:
+        """Check if provider has resources.
+
+        Returns:
+            True if provider has resources.
+
+        """
+        return bool(self._resources)
+
+    @property
+    def error_count(self) -> int:
+        """Get error count.
+
+        Returns:
+            Error count.
+
+        """
+        return self.health.error_count

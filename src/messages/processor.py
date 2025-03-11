@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from collections.abc import AsyncGenerator
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Protocol,
+    TypeVar,
+)
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from src.common_types import Message
-from src.exceptions import ConfigError
+from src.exceptions import AgentError, ConfigError, RetryError
+from src.messages import get_message_metadata
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from src.common_types import Message
 
 T = TypeVar("T")
@@ -174,18 +184,19 @@ def create_message_from_dict(data: dict[str, Any]) -> Message:
     raise ConfigError(msg)
 
 
-def get_message_metadata(message: Message, key: str) -> Any:
-    """Get message metadata value.
+def get_message_metadata(message: Message, key: str, default: Any = None) -> Any:
+    """Get metadata value from message.
 
     Args:
         message: Message to get metadata from.
         key: Metadata key.
+        default: Default value if key not found.
 
     Returns:
         Metadata value.
 
     """
-    return message.metadata.get(key)
+    return message.metadata.get(key, default)
 
 
 def set_message_metadata(message: Message, key: str, value: Any) -> None:
@@ -198,3 +209,137 @@ def set_message_metadata(message: Message, key: str, value: Any) -> None:
 
     """
     message.metadata[key] = value
+
+
+class MessageProcessor:
+    """Processes messages through registered agents."""
+
+    def __init__(self) -> None:
+        """Initialize processor."""
+        self.agents: dict[str, Agent] = {}
+        self.validators: list[Callable[[Message], bool]] = []
+        self.transformers: list[Callable[[Message], Message]] = []
+
+    def register_agent(self, agent_id: str, agent: Agent) -> None:
+        """Register agent.
+
+        Args:
+            agent_id: Agent ID.
+            agent: Agent instance.
+
+        """
+        self.agents[agent_id] = agent
+
+    def list_agents(self) -> list[str]:
+        """List registered agent IDs.
+
+        Returns:
+            List of agent IDs.
+
+        """
+        return list(self.agents.keys())
+
+    def add_validator(self, validator: Callable[[Message], bool]) -> None:
+        """Add message validator.
+
+        Args:
+            validator: Validator function.
+
+        """
+        self.validators.append(validator)
+
+    def add_transformer(self, transformer: Callable[[Message], Message]) -> None:
+        """Add message transformer.
+
+        Args:
+            transformer: Transformer function.
+
+        """
+        self.transformers.append(transformer)
+
+    async def process(self, message: Message) -> Result:
+        """Process message.
+
+        Args:
+            message: Message to process.
+
+        Returns:
+            Processing result.
+
+        Raises:
+            ConfigError: If message validation fails.
+            RetryError: If max retries exceeded.
+
+        """
+        # Validate message
+        for validator in self.validators:
+            if not validator(message):
+                msg = "Message validation failed"
+                raise ConfigError(msg)
+
+        # Transform message
+        for transformer in self.transformers:
+            message = transformer(message)
+
+        # Get target agent
+        target_agent_id = get_message_metadata(message, "target_agent")
+        if not target_agent_id or target_agent_id not in self.agents:
+            msg = f"Invalid target agent: {target_agent_id}"
+            raise ConfigError(msg)
+
+        # Process message with retries
+        agent = self.agents[target_agent_id]
+        retries = 0
+        max_retries = 3
+        last_error = None
+
+        while retries < max_retries:
+            try:
+                result = await agent.process(message)
+                if result.success:
+                    return result
+            except Exception as e:
+                last_error = str(e)
+            retries += 1
+
+        msg = f"Max retries ({max_retries}) exceeded. Last error: {last_error}"
+        raise RetryError(msg)
+
+    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+        """Process message with streaming.
+
+        Args:
+            message: Message to process.
+
+        Yields:
+            Chunks of processed message.
+
+        Raises:
+            ConfigError: If message validation fails.
+            AgentError: If processing fails.
+
+        """
+        # Validate message
+        for validator in self.validators:
+            if not validator(message):
+                msg = "Message validation failed"
+                raise ConfigError(msg)
+
+        # Transform message
+        for transformer in self.transformers:
+            message = transformer(message)
+
+        # Get target agent
+        target_agent_id = get_message_metadata(message, "target_agent")
+        if not target_agent_id or target_agent_id not in self.agents:
+            msg = f"Invalid target agent: {target_agent_id}"
+            raise ConfigError(msg)
+
+        # Process message
+        agent = self.agents[target_agent_id]
+        try:
+            async for chunk in agent.process_stream(message):
+                yield chunk
+        except AgentError as e:
+            msg = f"Error streaming from agent {target_agent_id}: {e}"
+            raise AgentError(msg) from e

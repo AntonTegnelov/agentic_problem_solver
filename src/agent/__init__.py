@@ -1,23 +1,6 @@
-"""Agent package."""
+"""Agent module."""
 
-from src.agent.agent_types.agent_types import Agent, Message, StepResult
-from src.agent.errors import (
-    AgentCommunicationError,
-    AgentConfigError,
-    AgentCreationError,
-    AgentError,
-    AgentExecutionError,
-    AgentNotFoundError,
-)
+from src.agent.base import Agent
+from src.agent.result import Result as StepResult
 
-__all__ = [
-    "Agent",
-    "AgentCommunicationError",
-    "AgentConfigError",
-    "AgentCreationError",
-    "AgentError",
-    "AgentExecutionError",
-    "AgentNotFoundError",
-    "Message",
-    "StepResult",
-]
+__all__ = ["Agent", "StepResult"]

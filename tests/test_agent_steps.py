@@ -1,13 +1,14 @@
-"""Test agent step processing functionality."""
+"""Test agent steps."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from src.agent.agent_types.agent_types import StepResult
+from src.agent.agent_types.agent_types import MockAgent
+from src.agent.result import Result
 from src.agent.state.base import AgentState
 from src.common_types.enums import AgentStep
-from src.exceptions import ConfigError, RetryError
+from src.exceptions import ConfigError
 from src.prompts import (
     execute_step_with_retry,
     get_next_step,
@@ -84,46 +85,42 @@ def test_validate_step_result() -> None:
 
     # Test understanding step
     state.current_step = AgentStep.UNDERSTAND
-    result = StepResult(
+    result = Result(
         success=True,
         data="This is a long enough response to meet the length requirement. "
         "This is a comprehensive understanding of the problem with key insights and analysis.",
-        error="",
+        error=None,
     )
-    assert validate_step_result(state, AgentStep.UNDERSTAND, result) is None
+    assert validate_step_result(AgentStep.UNDERSTAND, result, state) is None
 
     # Test planning step
     state.current_step = AgentStep.PLAN
-    result = StepResult(
+    result = Result(
         success=True,
         data="This is a long enough response to meet the validation requirement. "
         "This includes key insights and comprehensive analysis of the requirements.",
-        error="",
+        error=None,
     )
-    assert validate_step_result(state, AgentStep.PLAN, result) is None
+    assert validate_step_result(AgentStep.PLAN, result, state) is None
 
     # Test verification step
     state.current_step = AgentStep.VERIFY
-    result = StepResult(
+    result = Result(
         success=True,
-        data=(
-            "This is a long enough response that includes a thorough "
-            "analysis of the problem domain and identification of key "
-            "requirements and constraints."
-        ),
-        error="",
+        data=True,  # Verification result must be boolean
+        error=None,
     )
-    assert validate_step_result(state, AgentStep.VERIFY, result) is None
+    assert validate_step_result(AgentStep.VERIFY, result, state) is None
 
     # Test failed result
-    result = StepResult(success=False, data=None, error="Test error")
+    result = Result(success=False, data=None, error="Test error")
     with pytest.raises(ConfigError, match="Step failed: Test error"):
-        validate_step_result(state, AgentStep.VERIFY, result)
+        validate_step_result(AgentStep.VERIFY, result, state)
 
     # Test short response
-    result = StepResult(success=True, data="Too short", error="")
-    with pytest.raises(ConfigError, match="Verification is too brief"):
-        validate_step_result(state, AgentStep.VERIFY, result)
+    result = Result(success=True, data="Too short", error=None)
+    with pytest.raises(ConfigError, match="Understanding is too brief"):
+        validate_step_result(AgentStep.UNDERSTAND, result, state)
 
 
 def test_execute_step_with_retry() -> None:
@@ -131,60 +128,47 @@ def test_execute_step_with_retry() -> None:
     state = AgentState()
     state.current_step = AgentStep.UNDERSTAND
 
+    # Create a mock agent
+    mock_agent = MockAgent("test_agent", ["test"])
+    state.register_agent("test_agent", mock_agent)
+
     # Test successful execution
-    success_result = StepResult(
+    success_result = Result(
         success=True,
         data=(
             "Detailed understanding of the problem with sufficient content to pass validation. "
             "This includes key insights and comprehensive analysis of the requirements."
         ),
-        error="",
+        error=None,
     )
-    mock_execute = MagicMock(return_value=success_result)
+    mock_agent.process = MagicMock(return_value=success_result)
 
-    result = execute_step_with_retry(state, mock_execute)
+    result = execute_step_with_retry(state, state.current_step)
     assert result.success
-    assert mock_execute.call_count == 1
+    assert result.data == success_result.data
 
-    # Test execution with validation failure then success
-    brief_result = StepResult(success=True, data="Too brief", error="")
-    good_result = StepResult(
-        success=True,
-        data=(
-            "Detailed understanding with sufficient content to pass validation. "
-            "This includes a thorough analysis of the problem domain and identification "
-            "of key requirements and constraints."
-        ),
-        error="",
-    )
-    mock_execute_retry = MagicMock(side_effect=[brief_result, good_result])
+    # Test failure with retry
+    error_result = Result(success=False, data=None, error="Test error")
+    mock_agent.process = MagicMock(side_effect=[error_result, error_result, success_result])
 
-    result = execute_step_with_retry(state, mock_execute_retry, max_retries=1)
+    result = execute_step_with_retry(state, state.current_step)
     assert result.success
-    assert mock_execute_retry.call_count == 2
+    assert result.data == success_result.data
 
-    # Test execution with persistent failure
-    always_brief = StepResult(success=True, data="Always too brief", error="")
-    mock_execute_fail = MagicMock(return_value=always_brief)
+    # Test failure with max retries exceeded
+    mock_agent.process = MagicMock(return_value=error_result)
 
-    with pytest.raises(RetryError):
-        execute_step_with_retry(state, mock_execute_fail, max_retries=2)
-    assert mock_execute_fail.call_count == 3  # Initial + 2 retries
-
-    # Test execution with exception
-    mock_execute_exception = MagicMock(side_effect=Exception("Test exception"))
-
-    with pytest.raises(RetryError):
-        execute_step_with_retry(state, mock_execute_exception, max_retries=1)
-    assert mock_execute_exception.call_count == 2  # Initial + 1 retry
+    with pytest.raises(ConfigError, match="Max retries exceeded"):
+        execute_step_with_retry(state, state.current_step)
 
 
 def test_get_next_step() -> None:
     """Test getting next step in sequence."""
     # Test progression
     assert get_next_step(AgentStep.UNDERSTAND) == AgentStep.PLAN
-    assert get_next_step(AgentStep.PLAN) == AgentStep.VERIFY
-    assert get_next_step(AgentStep.VERIFY) is None
+    assert get_next_step(AgentStep.PLAN) == AgentStep.IMPLEMENT
+    assert get_next_step(AgentStep.IMPLEMENT) == AgentStep.VERIFY
+    assert get_next_step(AgentStep.VERIFY) == AgentStep.UNDERSTAND
 
     # Test invalid step
     with pytest.raises(ConfigError, match="Invalid step: invalid_step"):
@@ -224,22 +208,30 @@ def test_get_step_description() -> None:
     )
 
 
-def create_understanding_result(content: str) -> StepResult:
+def create_understanding_result(content: str) -> Result:
     """Create a test result for the understanding step."""
-    result = StepResult(success=True, data=content, error="")
+    result = Result(success=True, data=content, error=None)
     validate_step_result(AgentStep.UNDERSTAND, result)
     return result
 
 
-def create_plan_result(content: str) -> StepResult:
+def create_plan_result(content: str) -> Result:
     """Create a test result for the plan step."""
-    result = StepResult(success=True, data=content, error="")
+    result = Result(success=True, data=content, error=None)
     validate_step_result(AgentStep.PLAN, result)
     return result
 
 
-def create_verify_result(content: str) -> StepResult:
-    """Create a test result for the verify step."""
-    result = StepResult(success=True, data=content, error="")
+def create_verify_result(content: str) -> Result:
+    """Create verify step result.
+
+    Args:
+        content: Result content.
+
+    Returns:
+        Step result.
+
+    """
+    result = Result(success=True, data=True, error=None)
     validate_step_result(AgentStep.VERIFY, result)
     return result

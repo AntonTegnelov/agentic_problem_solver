@@ -1,16 +1,28 @@
 """Agent step processing module."""
+
 from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
-from .state.base import AgentState, AgentStatus
+from src.agent.result import Result
+from src.common_types.enums import AgentStatus, AgentStep
+from src.config.base import ConfigError
+from src.exceptions import ConfigError
+from src.prompts import get_retry_prompt, get_step_prompt
 
 if TYPE_CHECKING:
-    from .agent_types import StepKwargs, StepResult
+    from src.agent.agent_types import StepKwargs, StepResult
+    from src.agent.state.base import AgentState
 
 T = TypeVar("T")
+
+__all__ = ["Step", "StepFunction"]
+
+# Minimum lengths for step results
+MIN_UNDERSTANDING_LENGTH = 100
+MIN_PLAN_LENGTH = 50
 
 
 @runtime_checkable
@@ -185,9 +197,7 @@ class BaseStepExecutor(StepExecutor[T]):
             # Handle retries
             if step.retry_on_error:
                 max_retries = (
-                    step.max_retries
-                    if step.max_retries is not None
-                    else state.config.max_retries
+                    step.max_retries if step.max_retries is not None else state.config.max_retries
                 )
                 if state.retry_count <= max_retries:
                     return self.execute_step(step, state, **kwargs)
@@ -196,3 +206,110 @@ class BaseStepExecutor(StepExecutor[T]):
             state.status = AgentStatus.FAILED
             error_msg = f"Step '{step.name}' failed: {err}"
             raise RuntimeError(error_msg) from err
+
+
+def get_next_step(current_step: AgentStep) -> AgentStep:
+    """Get next step in sequence.
+
+    Args:
+        current_step: Current step.
+
+    Returns:
+        Next step.
+
+    Raises:
+        ConfigError: If current step is invalid.
+
+    """
+    step_sequence = {
+        AgentStep.UNDERSTAND: AgentStep.PLAN,
+        AgentStep.PLAN: AgentStep.EXECUTE,
+        AgentStep.EXECUTE: AgentStep.VERIFY,
+        AgentStep.VERIFY: AgentStep.UNDERSTAND,
+    }
+
+    if current_step not in step_sequence:
+        msg = f"Invalid step: {current_step}"
+        raise ConfigError(msg)
+
+    return step_sequence[current_step]
+
+
+def validate_step_result(step: AgentStep, result: StepResult[Any]) -> None:
+    """Validate step result.
+
+    Args:
+        step: Step to validate
+        result: Result to validate
+
+    Raises:
+        ConfigError: If result is invalid
+
+    """
+    # Check for failed result
+    if not result.success:
+        msg = f"Step failed: {result.error}"
+        raise ConfigError(msg)
+
+    # Check for empty result
+    if not result.data:
+        msg = "Empty result"
+        raise ConfigError(msg)
+
+    # Validate step-specific requirements
+    if step == AgentStep.UNDERSTAND:
+        if len(str(result.data)) < MIN_UNDERSTANDING_LENGTH:
+            msg = "Understanding is too brief"
+            raise ConfigError(msg)
+    elif step == AgentStep.PLAN and len(str(result.data)) < MIN_PLAN_LENGTH:
+        msg = "Plan is too brief"
+        raise ConfigError(msg)
+    elif step == AgentStep.VERIFY and not isinstance(result.data, bool):
+        msg = "Verification result must be boolean"
+        raise ConfigError(msg)
+
+
+def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int = 3) -> Result:
+    """Execute step with retry mechanism.
+
+    Args:
+        state: Agent state.
+        step: Step to execute.
+        max_retries: Maximum number of retries.
+
+    Returns:
+        Step result.
+
+    Raises:
+        ConfigError: If no agent registered.
+
+    """
+    agent = state.get_agent()
+    if not agent:
+        msg = "No agent registered"
+        raise ConfigError(msg)
+
+    retries = 0
+    last_result = None
+
+    while retries < max_retries:
+        try:
+            prompt = get_step_prompt(step)
+            result = agent.process(prompt)
+            if result.success:
+                return result
+            last_result = result
+        except Exception as e:
+            msg = f"Error executing step: {e}"
+            last_result = Result(success=False, error=msg)
+
+        if retries < max_retries - 1:
+            retry_prompt = get_retry_prompt(step, last_result.error)
+            result = agent.process(retry_prompt)
+            if result.success:
+                return result
+            last_result = result
+
+        retries += 1
+
+    return last_result

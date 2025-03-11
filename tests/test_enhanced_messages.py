@@ -5,10 +5,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.agent.agent_types.agent_types import Agent, Message, Result
-from src.agent.errors import AgentError
+from src.agent.agent_types.agent_types import Agent
+from src.agent.errors import AgentError, AgentNotFoundError
+from src.agent.result import Result
+from src.common_types.message_types import (
+    HumanMessage,
+    Message,
+    SystemMessage,
+)
 from src.exceptions import ConfigError, RetryError
 from src.messages import (
     MessageHandler,
@@ -28,21 +33,22 @@ from src.messages import (
 
 
 class TestAgent(Agent):
-    """Test agent implementation."""
+    """Test agent class."""
 
     def __init__(self, agent_id: str, should_fail: bool = False) -> None:
-        """Initialize agent.
+        """Initialize test agent.
 
         Args:
             agent_id: Agent ID
-            should_fail: Whether agent should fail processing
+            should_fail: Whether agent should fail
 
         """
+        super().__init__()
         self.agent_id = agent_id
         self.should_fail = should_fail
         self.processed_messages: list[Message] = []
 
-    def process(self, message: Message) -> Result:
+    async def process(self, message: Message) -> Result:
         """Process message.
 
         Args:
@@ -58,8 +64,9 @@ class TestAgent(Agent):
         if self.should_fail:
             msg = "Processing failed"
             raise AgentError(msg)
+
         self.processed_messages.append(message)
-        return Result(success=True, data=f"Processed by {self.agent_id}", error="")
+        return Result(success=True, data=f"Processed by {self.agent_id}")
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
         """Process message with streaming.
@@ -75,8 +82,9 @@ class TestAgent(Agent):
 
         """
         if self.should_fail:
-            msg = "Processing failed"
+            msg = f"Error streaming from agent {self.agent_id}: Processing failed"
             raise AgentError(msg)
+
         self.processed_messages.append(message)
         yield f"Processed by {self.agent_id}"
 
@@ -96,7 +104,7 @@ class TestAgent(Agent):
             List of capabilities.
 
         """
-        return ["test", "mock"]
+        return ["test"]
 
     def can_handle(self, task: str) -> bool:
         """Check if agent can handle task.
@@ -277,15 +285,15 @@ def test_message_history() -> None:
     # Test getting history
     history = chain.get_message_history(limit=3)
     assert len(history) == 3
-    assert history[0]["content"] == "Message 2"
-    assert history[2]["content"] == "Message 4"
+    assert history[0].content == "Message 2"
+    assert history[2].content == "Message 4"
 
     # Test with metadata
-    history = chain.get_message_history(limit=2, include_metadata=True)
+    history = chain.get_message_history(limit=2)
     assert len(history) == 2
-    assert "metadata" in history[0]
-    assert "timestamp" in history[0]["metadata"]
-    assert "priority" in history[0]["metadata"]
+    assert isinstance(history[0], HumanMessage)
+    assert "timestamp" in history[0].metadata
+    assert "priority" in history[0].metadata
 
 
 @pytest.mark.asyncio
@@ -301,7 +309,7 @@ async def test_message_router() -> None:
 
     # Test routing message
     message = create_human_message("Test routing")
-    result = router.route_message(message, "agent1")
+    result = await router.route_message(message, "agent1")
     assert result.success
     assert result.data == "Processed by agent1"
     assert message in agent1.processed_messages
@@ -314,11 +322,12 @@ async def test_message_router() -> None:
     assert message in agent2.processed_messages
 
     # Test routing to non-existent agent
-    with pytest.raises(ConfigError):
-        router.route_message(message, "non_existent")
+    with pytest.raises(AgentNotFoundError, match="Agent not found: non_existent"):
+        await router.route_message(message, "non_existent")
 
 
-def test_message_retry() -> None:
+@pytest.mark.asyncio
+async def test_message_retry() -> None:
     """Test message retry functionality."""
     router = MessageRouter(max_retries=2)
     failing_agent = TestAgent(agent_id="failing", should_fail=True)
@@ -329,13 +338,14 @@ def test_message_retry() -> None:
     # Test retry logic
     message = create_human_message("Test retry")
     with pytest.raises(RetryError):
-        router.route_message(message, "failing")
+        await router.route_message(message, "failing")
 
     # Verify retry metadata
     assert get_message_metadata(message, "retry_count") == 3  # Initial + 2 retries
 
 
-def test_message_broadcast() -> None:
+@pytest.mark.asyncio
+async def test_message_broadcast() -> None:
     """Test message broadcasting."""
     router = MessageRouter()
     agent1 = TestAgent(agent_id="agent1")
@@ -349,18 +359,16 @@ def test_message_broadcast() -> None:
 
     # Test broadcasting
     message = create_human_message("Broadcast test")
-    results = router.broadcast_message(message)
+    results = await router.broadcast_message(message)
 
-    # Check results
-    assert len(results) == 3
-    assert results["agent1"].success
-    assert results["agent2"].success
-    assert not results["agent3"].success
+    # Check results - only successful results are returned
+    assert len(results) == 2  # agent3 fails, so only 2 successful results
     assert message in agent1.processed_messages
     assert message in agent2.processed_messages
 
 
-def test_message_handler() -> None:
+@pytest.mark.asyncio
+async def test_message_handler() -> None:
     """Test message handler functionality."""
     handler = MessageHandler()
     agent1 = TestAgent(agent_id="agent1")
@@ -381,14 +389,16 @@ def test_message_handler() -> None:
 
     # Test routing
     message = create_human_message("Test routing")
-    result = handler.route_to_agent(message, "agent1")
+    result = await handler.route_to_agent(message, "agent1")
     assert result.success
+    assert result.data == "Processed by agent1"
     assert message in agent1.processed_messages
 
     # Test retry handling
     message = create_human_message("Test retry handling")
-    result = handler.handle_message_with_retry(message, "agent2", max_retries=1)
+    result = await handler.handle_message_with_retry(message, "agent2", max_retries=1)
     assert result.success
+    assert result.data == "Processed by agent2"
     assert message in agent2.processed_messages
 
 
@@ -428,7 +438,8 @@ def test_message_metadata() -> None:
     assert get_message_metadata(message, "nonexistent", "default") == "default"
 
 
-def test_message_processor() -> None:
+@pytest.mark.asyncio
+async def test_message_processor() -> None:
     """Test message processor."""
     processor = MessageProcessor()
 
@@ -440,7 +451,7 @@ def test_message_processor() -> None:
     # Test message processing
     message = create_human_message("Test message")
     set_message_metadata(message, "target_agent", "agent1")
-    result = processor.process(message)
+    result = await processor.process(message)
     assert result.success
     assert result.data == "Processed by agent1"
     assert message in agent1.processed_messages
@@ -451,7 +462,7 @@ def test_message_processor() -> None:
     message = create_human_message("Test message")
     set_message_metadata(message, "target_agent", "failing")
     with pytest.raises(RetryError, match="Max retries.*exceeded"):
-        processor.process(message)
+        await processor.process(message)
 
 
 @pytest.mark.asyncio

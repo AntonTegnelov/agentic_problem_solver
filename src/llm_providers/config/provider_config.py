@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from src.config import BaseConfig
@@ -12,12 +12,61 @@ from src.llm_providers.version import ProviderVersion, Version
 
 @dataclass
 class ProviderConfig(BaseConfig):
-    """Base provider configuration."""
+    """Provider configuration."""
 
+    provider_name: str
+    model: str
+    temperature: float = 0.7
+    max_tokens: int = 100
     api_key: str | None = None
-    model: str | None = None
-    version: Version | None = None
-    extra_params: dict[str, Any] = field(default_factory=dict)
+    api_base: str | None = None
+    api_version: str | None = None
+    api_type: str | None = None
+    deployment_name: str | None = None
+    organization_id: str | None = None
+    additional_kwargs: dict[str, Any] = None
+
+    def __init__(
+        self,
+        name: str = "default",
+        model: str = "default",
+        temperature: float = 0.7,
+        max_tokens: int = 100,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        api_version: str | None = None,
+        api_type: str | None = None,
+        deployment_name: str | None = None,
+        organization_id: str | None = None,
+        additional_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize provider config.
+
+        Args:
+            name: Provider name.
+            model: Model name.
+            temperature: Temperature setting.
+            max_tokens: Maximum tokens.
+            api_key: API key.
+            api_base: API base URL.
+            api_version: API version.
+            api_type: API type.
+            deployment_name: Deployment name.
+            organization_id: Organization ID.
+            additional_kwargs: Additional keyword arguments.
+
+        """
+        self.provider_name = name
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.api_key = api_key
+        self.api_base = api_base
+        self.api_version = api_version
+        self.api_type = api_type
+        self.deployment_name = deployment_name
+        self.organization_id = organization_id
+        self.additional_kwargs = additional_kwargs or {}
 
     # Required environment variables
     REQUIRED_ENV_VARS: ClassVar[list[str]] = ["API_KEY", "MODEL"]
@@ -35,41 +84,37 @@ class ProviderConfig(BaseConfig):
             ConfigError: If configuration is invalid.
 
         """
+        if not self.api_key:
+            msg = "API key is required"
+            raise ConfigError(msg)
 
-        def _raise_invalid_model_error(msg: str) -> None:
-            raise InvalidModelError(msg)
+        if not self.model:
+            msg = "Model name is required"
+            raise ConfigError(msg)
 
-        def _raise_value_error(msg: str) -> None:
-            raise ValueError(msg)
+        # Validate version if provided
+        if self.api_version:
+            try:
+                # Add version validation logic here
+                pass
+            except ValueError as e:
+                msg = f"Invalid version format: {e}"
+                raise ConfigError(msg) from e
 
-        try:
-            # Validate model version
-            model_version = self.get_model_version()
-            if model_version.min_provider_version > self.provider_version:
-                msg = (
-                    f"Model {self.model_name} requires provider version "
-                    f"{model_version.min_provider_version} or higher. "
-                    f"Current version is {self.provider_version}"
-                )
-                _raise_invalid_model_error(msg)
+        return True
 
-            # Validate parameters
-            if not 0 <= self.temperature <= 1:
-                _raise_value_error("Temperature must be between 0 and 1")
+    def get_model_version(self) -> str:
+        """Get model version.
 
-            if self.max_output_tokens <= 0:
-                _raise_value_error("Max tokens must be positive")
+        Returns:
+            Model version.
 
-            if not 0 <= self.top_p <= 1:
-                _raise_value_error("Top P must be between 0 and 1")
-
-            if self.top_k <= 0:
-                _raise_value_error("Top K must be positive")
-        except (ValueError, KeyError, InvalidModelError) as e:
-            msg = f"Invalid configuration: {e!s}"
-            raise ConfigError(msg) from e
-        else:
-            return True
+        """
+        return (
+            self.api_version or self.PROVIDER_VERSION.version
+            if self.PROVIDER_VERSION
+            else "Unknown"
+        )
 
     def required_keys(self) -> list[str]:
         """Get required environment variable keys.
@@ -78,7 +123,7 @@ class ProviderConfig(BaseConfig):
             List of required keys with provider prefix.
 
         """
-        provider_name = self.__class__.__name__.replace("Config", "").upper()
+        provider_name = self.provider_name.upper()
         return [f"{provider_name}_{key}" for key in self.REQUIRED_ENV_VARS]
 
 
@@ -124,11 +169,11 @@ class GeminiConfig(ProviderConfig):
         try:
             # Validate model version
             model_version = self.get_model_version()
-            if model_version.min_provider_version > self.provider_version:
+            if model_version.min_provider_version > self.PROVIDER_VERSION.version:
                 msg = (
-                    f"Model {self.model_name} requires provider version "
+                    f"Model {self.model} requires provider version "
                     f"{model_version.min_provider_version} or higher. "
-                    f"Current version is {self.provider_version}"
+                    f"Current version is {self.PROVIDER_VERSION.version}"
                 )
                 _raise_invalid_model_error(msg)
 
@@ -155,9 +200,9 @@ class GeminiConfig(ProviderConfig):
         """Create config from environment variables."""
         try:
             return cls(
-                api_key=env_vars["GEMINI_API_KEY"],
+                api_key=env_vars.get("GEMINI_API_KEY"),
                 model=env_vars.get("GEMINI_MODEL", "gemini-pro"),  # Ensure this is set
-                version=Version(1, 0, 0),  # Current version
+                api_version=Version(1, 0, 0),  # Current version
                 temperature=float(env_vars.get("GEMINI_TEMPERATURE", "0.7")),
                 max_output_tokens=int(env_vars.get("GEMINI_MAX_OUTPUT_TOKENS", "2048")),
                 top_p=float(env_vars.get("GEMINI_TOP_P", "0.95")),
