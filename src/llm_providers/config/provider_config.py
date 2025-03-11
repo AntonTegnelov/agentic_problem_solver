@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 
 from src.config import BaseConfig
 from src.exceptions import ConfigError, InvalidModelError
-from src.llm_providers.version import ProviderVersion, Version
+from src.llm_providers.version import ModelVersion, ProviderVersion, Version
 
 
 @dataclass
@@ -61,18 +61,21 @@ class ProviderConfig(BaseConfig):
 
         return True
 
-    def get_model_version(self) -> str:
+    def get_model_version(self) -> ModelVersion:
         """Get model version.
 
         Returns:
             Model version.
 
+        Raises:
+            InvalidModelError: If model is not supported.
+
         """
-        return (
-            self.api_version or self.PROVIDER_VERSION.version
-            if self.PROVIDER_VERSION
-            else "Unknown"
-        )
+        if not self.PROVIDER_VERSION:
+            msg = "Provider version not set"
+            raise ConfigError(msg)
+
+        return self.PROVIDER_VERSION.get_model(self.model)
 
     def required_keys(self) -> list[str]:
         """Get required environment variable keys.
