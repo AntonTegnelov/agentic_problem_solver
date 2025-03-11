@@ -216,14 +216,12 @@ def get_retry_prompt(state: AgentState, error: str) -> str:
 def validate_step_result(
     step: AgentStep,
     result: StepResult[Any],
-    state: AgentState | None = None,
 ) -> None:
     """Validate step result.
 
     Args:
         step: Step to validate.
         result: Result to validate.
-        state: Optional agent state for additional validation.
 
     Raises:
         ConfigError: If result is invalid.
@@ -336,9 +334,7 @@ def _try_execute_step_once_with_retry(
         result = _try_execute_step_once(state, step, prompt)
     except ConfigError as e:
         if retries > max_retries:
-            error_msg = (
-                f"Max retries exceeded ({max_retries}) for step {step.value}. Last error: {e}"
-            )
+            error_msg = f"Max retries exceeded ({max_retries}) for step {step.value}. Last error: {e}"
             raise ConfigError(error_msg) from e
         return False, None, e
     except (ValueError, AttributeError) as e:
@@ -372,9 +368,7 @@ def execute_step_with_retry(
 
     while retries <= max_retries:
         # Get step prompt
-        prompt = (
-            get_step_prompt(state) if retries == 0 else get_retry_prompt(state, str(last_error))
-        )
+        prompt = get_step_prompt(state) if retries == 0 else get_retry_prompt(state, str(last_error))
 
         # Get agent for step
         agent = state.get_agent_for_step(step)
