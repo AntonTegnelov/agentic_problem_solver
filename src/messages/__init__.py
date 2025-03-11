@@ -24,6 +24,7 @@ from .creation import (
     create_human_message,
     create_message,
     create_message_chain,
+    create_structured_message,
     create_system_message,
     create_tool_message,
 )
