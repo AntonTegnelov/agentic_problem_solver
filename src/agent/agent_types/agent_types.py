@@ -618,7 +618,7 @@ class MockAgent(Agent):
         """
         return any(cap in task.lower() for cap in self._capabilities)
 
-    async def process(self, message: Message) -> Result:
+    def process(self, message: Message) -> Result:
         """Process message.
 
         Args:
@@ -629,20 +629,20 @@ class MockAgent(Agent):
 
         """
         self.processed_messages.append(message)
-        return Result(success=True, data=f"Processed by {self.agent_id}")
+        return Result(success=True, data="Mock result")
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
-        """Process message with streaming.
+        """Process message asynchronously.
 
         Args:
             message: Message to process.
 
         Yields:
-            Chunks of processed message.
+            Processing results.
 
         """
         self.processed_messages.append(message)
-        yield f"Processed by {self.agent_id}"
+        yield "Mock result"
 
     def send_message(self, message: Message) -> Result[Any]:
         """Send message to agent.

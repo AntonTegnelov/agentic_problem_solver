@@ -1,4 +1,4 @@
-"""Test provider selection system."""
+"""Test provider selection functionality."""
 
 from __future__ import annotations
 
@@ -11,21 +11,17 @@ from src.exceptions import ConfigError, RetryError, TemperatureError
 from src.llm_providers.config.provider_config import ProviderConfig
 from src.llm_providers.lifecycle import ProviderLifecycle, ProviderState
 from src.llm_providers.providers.base import Provider
-from src.llm_providers.selection import ProviderCapability, ProviderSelector
+from src.llm_providers.selection import (
+    ProviderCapability,
+    ProviderSelector,
+)
 from src.llm_providers.version import ModelVersion, ProviderVersion, Version
+from tests.test_utils import TestGenerationError, TestProcessingError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from src.common_types.message_types import Message
-
-
-class TestProcessingError(Exception):
-    """Error raised during test message processing."""
-
-
-class TestGenerationError(Exception):
-    """Error raised during test text generation."""
 
 
 class MockProvider(Provider):

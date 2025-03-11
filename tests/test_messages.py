@@ -19,6 +19,7 @@ from src.messages import (
     set_message_metadata,
     validate_message_content,
 )
+from tests.test_utils import TestProcessingError
 
 
 class TestProcessingError(Exception):

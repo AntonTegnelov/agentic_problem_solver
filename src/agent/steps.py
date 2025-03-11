@@ -6,6 +6,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
+from langchain.schema import HumanMessage
+
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus, AgentStep
 from src.config.base import ConfigError
@@ -284,7 +286,7 @@ def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int
         ConfigError: If no agent registered.
 
     """
-    agent = state.get_agent()
+    agent = state.get_agent_for_step(step)
     if not agent:
         msg = "No agent registered"
         raise ConfigError(msg)
@@ -292,24 +294,30 @@ def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int
     retries = 0
     last_result = None
 
-    while retries < max_retries:
+    while retries <= max_retries:  # Changed to <= to include max_retries attempt
         try:
-            prompt = get_step_prompt(step)
-            result = agent.process(prompt)
+            # Use retry prompt if we have a previous error, otherwise use initial prompt
+            if last_result and last_result.error:
+                prompt = get_retry_prompt(step, last_result.error)
+            else:
+                prompt = get_step_prompt(step)
+
+            # Create a proper Message object
+            message = HumanMessage(content=prompt)
+            result = agent.process(message)
+
+            # Store the result
+            last_result = result
+
+            # Return immediately only on success
             if result.success:
                 return result
-            last_result = result
+
         except Exception as e:
             msg = f"Error executing step: {e}"
             last_result = Result(success=False, error=msg)
 
-        if retries < max_retries - 1:
-            retry_prompt = get_retry_prompt(step, last_result.error)
-            result = agent.process(retry_prompt)
-            if result.success:
-                return result
-            last_result = result
-
         retries += 1
 
-    return last_result
+    # Return the last result after all retries are exhausted
+    return last_result if last_result else Result(success=False, error="Max retries exceeded")

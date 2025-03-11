@@ -376,25 +376,28 @@ def execute_step_with_retry(
             get_step_prompt(state) if retries == 0 else get_retry_prompt(state, str(last_error))
         )
 
-        # Try to execute step
-        success, result, error = _try_execute_step_once_with_retry(
-            state,
-            step,
-            prompt,
-            retries,
-            max_retries,
-        )
-        if success:
+        # Get agent for step
+        agent = state.get_agent_for_step(step)
+        if not agent:
+            msg = f"No agent configured for step {step.value}"
+            raise ConfigError(msg)
+
+        # Create message with prompt
+        message = create_human_message(prompt)
+
+        # Process with agent
+        result = agent.process(message)
+
+        # If successful, return the result
+        if result.success:
             return result
 
         # Update retry state
         retries += 1
-        last_error = error
+        last_error = result.error
 
-    # This should never happen because _try_execute_step_once_with_retry will raise
-    # an error when retries > max_retries
-    error_msg = f"Max retries exceeded ({max_retries}) for step {step.value}"
-    raise ConfigError(error_msg)
+    # Return the last result after all retries are exhausted
+    return result
 
 
 def get_next_step(current_step: AgentStep) -> AgentStep:

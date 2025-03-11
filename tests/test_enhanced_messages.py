@@ -1,17 +1,12 @@
 """Test enhanced message system functionality."""
 
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import Any
 
 import pytest
 
-from src.agent.agent_types.agent_types import Agent
 from src.agent.errors import AgentError, AgentNotFoundError
-from src.agent.result import Result
 from src.common_types.message_types import (
     HumanMessage,
-    Message,
     SystemMessage,
 )
 from src.exceptions import ConfigError, RetryError
@@ -30,117 +25,7 @@ from src.messages import (
     parse_structured_content,
     set_message_metadata,
 )
-
-
-class TestAgent(Agent):
-    """Test agent class."""
-
-    def __init__(self, agent_id: str, should_fail: bool = False) -> None:
-        """Initialize test agent.
-
-        Args:
-            agent_id: Agent ID
-            should_fail: Whether agent should fail
-
-        """
-        super().__init__()
-        self.agent_id = agent_id
-        self.should_fail = should_fail
-        self.processed_messages: list[Message] = []
-
-    async def process(self, message: Message) -> Result:
-        """Process message.
-
-        Args:
-            message: Message to process
-
-        Returns:
-            Processing result
-
-        Raises:
-            AgentError: If processing fails
-
-        """
-        if self.should_fail:
-            msg = "Processing failed"
-            raise AgentError(msg)
-
-        self.processed_messages.append(message)
-        return Result(success=True, data=f"Processed by {self.agent_id}")
-
-    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
-        """Process message with streaming.
-
-        Args:
-            message: Message to process
-
-        Yields:
-            Chunks of processed message
-
-        Raises:
-            AgentError: If processing fails
-
-        """
-        if self.should_fail:
-            msg = f"Error streaming from agent {self.agent_id}: Processing failed"
-            raise AgentError(msg)
-
-        self.processed_messages.append(message)
-        yield f"Processed by {self.agent_id}"
-
-    def get_agent_id(self) -> str:
-        """Get agent ID.
-
-        Returns:
-            Agent ID.
-
-        """
-        return self.agent_id
-
-    def get_capabilities(self) -> list[str]:
-        """Get agent capabilities.
-
-        Returns:
-            List of capabilities.
-
-        """
-        return ["test"]
-
-    def can_handle(self, task: str) -> bool:
-        """Check if agent can handle task.
-
-        Args:
-            task: Task to check.
-
-        Returns:
-            True if agent can handle task.
-
-        """
-        return "test" in task.lower()
-
-    def send_message(self, message: Message) -> Result[Any]:
-        """Send message to agent.
-
-        Args:
-            message: Message to send.
-
-        Returns:
-            Result of message processing.
-
-        """
-        return self.process(message)
-
-    def receive_message(self, message: Message) -> Result[Any]:
-        """Receive message from another agent.
-
-        Args:
-            message: Message to receive.
-
-        Returns:
-            Result of message processing.
-
-        """
-        return self.process(message)
+from tests.test_utils import TestAgent
 
 
 def test_create_structured_message() -> None:

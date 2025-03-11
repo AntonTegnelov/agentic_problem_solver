@@ -149,25 +149,27 @@ def test_execute_step_with_retry() -> None:
 
     # Test failure with retry
     error_result = Result(success=False, data=None, error="Test error")
-    mock_agent.process = MagicMock(side_effect=[error_result, error_result, success_result])
+    side_effects = [error_result, error_result, success_result]
+    mock_agent.process = MagicMock(side_effect=side_effects)
 
     result = execute_step_with_retry(state, state.current_step)
-    assert result.success
+    assert result.success, f"Expected success=True, got {result}"
     assert result.data == success_result.data
 
     # Test failure with max retries exceeded
     mock_agent.process = MagicMock(return_value=error_result)
 
-    with pytest.raises(ConfigError, match="Max retries exceeded"):
-        execute_step_with_retry(state, state.current_step)
+    result = execute_step_with_retry(state, state.current_step)
+    assert not result.success
+    assert result.error == "Test error"
 
 
 def test_get_next_step() -> None:
     """Test getting next step in sequence."""
     # Test progression
     assert get_next_step(AgentStep.UNDERSTAND) == AgentStep.PLAN
-    assert get_next_step(AgentStep.PLAN) == AgentStep.IMPLEMENT
-    assert get_next_step(AgentStep.IMPLEMENT) == AgentStep.VERIFY
+    assert get_next_step(AgentStep.PLAN) == AgentStep.EXECUTE
+    assert get_next_step(AgentStep.EXECUTE) == AgentStep.VERIFY
     assert get_next_step(AgentStep.VERIFY) == AgentStep.UNDERSTAND
 
     # Test invalid step

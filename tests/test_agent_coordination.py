@@ -1,4 +1,4 @@
-"""Test agent coordination functionality."""
+"""Test agent coordination."""
 
 import pytest
 
@@ -12,6 +12,7 @@ from src.agent.agent_types.agent_types import (
 from src.agent.errors import AgentNotFoundError
 from src.common_types.message_types import Message
 from src.messages import create_human_message, set_message_metadata
+from tests.test_utils import TestProcessingError
 
 
 class MockAgent:
@@ -108,45 +109,6 @@ class MockAgent:
 
         """
         return self.process(message)
-
-
-class TestProcessingError(Exception):
-    """Error raised when test processing fails."""
-
-
-class TestAgent(Agent):
-    """Test agent implementation."""
-
-    def __init__(self, agent_id: str, should_fail: bool = False) -> None:
-        """Initialize test agent.
-
-        Args:
-            agent_id: Agent ID
-            should_fail: Whether the agent should fail processing
-
-        """
-        self.agent_id = agent_id
-        self.should_fail = should_fail
-        self.processed_messages = []
-
-    def process(self, message: Message) -> Result:
-        """Process a message.
-
-        Args:
-            message: Message to process
-
-        Returns:
-            Processing result
-
-        Raises:
-            TestProcessingError: If processing should fail
-
-        """
-        if self.should_fail:
-            msg = "Processing failed"
-            raise TestProcessingError(msg)
-        self.processed_messages.append(message)
-        return Result(success=True, data=f"Processed by {self.agent_id}", error="")
 
 
 def test_agent_registry() -> None:
