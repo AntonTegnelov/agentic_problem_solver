@@ -83,7 +83,7 @@ class MessageHandler:
 
         """
 
-    def register_agent(self, agent_id: str, agent: Any) -> None:
+    def register_agent(self, agent_id: str, agent: object) -> None:
         """Register agent.
 
         Args:
@@ -136,16 +136,46 @@ class MessageHandler:
             RetryError: If max retries exceeded.
 
         """
+        # First check if agent exists to avoid try-except in loop
+        if agent_id not in self.agents:
+            msg = f"Agent not found: {agent_id}"
+            raise AgentNotFoundError(msg)
+
         retries = 0
-        while retries <= max_retries:
+        last_error = None
+
+        # Define a helper function to attempt message routing
+        async def attempt_route() -> Result[Any]:
             try:
-                return await self.route_to_agent(message, agent_id)
-            except AgentNotFoundError:
-                raise
-            except Exception as e:
-                if retries == max_retries:
-                    msg = f"Max retries exceeded ({max_retries}). Last error: {e}"
-                    raise RetryError(msg) from e
-                retries += 1
-                await asyncio.sleep(0.1 * (2**retries))  # Exponential backoff
+                return await self.router.route_message(message, agent_id)
+            except (
+                ValueError,
+                TypeError,
+                AttributeError,
+                KeyError,
+                IndexError,
+                OSError,
+                RuntimeError,
+                ConnectionError,
+            ) as e:
+                nonlocal last_error
+                last_error = e
+                return None
+
+        while retries <= max_retries:
+            result = await attempt_route()
+            if result is not None:
+                return result
+
+            retries += 1
+            if retries > max_retries:
+                msg = f"Max retries exceeded ({max_retries}). Last error: {last_error}"
+                raise RetryError(msg) from last_error
+
+            await asyncio.sleep(0.1 * (2**retries))  # Exponential backoff
+
+        # This should never be reached due to the check above, but added for completeness
+        if last_error:
+            msg = f"Max retries exceeded ({max_retries})"
+            raise RetryError(msg) from last_error
         return None
