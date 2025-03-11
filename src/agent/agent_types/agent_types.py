@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from src.agent.base import Agent
 from src.agent.errors import AgentError, AgentNotFoundError
 from src.agent.result import Result
 from src.common_types.enums import AgentStatus
@@ -297,9 +296,7 @@ class InMemoryAgentRegistry(AgentRegistry):
             List of matching agent information.
 
         """
-        return [
-            entry.info for entry in self._agents.values() if capability in entry.info.capabilities
-        ]
+        return [entry.info for entry in self._agents.values() if capability in entry.info.capabilities]
 
     def find_agents_by_parent(self, parent_id: str) -> list[AgentInfo]:
         """Find agents by parent ID.
