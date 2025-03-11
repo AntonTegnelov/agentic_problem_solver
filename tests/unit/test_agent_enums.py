@@ -20,7 +20,7 @@ def test_agent_status_enum() -> None:
     assert AgentStatus("done") == AgentStatus.DONE
 
     # Test invalid enum value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'invalid_status' is not a valid AgentStatus"):
         AgentStatus("invalid_status")
 
 
@@ -39,5 +39,5 @@ def test_message_role_enum() -> None:
     assert MessageRole("tool") == MessageRole.TOOL
 
     # Test invalid enum value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'invalid_role' is not a valid MessageRole"):
         MessageRole("invalid_role")

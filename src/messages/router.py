@@ -1,7 +1,14 @@
 """Message routing module for directing messages between agents.
 
 This module provides functionality for routing messages between different agents,
-handling retries, and managing message flow in the system.
+handling retries, and managing message flow in the system. The MessageRouter class
+serves as a central hub for message distribution, error handling, and retry logic.
+
+Key features:
+- Agent registration and management
+- Message routing with retry capabilities
+- Streaming message support
+- Route configuration between agents
 """
 
 from __future__ import annotations
@@ -22,7 +29,18 @@ if TYPE_CHECKING:
 
 
 class MessageRouter:
-    """Message router for directing messages between agents."""
+    """Message router for directing messages between agents.
+
+    This class manages the routing of messages between different agents in the system,
+    handling retries, error conditions, and maintaining routing tables.
+
+    Attributes:
+        agents: Dictionary mapping agent IDs to agent instances.
+        routes: Dictionary mapping source agent IDs to target agent IDs.
+        max_retries: Maximum number of retry attempts for message processing.
+        retry_delay: Delay between retry attempts in seconds.
+
+    """
 
     def __init__(
         self,
@@ -32,31 +50,35 @@ class MessageRouter:
         """Initialize router.
 
         Args:
-            max_retries: Maximum number of retries.
+            max_retries: Maximum number of retries for message processing.
             retry_delay: Delay between retries in seconds.
 
         """
         self.agents: dict[str, Agent] = {}
         self.routes: dict[str, str] = {}
+        self.handlers: dict[str, Callable[[Message], None]] = {}
+        self.broadcast_handlers: list[Callable[[Message], None]] = []
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
     def register_agent(self, agent_id: str, agent: Agent) -> None:
-        """Register agent.
+        """Register agent with the router.
+
+        Adds an agent to the router's registry, making it available for message routing.
 
         Args:
-            agent_id: Agent ID.
-            agent: Agent to register.
+            agent_id: Unique identifier for the agent.
+            agent: Agent instance to register.
 
         """
         self.agents[agent_id] = agent
 
     def register_handler(self, message_type: str, handler: Callable[[Message], None]) -> None:
-        """Register message handler.
+        """Register message handler for a specific message type.
 
         Args:
             message_type: Type of message to handle.
-            handler: Handler function.
+            handler: Handler function to process messages of the specified type.
 
         """
         self.handlers[message_type] = handler
@@ -64,8 +86,10 @@ class MessageRouter:
     def register_broadcast_handler(self, handler: Callable[[Message], None]) -> None:
         """Register broadcast message handler.
 
+        Broadcast handlers receive all messages regardless of their type.
+
         Args:
-            handler: Handler function.
+            handler: Handler function to process all messages.
 
         """
         self.broadcast_handlers.append(handler)
@@ -76,19 +100,23 @@ class MessageRouter:
         target_agent_id: str,
         chain: MessageChain | None = None,
     ) -> StepResult:
-        """Route message to agent.
+        """Route message to a specific agent with retry capability.
+
+        This method sends a message to the specified agent, handling retries
+        if processing fails. If a message chain is provided, the message will
+        be added to the chain after successful processing.
 
         Args:
             message: Message to route.
             target_agent_id: Target agent ID.
-            chain: Optional message chain.
+            chain: Optional message chain to record the message.
 
         Returns:
-            Step result.
+            Step result from the agent's processing.
 
         Raises:
-            AgentNotFoundError: If agent not found.
-            RetryError: If max retries exceeded.
+            AgentNotFoundError: If the target agent is not found.
+            RetryError: If maximum retries are exceeded.
 
         """
         # Check if there's a route defined for this agent
@@ -133,13 +161,16 @@ class MessageRouter:
         raise RetryError(msg)
 
     async def broadcast_message(self, message: Message) -> list[StepResult]:
-        """Broadcast message to all agents.
+        """Broadcast message to all registered agents.
+
+        Sends the same message to all agents in the registry and collects their results.
+        Exceptions during processing are filtered out from the results.
 
         Args:
             message: Message to broadcast.
 
         Returns:
-            List of results from each agent.
+            List of successful results from each agent.
 
         """
         tasks = [agent.process(message) for agent in self.agents.values()]
@@ -147,7 +178,7 @@ class MessageRouter:
         return [r for r in results if not isinstance(r, Exception)]
 
     def get_handler(self, message_type: str) -> Callable[[Message], None] | None:
-        """Get handler for message type.
+        """Get handler for a specific message type.
 
         Args:
             message_type: Type of message.
@@ -161,12 +192,15 @@ class MessageRouter:
     def add_route(self, source: str, target: str) -> None:
         """Add route between agents.
 
+        Configures a routing rule that redirects messages from the source agent
+        to the target agent.
+
         Args:
             source: Source agent ID.
             target: Target agent ID.
 
         Raises:
-            ConfigError: If agent not found.
+            ConfigError: If either the source or target agent is not registered.
 
         """
         if source not in self.agents or target not in self.agents:
@@ -179,7 +213,10 @@ class MessageRouter:
         message: Message,
         target_agent_id: str,
     ) -> AsyncGenerator[str, None]:
-        """Route message to agent with streaming.
+        """Route message to agent with streaming response.
+
+        Similar to route_message, but returns a stream of response chunks
+        instead of waiting for the complete response.
 
         Args:
             message: Message to route.

@@ -26,7 +26,7 @@ def test_agent_step_enum() -> None:
     assert AgentStep("verify") == AgentStep.VERIFY
 
     # Test invalid enum value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'invalid_step' is not a valid AgentStep"):
         AgentStep("invalid_step")
 
 
@@ -45,7 +45,7 @@ def test_agent_status_enum() -> None:
     assert AgentStatus("completed") == AgentStatus.COMPLETED
 
     # Test invalid enum value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'invalid_status' is not a valid AgentStatus"):
         AgentStatus("invalid_status")
 
 
@@ -64,7 +64,7 @@ def test_message_role_enum() -> None:
     assert MessageRole("tool") == MessageRole.TOOL
 
     # Test invalid enum value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'invalid_role' is not a valid MessageRole"):
         MessageRole("invalid_role")
 
 
@@ -85,7 +85,7 @@ def test_log_level_enum() -> None:
     assert LogLevel("critical") == LogLevel.CRITICAL
 
     # Test invalid enum value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'invalid_level' is not a valid LogLevel"):
         LogLevel("invalid_level")
 
 
