@@ -12,6 +12,7 @@ def load_env_var(
     key: str,
     env_file: str | Path = ".env",
     default: str | None = None,
+    *,
     required: bool = False,
 ) -> str:
     """Load environment variable from .env file.
