@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.base import Agent
 from src.agent.result import Result
+from src.agent.state.base import AgentState
 from src.common_types.enums import MessageRole
 from src.messages import Message
 from src.prompts import get_step_prompt
@@ -13,7 +14,6 @@ from src.prompts import get_step_prompt
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from src.agent.state.base import AgentState
     from src.config.agent import AgentConfig
     from src.llm_providers.interface import LLMProvider
 
@@ -37,10 +37,11 @@ class SolverAgent(Agent):
             config: Agent configuration.
 
         """
-        super().__init__(config)
         self._provider = provider
         self._state_manager = state_manager
         self._agent_id = "solver_agent"
+        self.config = config
+        self.state = state_manager or AgentState(agent_id=self._agent_id)
 
     def get_agent_id(self) -> str:
         """Get agent ID.
