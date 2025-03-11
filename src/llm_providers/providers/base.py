@@ -176,7 +176,7 @@ class Provider(ABC):
 
         """
 
-    def get_resource(self, key: str) -> Any:
+    def get_resource(self, key: str) -> object:
         """Get resource.
 
         Args:
@@ -188,7 +188,7 @@ class Provider(ABC):
         """
         return self.resources.get(key)
 
-    def set_resource(self, key: str, value: Any) -> None:
+    def set_resource(self, key: str, value: object) -> None:
         """Set resource.
 
         Args:

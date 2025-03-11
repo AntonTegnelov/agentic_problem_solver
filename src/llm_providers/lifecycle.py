@@ -220,7 +220,7 @@ class ProviderLifecycle:
 
         self.stats.last_request = now
 
-    def add_test_resource(self, name: str, value: Any) -> None:
+    def add_test_resource(self, name: str, value: object) -> None:
         """Add test resource.
 
         Args:
