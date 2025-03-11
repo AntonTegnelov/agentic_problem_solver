@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from src.agent.base import Agent
 from src.agent.result import Result
 from src.agent.state.base import AgentState, StateManager
-from src.common_types.enums import MessageRole
+from src.common_types.message_types import Message, SystemMessage
 from src.messages.creation import create_message
 from src.prompts import get_step_prompt
 
@@ -139,10 +139,7 @@ class SolverAgent(Agent):
         return Result(success=True, data=response, error=None)
 
     def _prepare_messages(self, messages: list[Message]) -> list[Message]:
-        """Prepare messages for provider.
-
-        Some providers (like Gemini) don't support system messages.
-        This method converts system messages to user messages.
+        """Prepare messages for processing.
 
         Args:
             messages: Messages to prepare.
@@ -153,9 +150,9 @@ class SolverAgent(Agent):
         """
         prepared_messages = []
         for msg in messages:
-            if msg.role == MessageRole.SYSTEM:
+            if isinstance(msg, SystemMessage):
                 prepared_messages.append(
-                    create_message(role="user", content=msg.content),
+                    create_message(role="human", content=msg.content),
                 )
             else:
                 prepared_messages.append(msg)
@@ -183,7 +180,7 @@ class SolverAgent(Agent):
 
         """
         # Add user message
-        self.state.add_message(create_message(role="user", content=input_data))
+        self.state.add_message(create_message(role="human", content=input_data))
 
         # Get prompt for current step
         prompt = get_step_prompt(self.state)

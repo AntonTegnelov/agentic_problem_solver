@@ -1,14 +1,18 @@
 """Gemini LLM provider implementation."""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import google.generativeai as genai
+from google.generativeai.types import AsyncGenerateContentResponse, GenerationConfig
 
+from src.common_types.message_types import AIMessage, HumanMessage, Message, SystemMessage, ToolMessage
+from src.config import ConfigError
 from src.config.utils import load_env_var
 from src.exceptions import (
     APIKeyError,
-    ConfigError,
     EmptyResponseError,
     InvalidModelError,
     RetryError,
@@ -16,15 +20,18 @@ from src.exceptions import (
 )
 from src.llm_providers.config.provider_config import GeminiConfig
 from src.llm_providers.providers.base import BaseLLMProvider
+from src.llm_providers.version import ProviderVersion
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from src.agent.agent_types.agent_types import Message
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from google.generativeai import GenerativeModel
+if TYPE_CHECKING:
     from google.generativeai.types import AsyncGenerateContentResponse
 
-    from src.agent.agent_types.agent_types import Message
     from src.llm_providers.type_defs import GenerationConfig
 
 logger = get_logger(__name__)
@@ -40,12 +47,14 @@ class GeminiProvider(BaseLLMProvider):
         _model: The underlying Gemini model instance.
         _config: Provider configuration.
         _default_model: Default model name.
+        is_initialized: Indicates whether the provider is initialized.
 
     """
 
-    _model: GenerativeModel | None = None
+    _model: Any | None = None
     _config: GeminiConfig | None = None
     _default_model: ClassVar[str] = "gemini-2.0-flash-lite"
+    is_initialized: bool = False
 
     def __init__(self, config: GeminiConfig) -> None:
         """Initialize provider.
@@ -61,6 +70,15 @@ class GeminiProvider(BaseLLMProvider):
         self._validate_config()
         # Initialize the provider
         self._initialize()
+
+    def get_version(self) -> ProviderVersion:
+        """Get provider version.
+
+        Returns:
+            Provider version information.
+
+        """
+        return ProviderVersion.GEMINI_V1
 
     def _create_config(self, api_key: str | None = None) -> GeminiConfig:
         """Create provider configuration.
@@ -100,8 +118,16 @@ class GeminiProvider(BaseLLMProvider):
 
         genai.configure(api_key=self._config.api_key)
         model_name = self._config.model or self._default_model
+
+        # Validate model name
+        valid_models = ["gemini-pro", "gemini-pro-vision", "gemini-2.0-flash-lite"]
+        if model_name not in valid_models:
+            msg = f"Invalid model name: {model_name}. Valid models are: {', '.join(valid_models)}"
+            raise InvalidModelError(msg)
+
         try:
             self._model = genai.GenerativeModel(model_name)
+            self.is_initialized = True
         except Exception as e:
             msg = f"Failed to initialize model: {e}"
             raise ConfigError(msg) from e
@@ -143,7 +169,10 @@ class GeminiProvider(BaseLLMProvider):
             msg = "Empty response from model"
             raise EmptyResponseError(msg)
 
-    def generate(self, messages: list[Message]) -> str:
+    def generate(
+        self,
+        messages: list[Message],
+    ) -> str:
         """Generate response from messages.
 
         Args:
@@ -153,7 +182,7 @@ class GeminiProvider(BaseLLMProvider):
             Generated response.
 
         Raises:
-            ConfigError: If provider is not configured.
+            ConfigError: If provider is not initialized.
             RetryError: If generation fails.
 
         """
@@ -162,9 +191,22 @@ class GeminiProvider(BaseLLMProvider):
             raise ConfigError(msg)
 
         try:
-            response = self._model.generate_content(
-                [{"role": msg.role, "parts": [msg.content]} for msg in messages],
-            )
+            formatted_messages = []
+            for msg in messages:
+                if isinstance(msg, HumanMessage):
+                    role = "user"
+                elif isinstance(msg, AIMessage):
+                    role = "model"
+                elif isinstance(msg, SystemMessage):
+                    role = "system"
+                elif isinstance(msg, ToolMessage):
+                    role = "function"
+                else:
+                    role = "user"  # Default fallback
+
+                formatted_messages.append({"role": role, "parts": [msg.content]})
+
+            response = self._model.generate_content(formatted_messages)
         except Exception as e:
             msg = f"Failed to generate response: {e}"
             raise RetryError(msg) from e
@@ -185,7 +227,7 @@ class GeminiProvider(BaseLLMProvider):
             Generated response chunks.
 
         Raises:
-            ConfigError: If provider is not configured.
+            ConfigError: If provider is not initialized.
             RetryError: If generation fails.
 
         """
@@ -194,8 +236,23 @@ class GeminiProvider(BaseLLMProvider):
             raise ConfigError(msg)
 
         try:
+            formatted_messages = []
+            for msg in messages:
+                if isinstance(msg, HumanMessage):
+                    role = "user"
+                elif isinstance(msg, AIMessage):
+                    role = "model"
+                elif isinstance(msg, SystemMessage):
+                    role = "system"
+                elif isinstance(msg, ToolMessage):
+                    role = "function"
+                else:
+                    role = "user"  # Default fallback
+
+                formatted_messages.append({"role": role, "parts": [msg.content]})
+
             response = await self._model.generate_content_async(
-                [{"role": msg.role, "parts": [msg.content]} for msg in messages],
+                formatted_messages,
                 stream=True,
             )
             async for chunk in response:
