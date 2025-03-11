@@ -8,7 +8,7 @@ from src.agent.base import Agent
 from src.agent.result import Result
 from src.agent.state.base import AgentState, StateManager
 from src.common_types.enums import MessageRole
-from src.messages import Message
+from src.messages.creation import create_message
 from src.prompts import get_step_prompt
 
 if TYPE_CHECKING:
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     from src.config.agent import AgentConfig
     from src.llm_providers.interface import LLMProvider
+    from src.messages import Message
 
 T = TypeVar("T")
 
@@ -154,7 +155,7 @@ class SolverAgent(Agent):
         for msg in messages:
             if msg.role == MessageRole.SYSTEM:
                 prepared_messages.append(
-                    Message(role=MessageRole.USER, content=msg.content),
+                    create_message(role="user", content=msg.content),
                 )
             else:
                 prepared_messages.append(msg)
@@ -182,13 +183,13 @@ class SolverAgent(Agent):
 
         """
         # Add user message
-        self.state.add_message(Message(role=MessageRole.USER, content=input_data))
+        self.state.add_message(create_message(role="user", content=input_data))
 
         # Get prompt for current step
         prompt = get_step_prompt(self.state)
 
         # Add system message
-        self.state.add_message(Message(role=MessageRole.SYSTEM, content=prompt))
+        self.state.add_message(create_message(role="system", content=prompt))
 
         # Prepare messages for provider
         return self._prepare_messages(self.state.messages)
@@ -210,6 +211,6 @@ class SolverAgent(Agent):
         messages = self._prepare_state(input_data)
 
         response = self._provider.generate(messages)
-        self.state.add_message(Message(role=MessageRole.ASSISTANT, content=response))
+        self.state.add_message(create_message(role="ai", content=response))
 
         return response
