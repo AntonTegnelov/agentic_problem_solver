@@ -34,6 +34,13 @@ from src.common_types.message_types import (
     MessageValue,
 )
 from src.common_types.result_types import Result
+from src.common_types.task_types import (
+    Task,
+    TaskComplexity,
+    TaskDependency,
+    TaskPriority,
+    TaskStatus,
+)
 
 __all__ = [
     # Error types
@@ -65,6 +72,11 @@ __all__ = [
     "ProviderError",
     "Result",
     "RetryError",
+    "Task",
+    "TaskComplexity",
+    "TaskDependency",
+    "TaskPriority",
+    "TaskStatus",
     "TemperatureError",
     "ValidationError",
 ]
