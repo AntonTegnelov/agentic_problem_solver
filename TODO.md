@@ -5,7 +5,7 @@
   - [x] Extend `src/agent/agent_types/agent_types.py` to add hierarchical methods to the `Agent` protocol
   - [x] Add agent role enums in `src/common_types/enums.py` (ARCHITECT, PLANNER, EXECUTOR)
   - [x] Enhance `AgentInfo` in `src/common_types/agent_types.py` to include parent/child relationship tracking
-  - [ ] Add deprecation warning to `SolverAgent` in `src/agent/solver.py` while maintaining compatibility
+  - [x] Add deprecation warning to `SolverAgent` in `src/agent/solver.py` while maintaining compatibility
   - [ ] Create `ArchitectAgent` in `src/agent/agent_types/architect.py` for high-level task decomposition
   - [ ] Create `PlannerAgent` in `src/agent/agent_types/planner.py` for mid-level task refinement
   - [ ] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from src.agent.state.base import AgentState, StateManager
 from src.common_types.message_types import Message, SystemMessage
-
-# Import the Agent Protocol instead of the ABC
 from src.common_types.result_types import Result
 from src.messages.creation import create_message
 from src.prompts import get_step_prompt
@@ -27,6 +26,10 @@ class SolverAgent:
     """Agent that solves programming problems.
 
     This agent implements the Agent Protocol from src.agent.agent_types.agent_types.
+
+    .. deprecated:: 0.1.0
+       SolverAgent is deprecated and will be removed in a future version.
+       Use the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent) instead.
     """
 
     def __init__(
@@ -43,6 +46,13 @@ class SolverAgent:
             config: Agent configuration.
 
         """
+        warnings.warn(
+            "SolverAgent is deprecated and will be removed in a future version. "
+            "Use the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self._provider = provider
         self._state_manager = state_manager
         self._agent_id = "solver_agent"
