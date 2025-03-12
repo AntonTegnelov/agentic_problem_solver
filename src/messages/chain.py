@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Callable, Union
+from typing import TYPE_CHECKING, Any, Callable
 
 from langchain_core.messages import BaseMessage as Message
 
@@ -18,12 +18,12 @@ if TYPE_CHECKING:
 
 from src.common_types.enums import MessagePriority
 from src.common_types.error_types import ConfigError
-from src.common_types.message_types import AIMessage, HumanMessage
+from src.common_types.message_types import (
+    AIMessage,
+    CriteriaValue,
+    HumanMessage,
+)
 from src.messages.utils import get_message_metadata, set_message_metadata
-
-MessageValue = str | int | float | bool | dict[str, "MessageValue"] | list["MessageValue"] | None
-CriteriaValue = Union[str, int, bool, None]
-CriteriaDict = dict[str, CriteriaValue]
 
 
 def create_message_chain() -> MessageChain:
