@@ -21,9 +21,9 @@ class MinimalLLMProvider:
 
     def generate(
         self,
-        messages: list[Message],
+        _messages: list[Message],
         *,
-        config: GenerationConfig | None = None,
+        _config: GenerationConfig | None = None,
     ) -> str:
         """Generate response from messages."""
         return ""
@@ -41,7 +41,7 @@ class MinimalLLMProvider:
             pass
         yield ""
 
-    def count_tokens(self, text: str) -> int:
+    def count_tokens(self, _text: str) -> int:
         """Count tokens in text."""
         return 0
 
@@ -67,14 +67,14 @@ class PartialLLMProvider:
 
     def generate(
         self,
-        messages: list[Message],
+        _messages: list[Message],
         *,
-        config: GenerationConfig | None = None,
+        _config: GenerationConfig | None = None,
     ) -> str:
         """Generate response from messages."""
         return ""
 
-    def count_tokens(self, text: str) -> int:
+    def count_tokens(self, _text: str) -> int:
         """Count tokens in text."""
         return 0
 
@@ -91,10 +91,7 @@ async def test_generate_stream_empty_messages() -> None:
     provider = MinimalLLMProvider()
 
     # Test with empty messages
-    chunks = []
-    async for chunk in provider.generate_stream([]):
-        chunks.append(chunk)
-
+    chunks = [chunk async for chunk in provider.generate_stream([])]
     assert chunks == []
 
 
@@ -105,10 +102,7 @@ async def test_generate_stream_with_config() -> None:
     messages = [create_human_message("test")]
     config = GenerationConfig(model="test-model", temperature=0.5)
 
-    chunks = []
-    async for chunk in provider.generate_stream(messages, config=config):
-        chunks.append(chunk)
-
+    chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
     assert chunks == [""]
 
 
@@ -192,16 +186,12 @@ async def test_custom_provider_generate_stream() -> None:
     messages = [create_human_message("test")]
 
     # Test with default config
-    chunks = []
-    async for chunk in provider.generate_stream(messages):
-        chunks.append(chunk)
+    chunks = [chunk async for chunk in provider.generate_stream(messages)]
     assert "".join(chunks) == "Response using custom-model"
 
     # Test with custom config
     config = GenerationConfig(model="test-model")
-    chunks = []
-    async for chunk in provider.generate_stream(messages, config=config):
-        chunks.append(chunk)
+    chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
     assert "".join(chunks) == "Response using test-model"
 
 
