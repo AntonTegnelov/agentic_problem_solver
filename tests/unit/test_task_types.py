@@ -1,7 +1,7 @@
 """Tests for task types."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.common_types.enums import AgentRole
 from src.common_types.task_types import (
@@ -83,7 +83,7 @@ class TestTaskTypes:
             task_id=dependency_id,
             description="Test dependency",
         )
-        now = datetime.now().timestamp()
+        now = datetime.now(UTC).timestamp()
 
         task = Task(
             description="Custom task",

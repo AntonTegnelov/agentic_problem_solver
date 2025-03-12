@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 from uuid import UUID, uuid4
 
@@ -69,7 +69,6 @@ class Step:
             ValueError: If required keys are missing.
 
         """
-        error_msg: str
         missing_keys = [key for key in self.required_keys if key not in kwargs]
         if missing_keys:
             error_msg = f"Missing required keys: {', '.join(missing_keys)}"
@@ -357,72 +356,69 @@ class TaskBreakdownStep:
         """Execute task breakdown step.
 
         Args:
-            state: Current agent state.
-            **kwargs: Additional arguments.
-                - task_description: Description of the task to break down.
-                - parent_task_id: Optional ID of the parent task.
-                - complexity: Optional complexity of the task.
-                - priority: Optional priority of the task.
+            state: Agent state.
+            **kwargs: Step inputs.
 
         Returns:
-            Step result containing a list of Task objects.
+            Step result.
 
         """
-        # Validate inputs
-        self._validate_inputs(**kwargs)
-
-        # Extract task information
-        task_description = kwargs["task_description"]
-        parent_task_id = kwargs.get("parent_task_id")
-        complexity = kwargs.get("complexity", TaskComplexity.MODERATE)
-        priority = kwargs.get("priority", TaskPriority.MEDIUM)
-
-        # Create parent task if not provided
-        if not parent_task_id:
-            parent_task = Task(
-                description=task_description,
-                complexity=complexity,
-                priority=priority,
-                assigned_role=self.agent_role,
-                created_at=datetime.now().timestamp(),
-                updated_at=datetime.now().timestamp(),
-            )
-            parent_task_id = parent_task.task_id
-            # Store parent task in state
-            self._store_task_in_state(state, parent_task)
-
-        # Get agent for task breakdown
-        agent = state.get_agent_for_step(AgentStep.UNDERSTAND)
-
-        # Create prompt for task breakdown
-        prompt = self._create_task_breakdown_prompt(task_description, complexity, priority)
-
-        # Create a proper Message object
-        message = HumanMessage(content=prompt)
-
-        # Process the message
-        result = agent.process(message)
-
-        if not result.success:
-            return result
-
-        # Parse the result into Task objects
         try:
-            tasks = self._parse_tasks_from_result(result.data, parent_task_id)
+            # Validate inputs
+            self.validate_inputs(**kwargs)
+
+            # Extract task information
+            task_description = kwargs["task_description"]
+            complexity = kwargs.get("complexity", TaskComplexity.MODERATE)
+            priority = kwargs.get("priority", TaskPriority.MEDIUM)
+            parent_task_id = kwargs.get("parent_task_id")
+
+            # Create parent task if not provided
+            if not parent_task_id:
+                parent_task = Task(
+                    description=task_description,
+                    complexity=complexity,
+                    priority=priority,
+                    assigned_role=self.agent_role,
+                    created_at=datetime.now(UTC).timestamp(),
+                    updated_at=datetime.now(UTC).timestamp(),
+                )
+                parent_task_id = parent_task.task_id
+                # Store parent task in state
+                self.store_task_in_state(state, parent_task)
+
+            # Get agent for task breakdown
+            agent = state.get_agent_for_step(AgentStep.UNDERSTAND)
+
+            # Create prompt for task breakdown
+            prompt = self.create_task_breakdown_prompt(task_description, complexity, priority)
+
+            # Create a proper Message object
+            message = HumanMessage(content=prompt)
+
+            # Process message
+            result = agent.process(message)
+
+            if not result.success:
+                return StepResult(success=False, error=f"Agent failed: {result.error}")
+
+            # Parse tasks from result
+            tasks = self.parse_tasks_from_result(result.data, parent_task_id)
 
             # Store tasks in state
             for task in tasks:
-                self._store_task_in_state(state, task)
+                self.store_task_in_state(state, task)
 
-            # Update parent task with subtask IDs
-            self._update_parent_task_with_subtasks(state, parent_task_id, [task.task_id for task in tasks])
+            # Update parent task with subtasks
+            subtask_ids = [task.task_id for task in tasks]
+            self.update_parent_task_with_subtasks(state, parent_task_id, subtask_ids)
 
             return StepResult(success=True, data=tasks)
 
-        except Exception as e:
+        except (ValueError, TypeError, json.JSONDecodeError) as e:
             return StepResult(success=False, error=f"Failed to parse tasks: {e!s}")
 
-    def _validate_inputs(self, **kwargs: StepKwargs) -> None:
+    def validate_inputs(self, **kwargs: StepKwargs) -> None:
         """Validate step inputs.
 
         Args:
@@ -437,7 +433,7 @@ class TaskBreakdownStep:
             error_msg = f"Missing required keys: {', '.join(missing_keys)}"
             raise ValueError(error_msg)
 
-    def _create_task_breakdown_prompt(
+    def create_task_breakdown_prompt(
         self,
         task_description: str,
         complexity: TaskComplexity,
@@ -504,11 +500,15 @@ class TaskBreakdownStep:
         Ensure that the dependencies reference other tasks in the list by their index (0-based).
         """
 
-    def _parse_tasks_from_result(self, result_data: Any, parent_task_id: UUID) -> list[Task]:
+    def parse_tasks_from_result(
+        self,
+        result_data: str | list[dict[str, object]],
+        parent_task_id: UUID,
+    ) -> list[Task]:
         """Parse tasks from result data.
 
         Args:
-            result_data: Result data from agent.
+            result_data: Result data from agent, either a JSON string or a list of task dictionaries.
             parent_task_id: ID of the parent task.
 
         Returns:
@@ -516,6 +516,7 @@ class TaskBreakdownStep:
 
         Raises:
             ValueError: If result data is invalid.
+            TypeError: If result data is of an unexpected type.
 
         """
         # Extract JSON from result if needed
@@ -533,12 +534,12 @@ class TaskBreakdownStep:
                 task_dicts = json.loads(json_str)
             except json.JSONDecodeError as e:
                 msg = f"Invalid JSON in result: {e!s}"
-                raise ValueError(msg)
+                raise ValueError(msg) from e
         elif isinstance(result_data, list):
             task_dicts = result_data
         else:
             msg = f"Unexpected result data type: {type(result_data)}"
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         # Create Task objects
         tasks = []
@@ -556,8 +557,8 @@ class TaskBreakdownStep:
                 priority=TaskPriority(priority_str),
                 parent_task_id=parent_task_id,
                 assigned_role=self.agent_role,
-                created_at=datetime.now().timestamp(),
-                updated_at=datetime.now().timestamp(),
+                created_at=datetime.now(UTC).timestamp(),
+                updated_at=datetime.now(UTC).timestamp(),
             )
             tasks.append(task)
             task_ids[i] = task.task_id
@@ -581,7 +582,7 @@ class TaskBreakdownStep:
 
         return tasks
 
-    def _store_task_in_state(self, state: AgentState, task: Task) -> None:
+    def store_task_in_state(self, state: AgentState, task: Task) -> None:
         """Store task in agent state.
 
         Args:
@@ -627,7 +628,7 @@ class TaskBreakdownStep:
         # Store updated tasks list in state
         state.set_context("tasks", tasks)
 
-    def _update_parent_task_with_subtasks(
+    def update_parent_task_with_subtasks(
         self,
         state: AgentState,
         parent_task_id: UUID,

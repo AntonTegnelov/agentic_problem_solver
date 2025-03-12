@@ -210,7 +210,6 @@ class TestHierarchicalAgentSystem:
         self,
         registry: InMemoryAgentRegistry,
         hierarchical_system: dict[str, str],
-        mock_provider: MagicMock,
     ) -> None:
         """Test routing tasks based on agent capabilities."""
         # Get agents

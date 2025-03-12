@@ -159,11 +159,7 @@ class InMemoryAgentRegistry(AgentRegistry):
             List of agent information.
 
         """
-        result = []
-        for info in self._agent_info.values():
-            if hasattr(info, "role") and info.role == role:
-                result.append(info)
-        return result
+        return [info for info in self._agent_info.values() if hasattr(info, "role") and info.role == role]
 
     def find_agents_by_parent(self, parent_id: str) -> list[AgentInfo]:
         """Find agents by parent ID.
@@ -175,11 +171,7 @@ class InMemoryAgentRegistry(AgentRegistry):
             List of agent information with the specified parent.
 
         """
-        result = []
-        for info in self._agent_info.values():
-            if info.parent_id == parent_id:
-                result.append(info)
-        return result
+        return [info for info in self._agent_info.values() if info.parent_id == parent_id]
 
     def get_parent_agent(self, agent_id: str) -> Agent | None:
         """Get parent agent of the specified agent.

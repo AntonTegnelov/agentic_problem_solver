@@ -2,75 +2,171 @@
 
 ## Overview
 
-APS is designed as a hierarchical multi-agent system that breaks down and solves complex problems through coordinated agent interactions. The system follows clean architecture principles with clear separation of concerns and well-defined interfaces between components.
+APS is designed as a modular agent-based system for solving complex programming problems. The current implementation features a single `SolverAgent` that handles the entire problem-solving workflow, while the planned architecture will transform this into a hierarchical multi-agent system with specialized roles for more effective task decomposition and execution.
 
-## Core Components
+## Current Architecture
 
-### 1. Configuration System (`src/config/`)
+The current system is built around a protocol-based design with clear separation of concerns:
+
+### Core Components
+
+#### 1. Configuration System (`src/config/`)
 
 - Each subsystem has its own config that extends the base configurations
+- Environment-based configuration loading
+- Type-safe configuration validation
 
-### 2. Agent System (`src/agent/`)
+#### 2. Agent System (`src/agent/`)
 
-- `base.py`: Core agent abstractions and interfaces
+- `solver.py`: Current implementation of the primary agent
+- `agent_types/agent_types.py`: Protocol definitions for agents
 - `state/`: Agent state management
   - `base.py`: Base state classes and interfaces
   - `memory.py`: Agent memory implementations
 - `steps/`: Step execution framework
   - `base.py`: Step abstractions
   - `executors/`: Step execution implementations
-- `types/`: Type definitions for agent system
-  - `enums.py`: Enumerations (MessageRoles, StepTypes, etc.)
-  - `messages.py`: Message type definitions
-  - `states.py`: State type definitions
+- `coordination.py`: Basic agent coordination capabilities
 
-### 3. Provider System (`src/llm_providers/`)
+#### 3. Provider System (`src/llm_providers/`)
 
 - `base.py`: Provider interface definition
 - `factory.py`: Provider instantiation logic
-- Each provider in its own module (e.g., `gemini.py`, `openai.py`)
-- Consistent error handling and retry logic across providers
+- Provider-specific implementations (e.g., `gemini.py`, `openai.py`)
 
-### 4. Message System (`src/messages/`)
+#### 4. Message System (`src/messages/`)
 
 - `base.py`: Message abstractions
 - `handlers/`: Message processing logic
 - `schemas/`: Message structure definitions
 - `transformers/`: Message transformation utilities
 
-### 5. CLI System (`src/cli/`)
+#### 5. CLI System (`src/cli/`)
 
-- Clean command structure
-- Consistent error handling
-- Progress feedback
+- Command-line interface for interacting with the system
 - Configuration management
 
-### 5. Common Types (`src/common_types/`)
+#### 6. Common Types (`src/common_types/`)
 
-- Consolidates common types into a single source
+- Consolidates common types and enums
 
-## Data Flow
+### Current Data Flow
 
 1. User Input → CLI
-2. CLI → Top-level Agent
-3. Top-level Agent:
-   - Breaks down problem into tasks
-   - Creates sub-agents as needed
-   - Manages task delegation
-4. Sub-agents:
-   - Execute specific tasks
-   - Report progress
-   - Handle failures gracefully
-5. Results aggregation
-6. Final output → User
+2. CLI → SolverAgent
+3. SolverAgent processes the task through sequential steps:
+   - UNDERSTAND: Analyze and comprehend the task
+   - PLAN: Create a strategy to solve the task
+   - EXECUTE: Implement the planned solution
+   - VERIFY: Test and validate the solution
+4. Results → User
+
+## Planned Hierarchical Architecture
+
+The planned architecture will transform APS into a hierarchical multi-agent system with specialized roles:
+
+### Hierarchical Agent Structure
+
+1. **ArchitectAgent (Top Level)**
+
+   - Responsible for high-level problem decomposition
+   - Breaks down complex problems into independent microservices/components
+   - Designs interfaces between components
+   - Primarily delegates to PlannerAgents for further refinement
+   - Can delegate directly to ExecutorAgents for simple, well-defined tasks that don't require further decomposition
+
+2. **PlannerAgent (Middle Level)**
+
+   - Receives component tasks from ArchitectAgent
+   - Further decomposes components into implementable tasks
+   - Manages dependencies between tasks
+   - Can delegate to additional PlannerAgents for complex sub-components that require further specialized planning
+   - Primarily delegates to ExecutorAgents for implementation
+
+3. **ExecutorAgent (Bottom Level)**
+   - Receives well-defined tasks with clear scope
+   - Implements actual code solutions
+   - Focuses on specific, manageable pieces of work
+   - Reports results back up the hierarchy
+
+### Delegation Decision Responsibility
+
+The system will implement agent-driven delegation decisions rather than using a separate delegation layer:
+
+- **Agent-Driven Approach**: Each agent evaluates its assigned tasks and determines the appropriate delegation strategy
+
+  - ArchitectAgents assess task complexity to decide between PlannerAgent or direct ExecutorAgent delegation
+  - PlannerAgents evaluate sub-tasks to determine if further planning is needed or if they're ready for execution
+  - This approach keeps decision-making close to the context where it's most relevant
+
+- **Benefits of Agent-Driven Delegation**:
+
+  - Maintains agent autonomy within the system
+  - Leverages the contextual understanding each agent has of its specific tasks
+  - Simplifies the architecture by avoiding an additional coordination layer
+  - Allows for specialized delegation strategies per agent type
+
+- **Coordination Support**:
+  - While agents make delegation decisions, the coordination system provides supporting infrastructure
+  - Resource management to prevent excessive agent creation
+  - Capability matching to ensure tasks are assigned to appropriate agents
+  - Load balancing considerations for optimal task distribution
+
+### Protocol-Based Implementation
+
+The hierarchical system will be implemented using protocols rather than inheritance:
+
+- **Agent Protocol**: All agent types will implement the same `Agent` protocol defined in `agent_types.py`
+- **SolverAgent Transition**: The existing `SolverAgent` will be maintained for backward compatibility but marked as deprecated
+- **Specialized Implementations**: Each agent type will have its own implementation file in the `agent/agent_types/` directory
+
+### Enhanced Coordination System
+
+The existing coordination system will be extended to support hierarchical operations:
+
+- **Parent-Child Relationships**: Track relationships between agents in the hierarchy
+- **Task Delegation**: Route tasks to appropriate agent types based on capabilities
+- **Result Aggregation**: Combine results from multiple child agents
+- **Error Propagation**: Escalate errors to appropriate parent agents
+
+### Task Breakdown and Management
+
+A standardized task system will be implemented:
+
+- **Task Schema**: Defined structure for tasks with description, priority, dependencies, and status
+- **Task Breakdown**: Specialized steps for decomposing complex tasks
+- **Task Tracking**: Monitor progress of delegated tasks throughout the hierarchy
+
+## Hierarchical Data Flow
+
+1. User Input → CLI
+2. CLI → ArchitectAgent
+3. ArchitectAgent:
+   - Breaks down problem into components
+   - Analyzes each component's complexity
+   - For complex components: Creates PlannerAgents and delegates component tasks
+   - For simple components: Delegates directly to ExecutorAgents
+4. PlannerAgents:
+   - Further decompose components into implementable tasks
+   - For complex sub-components: Create additional PlannerAgents for specialized planning
+   - For implementable tasks: Create ExecutorAgents and delegate implementation
+5. ExecutorAgents:
+   - Implement assigned tasks
+   - Report results back to parent agent (either PlannerAgent or ArchitectAgent)
+6. PlannerAgents aggregate results from their ExecutorAgents and sub-PlannerAgents
+7. ArchitectAgent combines all component results into final solution
+8. Final result → User
 
 ## Key Design Principles
 
-1. **Single Responsibility**: Each module has one clear purpose
-2. **Interface Segregation**: Clean interfaces between components
-3. **Dependency Inversion**: High-level modules don't depend on low-level modules
-4. **Open/Closed**: Extend functionality without modifying existing code
-5. **DRY**: No code duplication across modules
+The system adheres to these principles in both current and planned architectures:
+
+1. **Protocol-Based Design**: Using protocols rather than inheritance for flexible composition
+2. **Single Responsibility**: Each component has one clear purpose
+3. **Interface Segregation**: Clean interfaces between components
+4. **Dependency Inversion**: High-level modules don't depend on low-level modules
+5. **Open/Closed**: Extend functionality without modifying existing code
+6. **DRY**: No code duplication across modules
 
 ## Configuration Management
 
@@ -87,6 +183,7 @@ APS is designed as a hierarchical multi-agent system that breaks down and solves
 - Retry mechanisms
 - Graceful degradation
 - Detailed logging
+- Planned: Hierarchical error escalation
 
 ## Testing Strategy
 
@@ -95,6 +192,7 @@ APS is designed as a hierarchical multi-agent system that breaks down and solves
 - End-to-end tests for critical paths
 - Performance benchmarks
 - Stress testing
+- Planned: Hierarchical agent interaction tests
 
 ## Monitoring and Observability
 
@@ -103,6 +201,7 @@ APS is designed as a hierarchical multi-agent system that breaks down and solves
 - Error tracking
 - Resource usage monitoring
 - Task progress tracking
+- Planned: Hierarchical task monitoring
 
 ## Security Considerations
 
@@ -111,3 +210,19 @@ APS is designed as a hierarchical multi-agent system that breaks down and solves
 - Input validation
 - Output sanitization
 - Secure configuration handling
+
+## Implementation Roadmap
+
+The transition to the hierarchical architecture will follow these key steps:
+
+1. Extend the Agent protocol with hierarchical capabilities
+2. Create specialized agent implementations (Architect, Planner, Executor)
+3. Enhance coordination system for hierarchical relationships
+4. Implement standardized task schema and breakdown
+5. Add hierarchical message routing
+6. Create result aggregation mechanisms
+7. Implement hierarchical error handling
+8. Update CLI for hierarchical operations
+9. Enhance documentation and testing
+
+Look at TODO.md for a more detailed roadmap

@@ -1,6 +1,6 @@
 """Agent types package."""
 
-from typing import Any, Optional, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from src.agent.agent_types.agent_types import (
     Agent,
@@ -36,9 +36,9 @@ __all__ = [
 
 def create_agent(
     role: AgentRole,
-    provider: Any = None,
+    provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: Any | None = None,
+    config: dict | None = None,
 ) -> Agent[Any]:
     """Create an agent based on the specified role.
 
@@ -66,9 +66,9 @@ def create_agent(
 
 
 def create_architect_agent(
-    provider: Any = None,
+    provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: Any | None = None,
+    config: dict | None = None,
 ) -> Agent[Any]:
     """Create an architect agent.
 
@@ -86,9 +86,9 @@ def create_architect_agent(
 
 
 def create_planner_agent(
-    provider: Any = None,
+    provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: Any | None = None,
+    config: dict | None = None,
 ) -> Agent[Any]:
     """Create a planner agent.
 
@@ -106,9 +106,9 @@ def create_planner_agent(
 
 
 def create_executor_agent(
-    provider: Any = None,
+    provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: Any | None = None,
+    config: dict | None = None,
 ) -> Agent[Any]:
     """Create an executor agent.
 
