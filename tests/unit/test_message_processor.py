@@ -438,13 +438,14 @@ async def test_process_stream_with_retry_value_error() -> None:
         _ = [chunk async for chunk in process_stream_with_retry(message, agents, "test_agent")]
 
 
-class TestStreamError(Exception):
-    """Custom exception for testing stream errors."""
-
-
 @pytest.mark.asyncio
 async def test_process_stream_with_retry_max_retries_exceeded() -> None:
     """Test process_stream_with_retry with max retries exceeded."""
+
+    # Define a custom exception for this test
+    class TestStreamError(Exception):
+        """Custom exception for testing stream errors."""
+
     agent = MagicMock()
 
     # Use a properly awaitable mock that returns an empty async generator
