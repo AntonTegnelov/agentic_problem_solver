@@ -1,6 +1,6 @@
 """Agent-specific error classes."""
 
-from src.exceptions import ConfigError
+from src.common_types import ConfigError
 
 
 class AgentError(Exception):

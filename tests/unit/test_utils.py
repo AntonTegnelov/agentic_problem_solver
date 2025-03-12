@@ -3,7 +3,6 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from src.agent.base import Agent
 from src.agent.errors import AgentError
 from src.agent.result import Result
 from src.common_types.message_types import Message
@@ -17,8 +16,8 @@ class MockGenerationError(Exception):
     """Test generation error."""
 
 
-class MockAgent(Agent):
-    """Test agent implementation."""
+class MockAgent:
+    """Test agent implementation that follows the Agent Protocol."""
 
     def __init__(self, agent_id: str = "test", should_fail: bool = False) -> None:
         """Initialize test agent.
@@ -51,7 +50,7 @@ class MockAgent(Agent):
             msg = f"Error streaming from agent {self._agent_id}: Test processing error"
             raise AgentError(msg)
         self.processed_messages.append(message)
-        return Result(success=True, data=f"Processed by {self._agent_id}", error="")
+        return Result(success=True, data=f"Processed by {self._agent_id}", error=None)
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
         """Process a message in streaming mode."""
@@ -63,8 +62,8 @@ class MockAgent(Agent):
 
     def send_message(self, _message: Message) -> Result[Any]:
         """Send a message."""
-        return Result(success=True, data=f"Sent by {self._agent_id}", error="")
+        return Result(success=True, data=f"Sent by {self._agent_id}", error=None)
 
     def receive_message(self, _message: Message) -> Result[Any]:
         """Receive a message."""
-        return Result(success=True, data=f"Received by {self._agent_id}", error="")
+        return Result(success=True, data=f"Received by {self._agent_id}", error=None)

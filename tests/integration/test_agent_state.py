@@ -15,7 +15,7 @@ from src.agent.state.base import (
     InMemoryStateManager,
 )
 from src.common_types.enums import AgentStep
-from src.exceptions import ConfigError
+from src.common_types.error_types import ConfigError
 from src.messages.creation import create_human_message, create_system_message
 
 

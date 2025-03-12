@@ -3,8 +3,8 @@
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from src.common_types import ConfigError
 from src.common_types.enums import MessagePriority
-from src.exceptions import ConfigError
 from src.messages.chain import MessageChain, create_message_chain
 from src.messages.utils import get_message_metadata, set_message_metadata
 

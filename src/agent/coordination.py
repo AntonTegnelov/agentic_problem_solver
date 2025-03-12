@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from src.agent.agent_types.agent_types import Agent, AgentInfo, AgentRegistry, Result, StepResult
+from src.common_types import AgentNotFoundError
 from src.common_types.message_types import Message
-from src.exceptions import AgentNotFoundError
 
 
 class InMemoryAgentRegistry(AgentRegistry):

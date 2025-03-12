@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.exceptions import InvalidModelError
+from src.common_types import InvalidModelError
 from src.llm_providers.version import ModelVersion, ProviderVersion, Version
 
 

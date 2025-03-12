@@ -7,8 +7,8 @@ import pytest
 from src.agent.result import Result
 from src.agent.state.base import AgentState
 from src.agent.steps import BaseStepExecutor, Step, execute_step_with_retry, get_next_step, validate_step_result
+from src.common_types import AgentNotFoundError, ConfigError
 from src.common_types.enums import AgentStatus, AgentStep
-from src.exceptions import AgentNotFoundError, ConfigError  # Updated import for ConfigError
 
 
 def test_step_initialization() -> None:

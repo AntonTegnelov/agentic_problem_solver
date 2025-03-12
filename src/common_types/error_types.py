@@ -53,3 +53,28 @@ class RetryError(Exception):
 
 class ProviderError(Exception):
     """Raised when there is a provider error."""
+
+
+# Additional exceptions migrated from src.exceptions
+class APIKeyError(ValueError):
+    """Raised when API key is missing or invalid."""
+
+
+class EmptyResponseError(RuntimeError):
+    """Raised when response is empty."""
+
+
+class InvalidModelError(ValueError):
+    """Raised when model name is invalid."""
+
+
+class TemperatureError(ValueError):
+    """Raised when temperature is out of range."""
+
+
+class ValidationError(Exception):
+    """Raised when validation fails."""
+
+
+class ProcessingError(Exception):
+    """Raised when message processing fails."""

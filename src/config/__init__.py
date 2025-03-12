@@ -5,7 +5,7 @@ This model is chosen for its optimal balance of speed and quality for our use ca
 Any changes to this default should be discussed and documented.
 """
 
-from src.exceptions import ConfigError
+from src.common_types import ConfigError
 
 from .agent import AgentConfig
 from .base import BaseConfig

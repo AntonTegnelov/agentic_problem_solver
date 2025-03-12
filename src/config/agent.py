@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
 
-from src.exceptions import ConfigError
+from src.common_types import ConfigError
 
 from .base import BaseConfig
 from .constants import (
@@ -64,9 +64,7 @@ class AgentConfig(BaseConfig):
     This model provides the best balance of speed and quality for the problem solver.
     """
 
-    model: str | LLMConfig = (
-        "gemini-2.0-flash-lite"  # Default model - DO NOT CHANGE without updating docs
-    )
+    model: str | LLMConfig = "gemini-2.0-flash-lite"  # Default model - DO NOT CHANGE without updating docs
     temperature: float = 0.7
     max_tokens: int = 1000
     max_retries: int = 3

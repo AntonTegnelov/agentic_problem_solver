@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from src.exceptions import InvalidModelError
+from src.common_types import InvalidModelError
 
 
 @dataclass

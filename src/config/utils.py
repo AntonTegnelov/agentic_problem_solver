@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.exceptions import ConfigError
+from src.common_types import ConfigError
 
 
 def load_env_var(

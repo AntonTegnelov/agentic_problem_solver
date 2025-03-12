@@ -5,7 +5,7 @@ from langchain_core.messages import HumanMessage
 
 from src.agent.agent_types.agent_types import Agent, AgentInfo, StepResult
 from src.agent.coordination import AgentCoordinator, InMemoryAgentRegistry
-from src.exceptions import AgentNotFoundError
+from src.common_types.error_types import AgentNotFoundError
 from src.messages.creation import create_human_message
 from tests.unit.test_utils import MockProcessingError
 

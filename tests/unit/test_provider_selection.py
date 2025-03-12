@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from src.agent.result import Result
-from src.exceptions import ConfigError, RetryError, TemperatureError
+from src.common_types import ConfigError, RetryError, TemperatureError
 from src.llm_providers.config.provider_config import ProviderConfig
 from src.llm_providers.lifecycle import ProviderLifecycle, ProviderState
 from src.llm_providers.providers.base import Provider
@@ -356,9 +356,7 @@ def test_provider_load_balancing() -> None:
     # Test 3: Health affects selection more than load
     lifecycle3.health.error_count = 5  # Make provider3 unhealthy
     selected = selector.select_provider()
-    assert (
-        selected.provider.name == "provider2"
-    )  # Should select provider2 (medium load but healthy)
+    assert selected.provider.name == "provider2"  # Should select provider2 (medium load but healthy)
 
     # Test 4: Both health and load affect selection
     lifecycle2.health.error_count = 3  # Make provider2 somewhat unhealthy

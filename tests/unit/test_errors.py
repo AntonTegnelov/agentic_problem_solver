@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.agent.errors import AgentError
-from src.config.utils import load_config_from_env, load_env_var
-from src.exceptions import (
+from src.common_types import (
     APIKeyError,
     ConfigError,
     EmptyResponseError,
@@ -16,6 +15,7 @@ from src.exceptions import (
     TemperatureError,
     ValidationError,
 )
+from src.config.utils import load_config_from_env, load_env_var
 
 
 def test_api_key_error() -> None:

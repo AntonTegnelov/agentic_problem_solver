@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from src.exceptions import ConfigError, RetryError, TemperatureError
+from src.common_types import ConfigError, RetryError, TemperatureError
 from src.llm_providers.lifecycle import ProviderLifecycle, ProviderState
 
 if TYPE_CHECKING:
@@ -80,9 +80,7 @@ class ProviderSelector:
 
         # Filter by temperature
         if temperature is not None:
-            temp_candidates = [
-                p for p in candidates if p.provider.supports_temperature(temperature)
-            ]
+            temp_candidates = [p for p in candidates if p.provider.supports_temperature(temperature)]
             if not temp_candidates:
                 msg = f"No provider found supporting temperature {temperature}"
                 raise TemperatureError(msg)
@@ -155,10 +153,7 @@ class ProviderSelector:
         for lifecycle in providers:
             if hasattr(lifecycle.provider.config, "temperature"):
                 config_temp = lifecycle.provider.config.temperature
-                if (
-                    0 <= temperature <= 1
-                    and abs(config_temp - temperature) <= TEMPERATURE_TOLERANCE
-                ):
+                if 0 <= temperature <= 1 and abs(config_temp - temperature) <= TEMPERATURE_TOLERANCE:
                     result.append(lifecycle)
         return result
 

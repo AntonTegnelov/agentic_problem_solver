@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
+from src.common_types import ConfigError
 from src.config.agent import AgentConfig, NumericValidation, validate_numeric_field
 from src.config.base import BaseConfig
 from src.config.llm import LLMConfig
 from src.config.utils import load_config_from_env, load_env_var
-from src.exceptions import ConfigError
 
 
 @dataclass
