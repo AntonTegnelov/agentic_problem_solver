@@ -103,6 +103,80 @@ class Agent(Protocol[T]):
         """
         ...
 
+    def get_parent_id(self) -> str | None:
+        """Get parent agent ID.
+
+        Returns:
+            Parent agent ID or None if no parent.
+
+        """
+        ...
+
+    def get_child_ids(self) -> list[str]:
+        """Get child agent IDs.
+
+        Returns:
+            List of child agent IDs.
+
+        """
+        ...
+
+    def add_child(self, child_agent_id: str) -> None:
+        """Add a child agent.
+
+        Args:
+            child_agent_id: Child agent ID to add.
+
+        """
+        ...
+
+    def remove_child(self, child_agent_id: str) -> None:
+        """Remove a child agent.
+
+        Args:
+            child_agent_id: Child agent ID to remove.
+
+        """
+        ...
+
+    def set_parent(self, parent_agent_id: str) -> None:
+        """Set parent agent.
+
+        Args:
+            parent_agent_id: Parent agent ID.
+
+        """
+        ...
+
+    def clear_parent(self) -> None:
+        """Clear parent agent reference."""
+        ...
+
+    def delegate_to_child(self, child_agent_id: str, task: str) -> Result[Any]:
+        """Delegate a task to a specific child agent.
+
+        Args:
+            child_agent_id: Child agent ID.
+            task: Task to delegate.
+
+        Returns:
+            Result of task processing.
+
+        Raises:
+            AgentError: If child agent not found or delegation fails.
+
+        """
+        ...
+
+    def collect_results_from_children(self) -> dict[str, Result[Any]]:
+        """Collect results from all child agents.
+
+        Returns:
+            Dictionary mapping child agent IDs to their results.
+
+        """
+        ...
+
 
 # For backward compatibility, StepResult is now imported from src.common_types.result_types
 
