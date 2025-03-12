@@ -9,42 +9,62 @@ This document provides detailed information about the key classes and functions 
 The main agent class that processes tasks and generates solutions.
 
 ```python
-class SolverAgent(BaseAgent):
-    def __init__(self, name: str = "solver", config: Optional[Dict[str, Any]] = None):
-        """Initialize the solver agent.
+class SolverAgent:
+    """Agent that solves programming problems."""
+
+    def __init__(
+        self,
+        provider: LLMProvider | None = None,
+        state_manager: AgentState | StateManager | None = None,
+        config: AgentConfig | None = None,
+    ):
+        """Initialize agent.
 
         Args:
-            name: Name of the agent (default: solver)
-            config: Optional configuration dictionary with settings like:
-                   - temperature: float (0.0 to 1.0)
-                   - max_tokens: int
-                   - model: str
+            provider: LLM provider.
+            state_manager: State manager or agent state.
+            config: Agent configuration.
         """
 ```
 
 #### Methods
 
-##### \_process_message_impl
+##### process
 
 ```python
-async def _process_message_impl(self, message: HumanMessage) -> AIMessage:
-    """Process a message through the agent graph.
+def process(self, message: Message) -> Result[str]:
+    """Process a message.
 
     Args:
-        message: The human message to process
+        message: Message to process.
 
     Returns:
-        AIMessage: The agent's response
+        Result containing the processed message.
     """
 ```
 
-##### clear_state
+##### process_stream
 
 ```python
-def clear_state(self) -> None:
-    """Clear the agent's state.
+async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+    """Process a message and stream results.
 
-    Resets all state variables to their initial values.
+    Args:
+        message: Message to process.
+
+    Yields:
+        Processed output chunks.
+    """
+```
+
+##### get_agent_id
+
+```python
+def get_agent_id(self) -> str:
+    """Get agent ID.
+
+    Returns:
+        Agent ID.
     """
 ```
 
@@ -56,8 +76,22 @@ Factory class for creating and managing LLM providers.
 
 ```python
 class LLMProviderFactory:
-    def __init__(self):
-        """Initialize the LLM provider factory."""
+    """Factory for creating LLM providers."""
+
+    @classmethod
+    def register_provider(
+        cls,
+        name: str,
+        provider_cls: type[BaseLLMProvider],
+        version: ProviderVersion | None = None,
+    ) -> None:
+        """Register a provider.
+
+        Args:
+            name: Provider name.
+            provider_cls: Provider class.
+            version: Optional provider version info.
+        """
 ```
 
 #### Methods
@@ -65,22 +99,42 @@ class LLMProviderFactory:
 ##### get_provider
 
 ```python
-def get_provider(self) -> BaseLLMProvider:
-    """Get the configured LLM provider instance.
+@classmethod
+def get_provider(cls, name: str) -> type[BaseLLMProvider]:
+    """Get a provider class.
+
+    Args:
+        name: Provider name.
 
     Returns:
-        BaseLLMProvider: The configured provider
+        Provider class.
+
+    Raises:
+        ProviderNotFoundError: If provider not found.
     """
 ```
 
-##### set_provider
+##### get_provider_instance
 
 ```python
-def set_provider(self, provider_name: str) -> None:
-    """Set the active LLM provider.
+def get_provider_instance(
+    self,
+    name: str | None = None,
+    capabilities: list[str] | None = None,
+    temperature: float | None = None,
+) -> BaseLLMProvider:
+    """Get provider instance.
 
     Args:
-        provider_name: Name of the provider to use
+        name: Provider name.
+        capabilities: Required capabilities.
+        temperature: Temperature setting.
+
+    Returns:
+        Provider instance.
+
+    Raises:
+        ConfigError: If provider creation fails.
     """
 ```
 
@@ -90,70 +144,101 @@ Base class for LLM providers.
 
 ```python
 class BaseLLMProvider(ABC):
-    @abstractmethod
-    async def generate(self, prompt: str) -> Union[str, AIMessage]:
-        """Generate a response for the given prompt.
+    """Abstract base class for LLM providers."""
+
+    def __init__(self, api_key: str | None = None) -> None:
+        """Initialize provider.
 
         Args:
-            prompt: Input prompt
+            api_key: Optional API key.
+        """
+        self.config = self._create_config(api_key)
+        self._validate_config()
+
+    @abstractmethod
+    async def generate(self, prompt: str) -> str:
+        """Generate text from prompt.
+
+        Args:
+            prompt: Input prompt.
 
         Returns:
-            Generated response as string or AIMessage
+            Generated text.
+        """
+
+    @abstractmethod
+    async def generate_stream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """Generate text from prompt as a stream.
+
+        Args:
+            prompt: Input prompt.
+
+        Yields:
+            Generated text chunks.
         """
 ```
 
-## Utilities
+## Message System
 
-### Logging
+### Message Creation
 
-#### setup_logging
-
-```python
-def setup_logging(
-    log_file: Optional[str] = None,
-    level: Union[str, int] = logging.INFO,
-    format_str: str = "%(levelname)-8s %(name)s:%(filename)s:%(lineno)d %(message)s",
-) -> None:
-    """Set up logging configuration.
-
-    Args:
-        log_file: Optional path to log file
-        level: Logging level (can be string or int)
-        format_str: Log message format string
-    """
-```
-
-#### get_logger
+#### create_human_message
 
 ```python
-def get_logger(name: str) -> logging.Logger:
-    """Get a logger instance.
+def create_human_message(
+    content: str,
+    metadata: dict[str, Any] | None = None,
+    **kwargs: object
+) -> HumanMessage:
+    """Create a human message.
 
     Args:
-        name: Logger name
+        content: Message content.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        Logger instance
+        Human message.
     """
 ```
 
-### Messages
+#### create_ai_message
+
+```python
+def create_ai_message(
+    content: str,
+    metadata: dict[str, Any] | None = None,
+    **kwargs: object
+) -> AIMessage:
+    """Create an AI message.
+
+    Args:
+        content: Message content.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        AI message.
+    """
+```
 
 #### create_system_message
 
 ```python
 def create_system_message(
     content: str,
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None,
+    **kwargs: object
 ) -> SystemMessage:
-    """Create a SystemMessage with proper initialization.
+    """Create a system message.
 
     Args:
-        content: Message content
-        metadata: Optional metadata dictionary
+        content: Message content.
+        metadata: Optional metadata.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        Initialized SystemMessage
+        System message.
     """
 ```
 
@@ -165,11 +250,10 @@ Enum defining the steps in the agent's workflow.
 
 ```python
 class AgentStep(str, Enum):
-    UNDERSTAND = "UNDERSTAND"
-    PLAN = "PLAN"
-    EXECUTE = "EXECUTE"
-    VERIFY = "VERIFY"
-    END = "END"
+    UNDERSTAND = "understand"    # Analyze and comprehend the task
+    PLAN = "plan"                # Create a strategy to solve the task
+    EXECUTE = "execute"          # Implement the planned solution
+    VERIFY = "verify"            # Test and validate the solution
 ```
 
 ## Configuration
