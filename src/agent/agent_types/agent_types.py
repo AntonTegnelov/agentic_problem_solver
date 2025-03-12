@@ -13,6 +13,7 @@ T = TypeVar("T")
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+    from src.common_types.agent_types import AgentInfo
     from src.common_types.message_types import Message
 
 

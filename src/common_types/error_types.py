@@ -67,7 +67,7 @@ class ProviderError(Exception):
     """Raised when there is a provider error."""
 
 
-# Additional exceptions migrated from src.exceptions
+# Additional exceptions
 class APIKeyError(ValueError):
     """Raised when API key is missing or invalid."""
 

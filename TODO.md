@@ -232,7 +232,7 @@
   - [ ] update documentation
   - [ ] verify the feature passes CI/CD
 
-- enable the new agents to systematically solve the TODO lists propmting themselves until the TODO is done
+- enable the new agents to systematically solve the TODO lists prompting themselves until the TODO is done
 
   - [ ] Create self-prompting mechanism
   - [ ] Implement progress tracking
@@ -262,27 +262,9 @@
   - [ ] update documentation
   - [ ] verify the feature passes CI/CD
 
-- add a few well chosen end-to-end tests
-
-  - [ ] Design comprehensive test scenarios
-  - [ ] Create test data and fixtures
-  - [ ] Implement user journey tests
-  - [ ] Add performance benchmarks
-  - [ ] Create stress tests
-  - [ ] Implement reliability tests
-  - [ ] Add integration points coverage
-  - [ ] Create data persistence tests
-  - [ ] Implement error recovery scenarios
-  - [ ] Add concurrency tests
-  - [ ] Setup test environment automation
-  - [ ] Create test reporting system
-  - [ ] verify that it works
-  - [ ] update documentation
-  - [ ] verify the feature passes CI/CD
-
 - Implement consistent error handling:
 
-  - [ ] Use existing error types from `exceptions.py`:
+  - [ ] Use existing error types from `common types`:
     - [ ] `APIKeyError` for provider key validation
     - [ ] `ConfigError` for configuration validation
     - [ ] `EmptyResponseError` for response validation
@@ -291,21 +273,6 @@
     - [ ] `TemperatureError` for parameter validation
   - [ ] Add error recovery mechanisms
   - [ ] Implement proper error logging
-
-- Improve type safety:
-
-  - [ ] Extend existing generic types in `agent_types.py`:
-    - [ ] `Agent[T, U]` for new agent types
-    - [ ] `Result[T]` for operation results
-    - [ ] `Message` for communication
-  - [ ] Add runtime type validation
-  - [ ] Implement stricter type bounds
-
-- Add performance optimizations:
-
-  - [ ] Implement message batching using existing message system
-  - [ ] Add caching for provider factory
-  - [ ] Optimize message routing using existing protocols
 
 - Create feature branches for each major component
 - Add PR templates
@@ -403,6 +370,22 @@
 - [ ] Add PR templates with testing requirements
 - [ ] Set up automated testing with existing test structure
 - [ ] Implement version tagging
+
+### Additional testing
+
+- add a few well chosen end-to-end tests
+  - [ ] Design comprehensive test scenarios
+  - [ ] Create test data and fixtures
+  - [ ] Implement user journey tests
+  - [ ] Implement reliability tests
+  - [ ] Add integration points coverage
+  - [ ] Create data persistence tests
+  - [ ] Implement error recovery scenarios
+  - [ ] Add concurrency tests
+  - [ ] Create test reporting system
+  - [ ] verify that it works
+  - [ ] update documentation
+  - [ ] verify the feature passes CI/CD
 
 ### Write Documentation
 

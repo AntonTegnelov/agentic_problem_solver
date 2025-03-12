@@ -45,6 +45,10 @@ APS is designed as a hierarchical multi-agent system that breaks down and solves
 - Progress feedback
 - Configuration management
 
+### 5. Common Types (`src/common_types/`)
+
+- Consolidates common types into a single source
+
 ## Data Flow
 
 1. User Input → CLI
