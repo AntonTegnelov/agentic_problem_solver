@@ -5,12 +5,11 @@ This package contains the agent implementation.
 
 from src.agent.agent_types import (
     Agent,
-    AgentEntry,
-    AgentInfo,
     AgentRegistry,
     MockAgent,
     SimpleAgentCoordinator,
 )
+from src.common_types import AgentEntry, AgentInfo
 from src.common_types.result_types import Result as StepResult
 
 __all__ = [

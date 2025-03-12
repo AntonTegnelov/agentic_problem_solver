@@ -4,6 +4,7 @@ This package contains common types, enums, and type definitions used throughout
 the application.
 """
 
+from src.common_types.agent_types import AgentEntry, AgentInfo
 from src.common_types.enums import AgentStep, LogLevel, MessageRole
 from src.common_types.error_types import (
     AgentAuthenticationError,
@@ -40,7 +41,10 @@ __all__ = [
     "AgentAuthenticationError",
     "AgentAuthorizationError",
     "AgentConfigError",
+    # Agent types
+    "AgentEntry",
     "AgentError",
+    "AgentInfo",
     "AgentNotFoundError",
     "AgentNotReadyError",
     "AgentProcessingError",

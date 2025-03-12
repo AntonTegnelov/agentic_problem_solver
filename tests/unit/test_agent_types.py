@@ -8,11 +8,10 @@ from langchain_core.messages import HumanMessage
 
 from src.agent.agent_types import (
     Agent,
-    AgentEntry,
-    AgentInfo,
     MockAgent,
     SimpleAgentCoordinator,
 )
+from src.common_types import AgentEntry, AgentInfo
 from src.common_types.enums import AgentStatus
 from src.common_types.result_types import Result
 

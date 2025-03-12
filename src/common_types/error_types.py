@@ -43,6 +43,18 @@ class AgentAuthorizationError(AgentError):
     """Error raised when there is an authorization error."""
 
 
+class AgentCreationError(AgentError):
+    """Error raised when agent creation fails."""
+
+
+class AgentCommunicationError(AgentError):
+    """Error raised when communication with an agent fails."""
+
+
+class AgentExecutionError(AgentError):
+    """Error raised when agent execution fails."""
+
+
 class ConfigError(Exception):
     """Raised when there is a configuration error."""
 

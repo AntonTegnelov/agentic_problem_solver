@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import warnings
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from src.common_types.enums import AgentStatus
+from src.common_types.agent_types import AgentEntry as CommonAgentEntry
+from src.common_types.agent_types import AgentInfo as CommonAgentInfo
 from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
 from src.messages.utils import set_message_metadata
@@ -19,23 +21,53 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class AgentInfo:
-    """Agent information."""
+class AgentInfo(CommonAgentInfo):
+    """Agent information.
 
-    agent_id: str
-    name: str
-    description: str
-    capabilities: list[str]
-    parent_id: str | None = None
-    status: str = field(default_factory=lambda: AgentStatus.IDLE.value)
+    .. deprecated:: 0.1.0
+       This class has been moved to src.common_types.agent_types.AgentInfo.
+       This version will be removed in a future release.
+
+    Migration steps:
+    1. Update imports to use src.common_types.agent_types.AgentInfo
+    2. Known usages:
+       - src/agent/coordination.py
+       - tests/integration/test_agent_coordination.py
+       - tests/unit/test_agent_types.py
+    """
+
+    def __post_init__(self) -> None:
+        """Post initialization."""
+        warnings.warn(
+            "AgentInfo has been moved to src.common_types.agent_types.AgentInfo. "
+            "This version will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 @dataclass
-class AgentEntry:
-    """Agent registry entry."""
+class AgentEntry(CommonAgentEntry):
+    """Agent registry entry.
 
-    info: AgentInfo
-    agent: Agent
+    .. deprecated:: 0.1.0
+       This class has been moved to src.common_types.agent_types.AgentEntry.
+       This version will be removed in a future release.
+
+    Migration steps:
+    1. Update imports to use src.common_types.agent_types.AgentEntry
+    2. Known usages:
+       - tests/unit/test_agent_types.py
+    """
+
+    def __post_init__(self) -> None:
+        """Post initialization."""
+        warnings.warn(
+            "AgentEntry has been moved to src.common_types.agent_types.AgentEntry. "
+            "This version will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 class Agent(Protocol[T]):

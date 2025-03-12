@@ -42,7 +42,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Callable, Generic, TypeVar
 
-from src.agent.errors import AgentError
+from src.common_types import AgentError
 
 T = TypeVar("T")
 U = TypeVar("U")

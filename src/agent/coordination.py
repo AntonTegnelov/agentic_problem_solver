@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable
 
-from src.agent.agent_types.agent_types import Agent, AgentInfo, AgentRegistry
-from src.common_types import AgentNotFoundError
+from src.agent.agent_types.agent_types import Agent, AgentRegistry
+from src.common_types import AgentInfo, AgentNotFoundError
 from src.common_types.message_types import Message
 
 if TYPE_CHECKING:

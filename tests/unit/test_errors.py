@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.errors import AgentError
 from src.common_types import (
+    AgentError,
     APIKeyError,
     ConfigError,
     EmptyResponseError,

@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from src.agent.errors import AgentError
+from src.common_types import AgentError
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 
