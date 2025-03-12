@@ -1,18 +1,24 @@
-"""Agent module.
+"""Agent package.
 
-This module provides the core agent functionality for the Agentic Problem Solver.
-
-The Agent Protocol from src.agent.agent_types.agent_types is the only way
-to define and use agents in the codebase.
-
-please use:
-    from src.agent.agent_types import Agent
+This package contains the agent implementation.
 """
 
-from src.agent.agent_types import Agent
-from src.agent.result import Result as StepResult
+from src.agent.agent_types import (
+    Agent,
+    AgentEntry,
+    AgentInfo,
+    AgentRegistry,
+    MockAgent,
+    SimpleAgentCoordinator,
+)
+from src.common_types.result_types import Result as StepResult
 
 __all__ = [
     "Agent",
+    "AgentEntry",
+    "AgentInfo",
+    "AgentRegistry",
+    "MockAgent",
+    "SimpleAgentCoordinator",
     "StepResult",
 ]

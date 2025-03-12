@@ -1,19 +1,20 @@
 """Unit tests for agent types."""
 
+import asyncio
 from typing import Any
 
 import pytest
 from langchain_core.messages import HumanMessage
 
-from src.agent.agent_types.agent_types import (
+from src.agent.agent_types import (
     Agent,
     AgentEntry,
     AgentInfo,
     MockAgent,
     SimpleAgentCoordinator,
 )
-from src.agent.result import Result
 from src.common_types.enums import AgentStatus
+from src.common_types.result_types import Result
 
 
 def test_agent_info_initialization() -> None:
@@ -90,8 +91,6 @@ def test_mock_agent_process_stream() -> None:
     # Test the async generator
     async def test_stream() -> list[str]:
         return [chunk async for chunk in agent.process_stream(message)]
-
-    import asyncio
 
     chunks = asyncio.run(test_stream())
     assert chunks == ["Mock result"]

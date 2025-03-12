@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agent.result import Result
 from src.agent.solver import SolverAgent
 from src.agent.state.base import AgentState
 from src.common_types.message_types import AIMessage, HumanMessage, Message, SystemMessage
+from src.common_types.result_types import Result
 from src.messages.creation import create_message
 
 

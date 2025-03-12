@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.agent.agent_types.agent_types import MockAgent
-from src.agent.result import Result
 from src.agent.state.base import AgentState
+from src.common_types import ConfigError
 from src.common_types.enums import AgentStep
-from src.common_types.error_types import ConfigError
+from src.common_types.result_types import Result
 from src.prompts import (
     execute_step_with_retry,
     get_next_step,

@@ -4,24 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncGenerator
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Protocol,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from src.common_types import Message
-from src.common_types.error_types import AgentNotFoundError, ConfigError, RetryError
+from src.common_types import AgentNotFoundError, RetryError
+from src.common_types.error_types import ConfigError
+from src.common_types.message_types import Message
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+    from src.common_types.result_types import Result
+
+if TYPE_CHECKING:
     from src.agent.agent_types import Agent
-    from src.agent.result import Result
     from src.common_types import Message
 
 T = TypeVar("T")

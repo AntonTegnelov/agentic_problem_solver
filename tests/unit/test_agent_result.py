@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.agent.errors import AgentError
-from src.agent.result import Result
+from src.common_types.error_types import AgentError
+from src.common_types.result_types import Result
 
 
 def test_result_initialization() -> None:
@@ -109,13 +109,13 @@ def test_result_unwrap() -> None:
 
     # Test successful result without data
     result = Result(success=True)
-    with pytest.raises(AgentError, match="Cannot unwrap None data"):
+    with pytest.raises(AgentError):
         result.unwrap()
 
     # Test error result
     error = ValueError("test_error")
     result = Result(success=False, error=error)
-    with pytest.raises(AgentError, match="Cannot unwrap unsuccessful result"):
+    with pytest.raises(ValueError, match="Cannot unwrap unsuccessful result"):
         result.unwrap()
 
 

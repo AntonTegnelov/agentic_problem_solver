@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from src.agent.result import Result
 from src.common_types.enums import AgentStatus
+from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
 from src.messages.utils import set_message_metadata
 
@@ -15,7 +15,7 @@ T = TypeVar("T")
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from langchain_core.messages import BaseMessage as Message
+    from src.common_types.message_types import Message
 
 
 @dataclass

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from src.agent.result import Result
     from src.common_types.message_types import Message
+    from src.common_types.result_types import Result
     from src.llm_providers.config.provider_config import ProviderConfig
 
 

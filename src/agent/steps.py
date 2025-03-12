@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from langchain.schema import HumanMessage
 
-from src.agent.result import Result
 from src.common_types import AgentNotFoundError, ConfigError
 from src.common_types.enums import AgentStatus, AgentStep
+from src.common_types.result_types import Result as StepResult
 from src.prompts import get_retry_prompt, get_step_prompt
 
 if TYPE_CHECKING:
-    from src.agent.agent_types import StepKwargs, StepResult
+    from src.agent.agent_types import StepKwargs
     from src.agent.state.base import AgentState
 
 T = TypeVar("T")
@@ -268,7 +268,7 @@ def validate_step_result(step: AgentStep, result: StepResult[Any]) -> None:
         raise ConfigError(msg)
 
 
-def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int = 3) -> Result:
+def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int = 3) -> StepResult:
     """Execute step with retry.
 
     Args:
@@ -308,21 +308,21 @@ def execute_step_with_retry(state: AgentState, step: AgentStep, max_retries: int
         except (ConfigError, AgentNotFoundError) as e:
             # Handle specific known errors
             msg = f"Error executing step: {e}"
-            last_result = Result(success=False, error=msg)
+            last_result = StepResult(success=False, error=msg)
         except ValueError as e:
             # Handle validation errors
             msg = f"Validation error in step execution: {e}"
-            last_result = Result(success=False, error=msg)
+            last_result = StepResult(success=False, error=msg)
         except OSError as e:
             # Handle I/O errors
             msg = f"I/O error in step execution: {e}"
-            last_result = Result(success=False, error=msg)
+            last_result = StepResult(success=False, error=msg)
         except RuntimeError as e:
             # Handle runtime errors
             msg = f"Runtime error in step execution: {e}"
-            last_result = Result(success=False, error=msg)
+            last_result = StepResult(success=False, error=msg)
 
         retries += 1
 
     # Return the last result after all retries are exhausted
-    return last_result if last_result else Result(success=False, error="Max retries exceeded")
+    return last_result if last_result else StepResult(success=False, error="Max retries exceeded")

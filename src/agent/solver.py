@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
-# Import the Agent Protocol instead of the ABC
-from src.agent.result import Result
 from src.agent.state.base import AgentState, StateManager
 from src.common_types.message_types import Message, SystemMessage
+
+# Import the Agent Protocol instead of the ABC
+from src.common_types.result_types import Result
 from src.messages.creation import create_message
 from src.prompts import get_step_prompt
 

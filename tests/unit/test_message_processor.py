@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from src.agent.result import Result
 from src.common_types import AgentNotFoundError, ConfigError, RetryError
 from src.common_types.message_types import Message
+from src.common_types.result_types import Result
 from src.messages.processor import (
     DefaultMessageProcessor,
     MessageProcessor,
