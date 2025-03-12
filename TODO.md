@@ -3,9 +3,9 @@
 - create CI/CD that
 
   - [x] automatically runs all test on each commit, pytest and doctest
-  - [ ] checks for at least 75% test coverage
-  - [ ] checks that documentation has been written for all parts of the codebase
-  - [ ] run ruff with strict typing and code must pass without warnings
+  - [x] checks for at least 75% test coverage
+  - [x] checks that documentation has been written for all parts of the codebase
+  - [x] run ruff with strict typing and code must pass without warnings
 
 - enable the ai to break down the prompt into TODO lists following a standardized format
 

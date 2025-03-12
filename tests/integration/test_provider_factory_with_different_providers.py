@@ -4,7 +4,7 @@ These tests verify that the provider factory can properly initialize and manage
 different LLM providers, handle switching between providers, and manage provider capabilities.
 """
 
-# ruff: noqa: S603, S607, BLE001
+# ruff: noqa: S603, S607, BLE001, SLF001
 from __future__ import annotations
 
 import os
@@ -185,11 +185,11 @@ class MockOpenAIProvider(BaseLLMProvider):
             api_key=api_key or "test_key",
         )
 
-    def generate(self, prompt: str | list[Any]) -> str:
+    def generate(self, _prompt: str | list[Any]) -> str:
         """Generate response."""
         return self.responses[0]
 
-    async def generate_stream(self, prompt: str | list[Any]) -> Generator[str, None, None]:
+    async def generate_stream(self, _prompt: str | list[Any]) -> Generator[str, None, None]:
         """Generate streaming response."""
         yield self.responses[0]
 
@@ -221,11 +221,11 @@ class MockAnthropicProvider(BaseLLMProvider):
             api_key=api_key or "test_key",
         )
 
-    def generate(self, prompt: str | list[Any]) -> str:
+    def generate(self, _prompt: str | list[Any]) -> str:
         """Generate response."""
         return self.responses[0]
 
-    async def generate_stream(self, prompt: str | list[Any]) -> Generator[str, None, None]:
+    async def generate_stream(self, _prompt: str | list[Any]) -> Generator[str, None, None]:
         """Generate streaming response."""
         yield self.responses[0]
 
@@ -258,7 +258,8 @@ def test_register_multiple_providers(provider_factory: LLMProviderFactory) -> No
     assert provider_factory.get_provider("gemini") == GeminiProvider
 
 
-def test_create_different_providers(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+@pytest.mark.usefixtures("mock_env_vars")
+def test_create_different_providers(provider_factory: LLMProviderFactory) -> None:
     """Test creating different provider instances."""
     # Register mock providers
     provider_factory.register_provider("openai", MockOpenAIProvider, MockOpenAIProvider.PROVIDER_VERSION)
@@ -299,7 +300,8 @@ def test_create_different_providers(provider_factory: LLMProviderFactory, mock_e
     assert anthropic_provider.config.model == "claude-3-opus"
 
 
-def test_provider_switching(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+@pytest.mark.usefixtures("mock_env_vars")
+def test_provider_switching(provider_factory: LLMProviderFactory) -> None:
     """Test switching between providers."""
     # Register mock providers
     provider_factory.register_provider("openai", MockOpenAIProvider, MockOpenAIProvider.PROVIDER_VERSION)
@@ -344,7 +346,8 @@ def test_provider_switching(provider_factory: LLMProviderFactory, mock_env_vars:
     assert provider_factory.get_current_provider() == gemini_provider
 
 
-def test_provider_capabilities(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+@pytest.mark.usefixtures("mock_env_vars")
+def test_provider_capabilities(provider_factory: LLMProviderFactory) -> None:
     """Test provider capabilities."""
     # Register mock providers with different capabilities
     provider_factory.register_provider("openai", MockOpenAIProvider, MockOpenAIProvider.PROVIDER_VERSION)
@@ -368,7 +371,8 @@ def test_provider_capabilities(provider_factory: LLMProviderFactory, mock_env_va
     assert anthropic_version.has_capability("claude-3-opus", "code-analysis")
 
 
-def test_provider_fallback_chain(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+@pytest.mark.usefixtures("mock_env_vars")
+def test_provider_fallback_chain(provider_factory: LLMProviderFactory) -> None:
     """Test provider fallback chain."""
     # Register mock providers
     provider_factory.register_provider("openai", MockOpenAIProvider, MockOpenAIProvider.PROVIDER_VERSION)
@@ -417,7 +421,8 @@ def test_provider_fallback_chain(provider_factory: LLMProviderFactory, mock_env_
     assert fallback_provider == openai_provider
 
 
-def test_provider_with_invalid_model(provider_factory: LLMProviderFactory, mock_env_vars: None) -> None:
+@pytest.mark.usefixtures("mock_env_vars")
+def test_provider_with_invalid_model(provider_factory: LLMProviderFactory) -> None:
     """Test provider with invalid model."""
     # Register mock provider with validation
     provider_factory.register_provider("openai", MockOpenAIProviderWithValidation, MockOpenAIProvider.PROVIDER_VERSION)
