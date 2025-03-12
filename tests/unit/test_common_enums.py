@@ -35,14 +35,18 @@ def test_agent_status_enum() -> None:
     # Test enum values
     assert AgentStatus.IDLE == "idle"
     assert AgentStatus.BUSY == "busy"
+    assert AgentStatus.PROCESSING == "processing"  # Alias for BUSY
     assert AgentStatus.ERROR == "error"
     assert AgentStatus.COMPLETED == "completed"
+    assert AgentStatus.DONE == "done"  # Alias for COMPLETED
 
     # Test enum creation from string
     assert AgentStatus("idle") == AgentStatus.IDLE
     assert AgentStatus("busy") == AgentStatus.BUSY
+    assert AgentStatus("processing") == AgentStatus.PROCESSING
     assert AgentStatus("error") == AgentStatus.ERROR
     assert AgentStatus("completed") == AgentStatus.COMPLETED
+    assert AgentStatus("done") == AgentStatus.DONE
 
     # Test invalid enum value
     with pytest.raises(ValueError, match="'invalid_status' is not a valid AgentStatus"):

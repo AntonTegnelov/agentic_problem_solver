@@ -25,15 +25,17 @@ class AgentStatus(str, Enum):
 
     These statuses represent the current state of an agent:
     - IDLE: Agent is not currently processing any task
-    - BUSY: Agent is actively processing a task
+    - BUSY/PROCESSING: Agent is actively processing a task
     - ERROR: Agent encountered an error during processing
-    - COMPLETED: Agent has completed its task
+    - COMPLETED/DONE: Agent has completed its task
     """
 
     IDLE = "idle"
     BUSY = "busy"
+    PROCESSING = "processing"  # Alias for BUSY for backward compatibility
     ERROR = "error"
     COMPLETED = "completed"
+    DONE = "done"  # Alias for COMPLETED for backward compatibility
 
 
 class MessageRole(str, Enum):
