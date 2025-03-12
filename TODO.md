@@ -10,7 +10,7 @@
   - [x] Create `PlannerAgent` in `src/agent/agent_types/planner.py` for mid-level task refinement
   - [x] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution
   - [x] Add agent factory methods in `src/agent/agent_types/__init__.py` for role-based instantiation
-  - [ ] Update `AgentRegistry` protocol in `src/agent/agent_types/agent_types.py` with hierarchical query methods
+  - [x] Update `AgentRegistry` protocol in `src/agent/agent_types/agent_types.py` with hierarchical query methods
   - [x] Create unit tests in `tests/unit/test_specialized_agents.py` for the new agent types
   - [ ] Create integration tests in `tests/integration/test_agent_hierarchy.py` for multi-tier workflow
   - [ ] Update documentation in `docs/explanation/hierarchical_agents.md` with architecture details

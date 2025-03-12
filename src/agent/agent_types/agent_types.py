@@ -249,19 +249,105 @@ class AgentRegistry(Protocol):
             capability: Capability to search for.
 
         Returns:
-            List of matching agent information.
+            List of agent information.
 
         """
         ...
 
-    def find_agents_by_parent(self, parent_id: str) -> list[AgentInfo]:
-        """Find agents by parent ID.
+    def find_agents_by_role(self, role: str) -> list[AgentInfo]:
+        """Find agents by role.
+
+        Args:
+            role: Role to search for.
+
+        Returns:
+            List of agent information.
+
+        """
+        ...
+
+    def get_parent_agent(self, agent_id: str) -> Agent[Any] | None:
+        """Get parent agent of the specified agent.
+
+        Args:
+            agent_id: Agent ID.
+
+        Returns:
+            Parent agent instance or None if no parent.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        ...
+
+    def get_child_agents(self, agent_id: str) -> list[Agent[Any]]:
+        """Get child agents of the specified agent.
+
+        Args:
+            agent_id: Agent ID.
+
+        Returns:
+            List of child agent instances.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        ...
+
+    def get_sibling_agents(self, agent_id: str) -> list[Agent[Any]]:
+        """Get sibling agents of the specified agent.
+
+        Args:
+            agent_id: Agent ID.
+
+        Returns:
+            List of sibling agent instances.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        ...
+
+    def register_parent_child_relationship(self, parent_id: str, child_id: str) -> None:
+        """Register parent-child relationship between agents.
 
         Args:
             parent_id: Parent agent ID.
+            child_id: Child agent ID.
+
+        Raises:
+            AgentNotFoundError: If parent or child agent not found.
+
+        """
+        ...
+
+    def remove_parent_child_relationship(self, parent_id: str, child_id: str) -> None:
+        """Remove parent-child relationship between agents.
+
+        Args:
+            parent_id: Parent agent ID.
+            child_id: Child agent ID.
+
+        Raises:
+            AgentNotFoundError: If parent or child agent not found.
+
+        """
+        ...
+
+    def get_agent_hierarchy(self, root_agent_id: str) -> dict[str, list[str]]:
+        """Get the agent hierarchy starting from the specified root agent.
+
+        Args:
+            root_agent_id: Root agent ID.
 
         Returns:
-            List of child agent information.
+            Dictionary mapping agent IDs to lists of child agent IDs.
+
+        Raises:
+            AgentNotFoundError: If root agent not found.
 
         """
         ...
