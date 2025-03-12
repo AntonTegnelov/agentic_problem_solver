@@ -149,9 +149,7 @@ async def test_generate_stream_method() -> None:
     messages = [HumanMessage(content="Hello")]
 
     # Collect stream chunks
-    chunks = []
-    async for chunk in provider.generate_stream(messages):
-        chunks.append(chunk)
+    chunks = [chunk async for chunk in provider.generate_stream(messages)]
 
     assert "".join(chunks).strip() == "Response to: Hello"
 
@@ -194,12 +192,12 @@ def test_validate_config_method() -> None:
 
     # Invalid temperature
     invalid_temp_config = GenerationConfig(model="test-model", temperature=1.5, max_tokens=100)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Temperature must be between 0 and 1"):
         provider.validate_config(invalid_temp_config)
 
     # Invalid max_tokens
     invalid_tokens_config = GenerationConfig(model="test-model", temperature=0.7, max_tokens=0)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Max tokens must be positive"):
         provider.validate_config(invalid_tokens_config)
 
 

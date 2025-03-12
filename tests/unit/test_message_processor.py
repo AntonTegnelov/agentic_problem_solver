@@ -438,16 +438,19 @@ async def test_process_stream_with_retry_value_error() -> None:
         _ = [chunk async for chunk in process_stream_with_retry(message, agents, "test_agent")]
 
 
+class TestStreamError(Exception):
+    """Custom exception for testing stream errors."""
+
+
 @pytest.mark.asyncio
 async def test_process_stream_with_retry_max_retries_exceeded() -> None:
-    """Test process_stream_with_retry function with max retries exceeded."""
-    # Create mock agent that raises an exception
+    """Test process_stream_with_retry with max retries exceeded."""
     agent = MagicMock()
 
     # Use a properly awaitable mock that returns an empty async generator
     async def mock_stream_with_error(_: Message) -> AsyncGenerator[str, None]:
         msg = "Test error"
-        raise Exception(msg)
+        raise TestStreamError(msg)
         # This yield is never reached but needed for the function to be an async generator
         yield ""  # pragma: no cover
 

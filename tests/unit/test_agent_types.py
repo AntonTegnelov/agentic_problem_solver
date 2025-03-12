@@ -1,9 +1,12 @@
 """Unit tests for agent types."""
 
+from typing import Any
+
 import pytest
 from langchain_core.messages import HumanMessage
 
 from src.agent.agent_types.agent_types import (
+    Agent,
     AgentEntry,
     AgentInfo,
     MockAgent,
@@ -85,11 +88,8 @@ def test_mock_agent_process_stream() -> None:
     message = HumanMessage(content="test message")
 
     # Test the async generator
-    async def test_stream():
-        chunks = []
-        async for chunk in agent.process_stream(message):
-            chunks.append(chunk)
-        return chunks
+    async def test_stream() -> list[str]:
+        return [chunk async for chunk in agent.process_stream(message)]
 
     import asyncio
 
@@ -126,23 +126,24 @@ def test_simple_agent_coordinator_initialization() -> None:
     # Create a mock registry
     class MockRegistry:
         def __init__(self) -> None:
-            self.agents = {}
+            self.agents: dict[str, AgentEntry] = {}
 
-        def register_agent(self, agent, info) -> None:
+        def register_agent(self, agent: Agent, info: AgentInfo) -> None:
             self.agents[info.agent_id] = AgentEntry(info=info, agent=agent)
 
-        def get_agent(self, agent_id):
+        def get_agent(self, agent_id: str) -> Agent:
             return self.agents[agent_id].agent
 
-        def get_agent_info(self, agent_id):
+        def get_agent_info(self, agent_id: str) -> AgentInfo:
             return self.agents[agent_id].info
 
-        def list_agents(self):
+        def list_agents(self) -> list[AgentInfo]:
             return [entry.info for entry in self.agents.values()]
 
     registry = MockRegistry()
     coordinator = SimpleAgentCoordinator(registry)
     assert hasattr(coordinator, "registry")
+    # Access to private member is acceptable in tests
     assert hasattr(coordinator, "_agent_factories")
 
 
@@ -152,27 +153,28 @@ def test_simple_agent_coordinator_register_agent_factory() -> None:
     # Create a mock registry
     class MockRegistry:
         def __init__(self) -> None:
-            self.agents = {}
+            self.agents: dict[str, AgentEntry] = {}
 
-        def register_agent(self, agent, info) -> None:
+        def register_agent(self, agent: Agent, info: AgentInfo) -> None:
             self.agents[info.agent_id] = AgentEntry(info=info, agent=agent)
 
-        def get_agent(self, agent_id):
+        def get_agent(self, agent_id: str) -> Agent:
             return self.agents[agent_id].agent
 
-        def get_agent_info(self, agent_id):
+        def get_agent_info(self, agent_id: str) -> AgentInfo:
             return self.agents[agent_id].info
 
-        def list_agents(self):
+        def list_agents(self) -> list[AgentInfo]:
             return [entry.info for entry in self.agents.values()]
 
     registry = MockRegistry()
     coordinator = SimpleAgentCoordinator(registry)
 
-    def factory(config):
+    def factory(config: dict[str, Any]) -> Agent:
         return MockAgent(agent_id=config.get("agent_id", "test"), capabilities=["test"])
 
     coordinator.register_agent_factory("test_type", factory)
+    # Access to private member is acceptable in tests
     assert "test_type" in coordinator._agent_factories
     assert coordinator._agent_factories["test_type"] == factory
 
@@ -183,24 +185,24 @@ def test_simple_agent_coordinator_create_agent() -> None:
     # Create a mock registry
     class MockRegistry:
         def __init__(self) -> None:
-            self.agents = {}
+            self.agents: dict[str, AgentEntry] = {}
 
-        def register_agent(self, agent, info) -> None:
+        def register_agent(self, agent: Agent, info: AgentInfo) -> None:
             self.agents[info.agent_id] = AgentEntry(info=info, agent=agent)
 
-        def get_agent(self, agent_id):
+        def get_agent(self, agent_id: str) -> Agent:
             return self.agents[agent_id].agent
 
-        def get_agent_info(self, agent_id):
+        def get_agent_info(self, agent_id: str) -> AgentInfo:
             return self.agents[agent_id].info
 
-        def list_agents(self):
+        def list_agents(self) -> list[AgentInfo]:
             return [entry.info for entry in self.agents.values()]
 
     registry = MockRegistry()
     coordinator = SimpleAgentCoordinator(registry)
 
-    def factory(config):
+    def factory(config: dict[str, Any]) -> Agent:
         return MockAgent(agent_id=config.get("agent_id", "test"), capabilities=["test"])
 
     coordinator.register_agent_factory("test_type", factory)
@@ -212,5 +214,5 @@ def test_simple_agent_coordinator_create_agent() -> None:
     assert agent.get_agent_id() == "new-agent"
 
     # Test with invalid agent type
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid agent type"):
         coordinator.create_agent("invalid_type", {})
