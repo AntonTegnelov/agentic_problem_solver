@@ -38,7 +38,7 @@ class ModelProtocol(Protocol):
 
 
 # Test helper class to expose protected methods for testing
-class TestableGeminiProvider(GeminiProvider):
+class GeminiProviderTestHelper(GeminiProvider):
     """A testable version of GeminiProvider that exposes protected methods for testing."""
 
     @classmethod
@@ -109,7 +109,7 @@ class TestGeminiProvider:
         """Test _create_config method with API key."""
         with patch("src.llm_providers.providers.gemini.load_env_var", return_value="gemini-2.0-flash-lite"):
             provider = MagicMock(spec=GeminiProvider)
-            config = TestableGeminiProvider.create_config(provider, api_key="test_key")
+            config = GeminiProviderTestHelper.create_config(provider, api_key="test_key")
             assert config.api_key == "test_key"
             assert config.model == "gemini-2.0-flash-lite"
 
@@ -120,7 +120,7 @@ class TestGeminiProvider:
             side_effect=["test_key", "gemini-2.0-flash-lite"],
         ):
             provider = MagicMock(spec=GeminiProvider)
-            config = TestableGeminiProvider.create_config(provider)
+            config = GeminiProviderTestHelper.create_config(provider)
             assert config.api_key == "test_key"
             assert config.model == "gemini-2.0-flash-lite"
 
@@ -132,18 +132,18 @@ class TestGeminiProvider:
         ):
             provider = MagicMock(spec=GeminiProvider)
             with pytest.raises(APIKeyError):
-                TestableGeminiProvider.create_config(provider)
+                GeminiProviderTestHelper.create_config(provider)
 
     def test_initialize_no_config(self) -> None:
         """Test _initialize method with no config."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.set_config(None)
         with pytest.raises(ConfigError, match="Provider not configured"):
             provider.initialize()
 
     def test_initialize_no_api_key(self) -> None:
         """Test _initialize method with no API key."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         config = GeminiConfig(api_key=None)
         provider.set_config(config)
         with pytest.raises(ConfigError, match="API key not found"):
@@ -152,7 +152,7 @@ class TestGeminiProvider:
     def test_initialize_invalid_model(self) -> None:
         """Test _initialize method with invalid model."""
         with patch("google.generativeai.configure"):
-            provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+            provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
             config = GeminiConfig(api_key="test_key", model="invalid-model")
             provider.set_config(config)
             with pytest.raises(InvalidModelError):
@@ -167,7 +167,7 @@ class TestGeminiProvider:
                 side_effect=Exception("Test exception"),
             ),
         ):
-            provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+            provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
             config = GeminiConfig(api_key="test_key", model="gemini-2.0-flash-lite")
             provider.set_config(config)
             with pytest.raises(ConfigError):
@@ -176,7 +176,7 @@ class TestGeminiProvider:
     def test_load_config_with_api_key(self) -> None:
         """Test _load_config method with API key."""
         provider = MagicMock(spec=GeminiProvider)
-        config = TestableGeminiProvider.load_config(provider, api_key="test_key")
+        config = GeminiProviderTestHelper.load_config(provider, api_key="test_key")
         assert config.api_key == "test_key"
 
     def test_load_config_without_api_key(self) -> None:
@@ -186,7 +186,7 @@ class TestGeminiProvider:
             return_value="test_key",
         ):
             provider = MagicMock(spec=GeminiProvider)
-            config = TestableGeminiProvider.load_config(provider)
+            config = GeminiProviderTestHelper.load_config(provider)
             assert config.api_key == "test_key"
 
     def test_load_config_error(self) -> None:
@@ -197,11 +197,11 @@ class TestGeminiProvider:
         ):
             provider = MagicMock(spec=GeminiProvider)
             with pytest.raises(APIKeyError):
-                TestableGeminiProvider.load_config(provider)
+                GeminiProviderTestHelper.load_config(provider)
 
     def test_validate_response_empty(self) -> None:
         """Test _validate_response method with empty response."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         response = MagicMock()
         response.text = ""
         with pytest.raises(EmptyResponseError):
@@ -209,7 +209,7 @@ class TestGeminiProvider:
 
     def test_validate_response_valid(self) -> None:
         """Test _validate_response method with valid response."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         response = MagicMock()
         response.text = "Test response"
         # Should not raise an exception
@@ -217,14 +217,14 @@ class TestGeminiProvider:
 
     def test_generate_not_initialized(self) -> None:
         """Test generate method when provider is not initialized."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = None
         with pytest.raises(ConfigError, match="Provider not initialized"):
             provider.generate([])
 
     def test_generate_success(self) -> None:
         """Test generate method success."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = MagicMock()
         response = MagicMock()
         response.text = "Test response"
@@ -243,7 +243,7 @@ class TestGeminiProvider:
 
     def test_generate_exception(self) -> None:
         """Test generate method with exception."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = MagicMock()
         provider.model.generate_content.side_effect = Exception("Test exception")
 
@@ -253,7 +253,7 @@ class TestGeminiProvider:
     @pytest.mark.asyncio
     async def test_generate_stream_not_initialized(self) -> None:
         """Test generate_stream method when provider is not initialized."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = None
         # Use a simple statement with pytest.raises
         with pytest.raises(ConfigError, match="Provider not initialized"):
@@ -263,7 +263,7 @@ class TestGeminiProvider:
     @pytest.mark.asyncio
     async def test_generate_stream_success(self) -> None:
         """Test generate_stream method success."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = AsyncMock()
 
         # Create a mock response that can be iterated asynchronously
@@ -294,7 +294,7 @@ class TestGeminiProvider:
     @pytest.mark.asyncio
     async def test_generate_stream_exception(self) -> None:
         """Test generate_stream method with exception."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = AsyncMock()
         provider.model.generate_content_async.side_effect = Exception("Test exception")
 
@@ -305,7 +305,7 @@ class TestGeminiProvider:
 
     def test_validate_config_no_model(self) -> None:
         """Test validate_config method with no model."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         config = MagicMock()
         config.model = None
 
@@ -314,7 +314,7 @@ class TestGeminiProvider:
 
     def test_validate_config_invalid_temperature(self) -> None:
         """Test validate_config method with invalid temperature."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
 
         # Test temperature < 0
         config = MagicMock()
@@ -332,7 +332,7 @@ class TestGeminiProvider:
 
     def test_validate_config_valid(self) -> None:
         """Test validate_config method with valid config."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         config = MagicMock()
         config.model = "gemini-2.0-flash-lite"
         config.temperature = 0.5
@@ -342,7 +342,7 @@ class TestGeminiProvider:
 
     def test_count_tokens_not_initialized(self) -> None:
         """Test count_tokens method when provider is not initialized."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = None
 
         with pytest.raises(ConfigError, match="Provider not initialized"):
@@ -350,7 +350,7 @@ class TestGeminiProvider:
 
     def test_count_tokens_success(self) -> None:
         """Test count_tokens method success."""
-        provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
+        provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = MagicMock()
         token_count = MagicMock()
         token_count.total_tokens = 10
