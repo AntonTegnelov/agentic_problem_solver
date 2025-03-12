@@ -21,7 +21,7 @@
   - [x] Add task complexity estimation fields to the schema to support delegation decisions
   - [x] Extend `src/agent/steps.py` to add a new `TaskBreakdownStep` class for task decomposition
   - [x] Add prompt templates in `src/prompts/templates.py` for architectural breakdown, planning, and execution
-  - [ ] Add specialized prompt for `ArchitectAgent` in `src/prompts/templates.py` focused on system design
+  - [x] Add specialized prompt for `ArchitectAgent` in `src/prompts/templates.py` focused on system design
   - [ ] Add specialized prompt for `PlannerAgent` in `src/prompts/templates.py`
   - [ ] Add specialized prompt for `ExecutorAgent` in `src/prompts/templates.py`
   - [ ] Implement validation logic in `src/utils/validation.py` to ensure generated tasks conform to the schema
@@ -66,4 +66,4 @@
   - [ ] Add task complexity evaluation to support flexible delegation decisions
   - [ ] Implement progress tracking in `src/agent/state/base.py` to monitor delegated tasks
   - [ ] Add message routing capabilities in `src/messages/routing.py` for hierarchical message delivery
-  - [ ] Add result aggregation functionality in `
+  - [ ] Add result aggregation functionality in `src/

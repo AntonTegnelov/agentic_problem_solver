@@ -246,11 +246,100 @@ Your implementation should be complete and ready for review.
 {context}
 """
 
+# Specialized prompt for ArchitectAgent focused on system design
+ARCHITECT_SYSTEM_DESIGN_PROMPT = """You are an ARCHITECT agent specializing in system design and architecture.
+Your role is to create comprehensive, scalable, and maintainable software architectures.
+
+Task Description: {task_description}
+
+Please create a detailed system design for this task following these guidelines:
+
+1. System Overview
+   - Provide a high-level description of the system
+   - Identify the core purpose and objectives
+   - Define system boundaries and constraints
+
+2. Architectural Style and Patterns
+   - Select appropriate architectural styles (e.g., microservices, layered, event-driven)
+   - Identify design patterns that address key requirements
+   - Justify your architectural decisions
+
+3. Component Breakdown
+   - Identify all major components and subsystems
+   - Define clear responsibilities for each component
+   - Establish interfaces and contracts between components
+   - Specify data models and schemas
+
+4. Data Flow and Processing
+   - Describe how data flows through the system
+   - Identify key processes and transformations
+   - Address data storage, retrieval, and persistence strategies
+   - Consider caching and performance optimization
+
+5. Non-Functional Requirements
+   - Scalability considerations
+   - Performance characteristics
+   - Security measures
+   - Reliability and fault tolerance
+   - Maintainability and extensibility
+
+6. Technology Stack
+   - Recommend specific technologies, frameworks, and tools
+   - Justify technology choices based on requirements
+   - Consider compatibility and integration challenges
+
+7. Implementation Roadmap
+   - Break down the implementation into phases
+   - Identify critical path components
+   - Suggest development priorities
+   - Estimate complexity for each component (simple, moderate, complex, very_complex)
+   - Assign priority to each component (low, medium, high, critical)
+
+Format your response as a structured document with clear sections for each of the above areas.
+For the component breakdown, include a JSON array with the following structure:
+
+```json
+[
+  {{
+    "name": "Component name",
+    "description": "Detailed component description",
+    "responsibilities": ["Responsibility 1", "Responsibility 2"],
+    "interfaces": ["Interface 1", "Interface 2"],
+    "data_models": ["Data model 1", "Data model 2"],
+    "technologies": ["Technology 1", "Technology 2"],
+    "complexity": "simple|moderate|complex|very_complex",
+    "priority": "low|medium|high|critical",
+    "dependencies": [
+      {{
+        "component_index": 0,
+        "description": "Dependency description",
+        "is_blocking": true|false
+      }}
+    ]
+  }},
+  // Additional components...
+]
+```
+
+Ensure that your design is comprehensive, well-structured, and addresses all aspects of the system.
+Consider both immediate implementation needs and long-term evolution of the system.
+{context}
+"""
+
 # Role-specific prompts dictionary
 ROLE_PROMPTS = {
     AgentRole.ARCHITECT: ARCHITECTURAL_BREAKDOWN_PROMPT,
     AgentRole.PLANNER: PLANNING_PROMPT,
     AgentRole.EXECUTOR: EXECUTION_PROMPT,
+}
+
+# Add specialized role prompts dictionary for more specific use cases
+SPECIALIZED_ROLE_PROMPTS = {
+    AgentRole.ARCHITECT: {
+        "system_design": ARCHITECT_SYSTEM_DESIGN_PROMPT,
+        "breakdown": ARCHITECTURAL_BREAKDOWN_PROMPT,
+    },
+    # Other specialized prompts will be added here
 }
 
 STEP_PROMPTS = {
@@ -371,6 +460,45 @@ def get_role_prompt(role: AgentRole, **kwargs: dict[str, Any]) -> str:
         raise ConfigError(msg)
 
     prompt = ROLE_PROMPTS[role]
+
+    # Get additional context
+    context_data = kwargs.pop("context", {})
+    context_str = ""
+    if context_data:
+        context_str = "\nAdditional Context:\n"
+        for key, value in context_data.items():
+            context_str += f"- {key}: {value}\n"
+
+    # Format the prompt with provided kwargs and context
+    return prompt.format(context=context_str, **kwargs)
+
+
+def get_specialized_role_prompt(role: AgentRole, prompt_type: str, **kwargs: dict[str, Any]) -> str:
+    """Get specialized prompt for specific agent role and prompt type.
+
+    Args:
+        role: Agent role.
+        prompt_type: Type of specialized prompt.
+        **kwargs: Additional context for the prompt.
+
+    Returns:
+        Specialized role-specific prompt.
+
+    Raises:
+        ConfigError: If role or prompt type is invalid.
+
+    """
+    # Validate role
+    if role not in SPECIALIZED_ROLE_PROMPTS:
+        msg = f"Invalid role for specialized prompt: {role}"
+        raise ConfigError(msg)
+
+    # Validate prompt type
+    if prompt_type not in SPECIALIZED_ROLE_PROMPTS[role]:
+        msg = f"Invalid prompt type '{prompt_type}' for role {role}"
+        raise ConfigError(msg)
+
+    prompt = SPECIALIZED_ROLE_PROMPTS[role][prompt_type]
 
     # Get additional context
     context_data = kwargs.pop("context", {})

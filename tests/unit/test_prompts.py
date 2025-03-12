@@ -5,11 +5,14 @@ import pytest
 from src.common_types.enums import AgentRole
 from src.common_types.error_types import ConfigError
 from src.prompts.templates import (
+    ARCHITECT_SYSTEM_DESIGN_PROMPT,
     ARCHITECTURAL_BREAKDOWN_PROMPT,
     EXECUTION_PROMPT,
     PLANNING_PROMPT,
     ROLE_PROMPTS,
+    SPECIALIZED_ROLE_PROMPTS,
     get_role_prompt,
+    get_specialized_role_prompt,
 )
 
 
@@ -94,3 +97,74 @@ class TestRolePrompts:
         """Test get_role_prompt with invalid role."""
         with pytest.raises(ConfigError, match="Invalid role: AgentRole.SOLVER"):
             get_role_prompt(AgentRole.SOLVER, task_description="Test")
+
+
+class TestSpecializedRolePrompts:
+    """Test specialized role-specific prompts."""
+
+    def test_specialized_role_prompts_dictionary(self) -> None:
+        """Test that the SPECIALIZED_ROLE_PROMPTS dictionary contains expected entries."""
+        assert AgentRole.ARCHITECT in SPECIALIZED_ROLE_PROMPTS
+        assert "system_design" in SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]
+        assert "breakdown" in SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]
+        assert SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]["system_design"] == ARCHITECT_SYSTEM_DESIGN_PROMPT
+        assert SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]["breakdown"] == ARCHITECTURAL_BREAKDOWN_PROMPT
+
+    def test_get_specialized_role_prompt_architect_system_design(self) -> None:
+        """Test get_specialized_role_prompt for ARCHITECT role with system_design type."""
+        prompt = get_specialized_role_prompt(
+            AgentRole.ARCHITECT,
+            "system_design",
+            task_description="Build a scalable e-commerce platform",
+        )
+        assert "ARCHITECT agent specializing in system design" in prompt
+        assert "Build a scalable e-commerce platform" in prompt
+        assert "System Overview" in prompt
+        assert "Architectural Style and Patterns" in prompt
+        assert "Component Breakdown" in prompt
+        assert "Data Flow and Processing" in prompt
+        assert "Non-Functional Requirements" in prompt
+        assert "Technology Stack" in prompt
+        assert "Implementation Roadmap" in prompt
+        assert "JSON array" in prompt
+
+    def test_get_specialized_role_prompt_architect_breakdown(self) -> None:
+        """Test get_specialized_role_prompt for ARCHITECT role with breakdown type."""
+        prompt = get_specialized_role_prompt(
+            AgentRole.ARCHITECT,
+            "breakdown",
+            task_description="Build a user authentication system",
+        )
+        assert "ARCHITECT agent responsible for high-level system" in prompt
+        assert "Build a user authentication system" in prompt
+        assert "architectural components" in prompt
+        assert "JSON array" in prompt
+
+    def test_get_specialized_role_prompt_with_context(self) -> None:
+        """Test get_specialized_role_prompt with additional context."""
+        prompt = get_specialized_role_prompt(
+            AgentRole.ARCHITECT,
+            "system_design",
+            task_description="Build a distributed database system",
+            context={
+                "Performance": "High throughput required",
+                "Consistency": "Eventually consistent",
+                "Availability": "99.99% uptime",
+            },
+        )
+        assert "ARCHITECT agent specializing in system design" in prompt
+        assert "Build a distributed database system" in prompt
+        assert "Additional Context" in prompt
+        assert "Performance: High throughput required" in prompt
+        assert "Consistency: Eventually consistent" in prompt
+        assert "Availability: 99.99% uptime" in prompt
+
+    def test_get_specialized_role_prompt_invalid_role(self) -> None:
+        """Test get_specialized_role_prompt with invalid role."""
+        with pytest.raises(ConfigError, match="Invalid role for specialized prompt: AgentRole.SOLVER"):
+            get_specialized_role_prompt(AgentRole.SOLVER, "system_design", task_description="Test")
+
+    def test_get_specialized_role_prompt_invalid_prompt_type(self) -> None:
+        """Test get_specialized_role_prompt with invalid prompt type."""
+        with pytest.raises(ConfigError, match="Invalid prompt type 'invalid_type' for role AgentRole.ARCHITECT"):
+            get_specialized_role_prompt(AgentRole.ARCHITECT, "invalid_type", task_description="Test")
