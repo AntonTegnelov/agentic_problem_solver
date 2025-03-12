@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.common_types.enums import AgentStatus, MessageRole
+from src.common_types.enums import AgentRole, AgentStatus, MessageRole
 
 
 def test_agent_status_enum() -> None:
@@ -26,6 +26,25 @@ def test_agent_status_enum() -> None:
     # Test invalid enum value
     with pytest.raises(ValueError, match="'invalid_status' is not a valid AgentStatus"):
         AgentStatus("invalid_status")
+
+
+def test_agent_role_enum() -> None:
+    """Test AgentRole enum values."""
+    # Test enum values
+    assert AgentRole.ARCHITECT == "architect"
+    assert AgentRole.PLANNER == "planner"
+    assert AgentRole.EXECUTOR == "executor"
+    assert AgentRole.SOLVER == "solver"
+
+    # Test enum creation from string
+    assert AgentRole("architect") == AgentRole.ARCHITECT
+    assert AgentRole("planner") == AgentRole.PLANNER
+    assert AgentRole("executor") == AgentRole.EXECUTOR
+    assert AgentRole("solver") == AgentRole.SOLVER
+
+    # Test invalid enum value
+    with pytest.raises(ValueError, match="'invalid_role' is not a valid AgentRole"):
+        AgentRole("invalid_role")
 
 
 def test_message_role_enum() -> None:

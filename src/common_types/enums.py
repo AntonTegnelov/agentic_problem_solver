@@ -38,6 +38,22 @@ class AgentStatus(str, Enum):
     DONE = "done"  # Alias for COMPLETED for backward compatibility
 
 
+class AgentRole(str, Enum):
+    """Agent roles in the hierarchical system.
+
+    These roles represent the specialized functions in the hierarchical agent system:
+    - ARCHITECT: High-level problem decomposition and system design
+    - PLANNER: Mid-level task refinement and planning
+    - EXECUTOR: Low-level task execution and implementation
+    - SOLVER: Legacy/general role for backward compatibility
+    """
+
+    ARCHITECT = "architect"
+    PLANNER = "planner"
+    EXECUTOR = "executor"
+    SOLVER = "solver"  # For backward compatibility
+
+
 class MessageRole(str, Enum):
     """Message roles in conversations.
 
