@@ -27,6 +27,7 @@ class AgentInfo:
     description: str
     capabilities: list[str]
     parent_id: str | None = None
+    child_ids: list[str] = field(default_factory=list)
     status: str = field(default_factory=lambda: AgentStatus.IDLE.value)
 
 

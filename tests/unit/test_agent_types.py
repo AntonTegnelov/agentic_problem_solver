@@ -30,6 +30,7 @@ def test_agent_info_initialization() -> None:
     assert info.description == "A test agent"
     assert info.capabilities == ["test"]
     assert info.parent_id is None
+    assert info.child_ids == []
     assert info.status == AgentStatus.IDLE.value
 
     # Test with all parameters
@@ -39,6 +40,7 @@ def test_agent_info_initialization() -> None:
         description="A test agent",
         capabilities=["test"],
         parent_id="parent-agent",
+        child_ids=["child-agent-1", "child-agent-2"],
         status=AgentStatus.BUSY.value,
     )
     assert info.agent_id == "test-agent"
@@ -46,6 +48,7 @@ def test_agent_info_initialization() -> None:
     assert info.description == "A test agent"
     assert info.capabilities == ["test"]
     assert info.parent_id == "parent-agent"
+    assert info.child_ids == ["child-agent-1", "child-agent-2"]
     assert info.status == AgentStatus.BUSY.value
 
 
