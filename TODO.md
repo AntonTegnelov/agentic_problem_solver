@@ -20,7 +20,7 @@
   - [x] Create a standardized task schema in `src/common_types/task_types.py` with fields for description, priority, dependencies, and status
   - [x] Add task complexity estimation fields to the schema to support delegation decisions
   - [x] Extend `src/agent/steps.py` to add a new `TaskBreakdownStep` class for task decomposition
-  - [ ] Add prompt templates in `src/prompts/templates.py` for architectural breakdown, planning, and execution
+  - [x] Add prompt templates in `src/prompts/templates.py` for architectural breakdown, planning, and execution
   - [ ] Add specialized prompt for `ArchitectAgent` in `src/prompts/templates.py` focused on system design
   - [ ] Add specialized prompt for `PlannerAgent` in `src/prompts/templates.py`
   - [ ] Add specialized prompt for `ExecutorAgent` in `src/prompts/templates.py`

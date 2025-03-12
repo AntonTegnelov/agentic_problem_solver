@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from src.common_types.enums import AgentStep
+from src.common_types.enums import AgentRole, AgentStep
 from src.common_types.error_types import ConfigError
 from src.messages.creation import create_human_message
 
@@ -115,6 +115,144 @@ Task: {task}
 {context}
 """
 
+# New hierarchical agent prompts
+
+# Architectural breakdown prompt for the Architect agent
+ARCHITECTURAL_BREAKDOWN_PROMPT = """You are an ARCHITECT agent responsible for high-level system \
+design and task decomposition.
+
+Task Description: {task_description}
+
+Please analyze this task and break it down into major architectural components following these guidelines:
+
+1. Identify the key components or subsystems needed
+2. Define clear interfaces between components
+3. Consider system-level design patterns and principles
+4. Establish data flow between components
+5. Identify potential technical challenges
+6. Consider scalability, maintainability, and extensibility
+7. Determine appropriate technologies and frameworks
+8. Establish naming conventions and architectural standards
+
+For each component, provide:
+- A clear description
+- Its purpose and responsibilities
+- Key interfaces with other components
+- Estimated complexity (simple, moderate, complex, very_complex)
+- Priority (low, medium, high, critical)
+- Any dependencies on other components
+
+Format your response as a JSON array of components with the following structure:
+
+```json
+[
+  {{
+    "description": "Component description",
+    "purpose": "Component purpose and responsibilities",
+    "interfaces": ["Interface 1", "Interface 2"],
+    "complexity": "simple|moderate|complex|very_complex",
+    "priority": "low|medium|high|critical",
+    "dependencies": [
+      {{
+        "component_index": 0,
+        "description": "Dependency description",
+        "is_blocking": true|false
+      }}
+    ]
+  }},
+  // Additional components...
+]
+```
+
+Ensure that the dependencies reference other components in the list by their index (0-based).
+{context}
+"""
+
+# Planning prompt for the Planner agent
+PLANNING_PROMPT = """You are a PLANNER agent responsible for mid-level task refinement and planning.
+
+Component to Implement: {component_description}
+Component Purpose: {component_purpose}
+Component Interfaces: {component_interfaces}
+Component Complexity: {component_complexity}
+Component Priority: {component_priority}
+
+Please break down this component into specific implementation tasks following these guidelines:
+
+1. Create a logical sequence of development tasks
+2. Define clear acceptance criteria for each task
+3. Identify dependencies between tasks
+4. Estimate complexity for each task
+5. Assign appropriate priority to each task
+6. Consider testing requirements
+7. Plan for error handling and edge cases
+8. Include documentation tasks
+
+For each task, provide:
+- A clear description
+- Specific acceptance criteria
+- Estimated complexity (simple, moderate, complex, very_complex)
+- Priority (low, medium, high, critical)
+- Any dependencies on other tasks
+
+Format your response as a JSON array of tasks with the following structure:
+
+```json
+[
+  {{
+    "description": "Task description",
+    "acceptance_criteria": ["Criterion 1", "Criterion 2"],
+    "complexity": "simple|moderate|complex|very_complex",
+    "priority": "low|medium|high|critical",
+    "dependencies": [
+      {{
+        "task_index": 0,
+        "description": "Dependency description",
+        "is_blocking": true|false
+      }}
+    ]
+  }},
+  // Additional tasks...
+]
+```
+
+Ensure that the dependencies reference other tasks in the list by their index (0-based).
+{context}
+"""
+
+# Execution prompt for the Executor agent
+EXECUTION_PROMPT = """You are an EXECUTOR agent responsible for low-level task implementation.
+
+Task to Implement: {task_description}
+Acceptance Criteria: {acceptance_criteria}
+Task Complexity: {task_complexity}
+Task Priority: {task_priority}
+
+Please implement this task following these guidelines:
+
+1. Write clean, well-documented code
+2. Follow best practices and patterns
+3. Implement proper error handling
+4. Add appropriate comments
+5. Ensure the code meets all acceptance criteria
+6. Follow consistent coding style
+7. Use appropriate data structures and algorithms
+8. Optimize for readability and performance
+9. Include unit tests where appropriate
+10. Document any assumptions or limitations
+
+Your implementation should be complete and ready for review.
+
+{context}
+"""
+
+# Role-specific prompts dictionary
+ROLE_PROMPTS = {
+    AgentRole.ARCHITECT: ARCHITECTURAL_BREAKDOWN_PROMPT,
+    AgentRole.PLANNER: PLANNING_PROMPT,
+    AgentRole.EXECUTOR: EXECUTION_PROMPT,
+}
+
 STEP_PROMPTS = {
     AgentStep.UNDERSTAND: UNDERSTAND_PROMPT,
     AgentStep.PLAN: PLAN_PROMPT,
@@ -211,6 +349,39 @@ def get_retry_prompt(state: AgentState, error: str) -> str:
         task=task,
         context=context_str,
     )
+
+
+def get_role_prompt(role: AgentRole, **kwargs: dict[str, Any]) -> str:
+    """Get prompt for specific agent role.
+
+    Args:
+        role: Agent role.
+        **kwargs: Additional context for the prompt.
+
+    Returns:
+        Role-specific prompt.
+
+    Raises:
+        ConfigError: If role is invalid.
+
+    """
+    # Validate role
+    if role not in ROLE_PROMPTS:
+        msg = f"Invalid role: {role}"
+        raise ConfigError(msg)
+
+    prompt = ROLE_PROMPTS[role]
+
+    # Get additional context
+    context_data = kwargs.pop("context", {})
+    context_str = ""
+    if context_data:
+        context_str = "\nAdditional Context:\n"
+        for key, value in context_data.items():
+            context_str += f"- {key}: {value}\n"
+
+    # Format the prompt with provided kwargs and context
+    return prompt.format(context=context_str, **kwargs)
 
 
 def validate_step_result(
