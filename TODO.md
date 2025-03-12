@@ -19,13 +19,15 @@
 
   - [x] Create a standardized task schema in `src/common_types/task_types.py` with fields for description, priority, dependencies, and status
   - [x] Add task complexity estimation fields to the schema to support delegation decisions
-  - [ ] Extend `src/agent/steps.py` to add a new `TaskBreakdownStep` class for task decomposition
+  - [x] Extend `src/agent/steps.py` to add a new `TaskBreakdownStep` class for task decomposition
   - [ ] Add prompt templates in `src/prompts/templates.py` for architectural breakdown, planning, and execution
   - [ ] Add specialized prompt for `ArchitectAgent` in `src/prompts/templates.py` focused on system design
+  - [ ] Add specialized prompt for `PlannerAgent` in `src/prompts/templates.py`
+  - [ ] Add specialized prompt for `ExecutorAgent` in `src/prompts/templates.py`
   - [ ] Implement validation logic in `src/utils/validation.py` to ensure generated tasks conform to the schema
   - [ ] Add dependency tracking functionality in `src/agent/state/base.py` to manage task relationships
   - [ ] Create task serialization utilities in `src/utils/serialization.py` for task interchange between agents
-  - [ ] Create unit tests in `tests/unit/test_task_breakdown.py` to verify breakdown functionality
+  - [x] Create unit tests in `tests/unit/test_task_breakdown.py` to verify breakdown functionality
   - [ ] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
   - [ ] Update documentation in `docs/howto/task_breakdown.md` with usage examples
   - [ ] Ensure CI/CD pipeline validates the new functionality
