@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agent.result import Result
+from src.agent.agent_types.agent_types import Result
 from src.agent.solver import SolverAgent
 from src.agent.state.base import AgentState
 from src.common_types.message_types import AIMessage, HumanMessage, Message, SystemMessage
