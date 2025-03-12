@@ -17,6 +17,7 @@ from src.common_types.enums import AgentStep
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 from src.common_types.result_types import Result as StepResult
+from src.common_types.task_types import Task, TaskDependency, TaskStatus
 from src.messages.creation import create_structured_message
 from src.messages.utils import (
     get_message_at_index,
@@ -536,6 +537,207 @@ class AgentState:
         prompt = get_step_prompt(step)
         self.add_message(prompt)
         return agent.process(prompt)
+
+    def get_tasks(self) -> list[Task]:
+        """Get all tasks in the state.
+
+        Returns:
+            List of tasks.
+
+        """
+        return self.context.data.get("tasks", [])
+
+    def add_task(self, task: Task) -> None:
+        """Add a task to the state.
+
+        Args:
+            task: Task to add.
+
+        """
+        tasks = self.get_tasks()
+        # Convert Task object to dict for storage
+        task_dict = asdict(task)
+        # Convert UUID objects to strings for JSON serialization
+        task_dict["task_id"] = str(task.task_id)
+        if task.parent_task_id:
+            task_dict["parent_task_id"] = str(task.parent_task_id)
+        task_dict["subtasks"] = [str(subtask_id) for subtask_id in task.subtasks]
+        task_dict["dependencies"] = [
+            {
+                "task_id": str(dep.task_id),
+                "description": dep.description,
+                "is_blocking": dep.is_blocking,
+            }
+            for dep in task.dependencies
+        ]
+
+        tasks.append(task_dict)
+        self.set_context("tasks", tasks)
+        self.updated_at = datetime.now(UTC).isoformat()
+
+    def get_task_by_id(self, task_id: uuid.UUID) -> Task | None:
+        """Get task by ID.
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            Task or None if not found.
+
+        """
+        tasks = self.get_tasks()
+        task_id_str = str(task_id)
+
+        for task_dict in tasks:
+            if task_dict["task_id"] == task_id_str:
+                return self._convert_dict_to_task(task_dict)
+
+        return None
+
+    def update_task(self, task: Task) -> None:
+        """Update a task in the state.
+
+        Args:
+            task: Task to update.
+
+        """
+        tasks = self.get_tasks()
+        task_id_str = str(task.task_id)
+
+        for i, task_dict in enumerate(tasks):
+            if task_dict["task_id"] == task_id_str:
+                # Convert Task object to dict for storage
+                updated_task = asdict(task)
+                # Convert UUID objects to strings for JSON serialization
+                updated_task["task_id"] = task_id_str
+                if task.parent_task_id:
+                    updated_task["parent_task_id"] = str(task.parent_task_id)
+                updated_task["subtasks"] = [str(subtask_id) for subtask_id in task.subtasks]
+                updated_task["dependencies"] = [
+                    {
+                        "task_id": str(dep.task_id),
+                        "description": dep.description,
+                        "is_blocking": dep.is_blocking,
+                    }
+                    for dep in task.dependencies
+                ]
+
+                tasks[i] = updated_task
+                self.set_context("tasks", tasks)
+                self.updated_at = datetime.now(UTC).isoformat()
+                return
+
+        # If task not found, add it
+        self.add_task(task)
+
+    def is_task_blocked_by_dependencies(self, task_id: uuid.UUID) -> bool:
+        """Check if a task is blocked by dependencies.
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            True if task is blocked by dependencies.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return False
+
+        # Check if any blocking dependency is not completed
+        for dependency in task.dependencies:
+            if dependency.is_blocking:
+                dep_task = self.get_task_by_id(dependency.task_id)
+                if not dep_task or dep_task.status != TaskStatus.COMPLETED:
+                    return True
+
+        return False
+
+    def update_task_status_based_on_dependencies(self, task_id: uuid.UUID) -> None:
+        """Update task status based on dependencies.
+
+        Args:
+            task_id: Task ID.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return
+
+        # Only update if task is pending or blocked
+        if task.status not in [TaskStatus.PENDING, TaskStatus.BLOCKED]:
+            return
+
+        if self.is_task_blocked_by_dependencies(task_id):
+            task.status = TaskStatus.BLOCKED
+        # If task was blocked but dependencies are now resolved, set to pending
+        elif task.status == TaskStatus.BLOCKED:
+            task.status = TaskStatus.PENDING
+
+        self.update_task(task)
+
+    def update_dependent_tasks(self, task_id: uuid.UUID) -> None:
+        """Update status of tasks that depend on the given task.
+
+        Args:
+            task_id: Task ID.
+
+        """
+        tasks = self.get_tasks()
+        task_id_str = str(task_id)
+
+        for task_dict in tasks:
+            # Check if this task depends on the given task
+            for dep in task_dict.get("dependencies", []):
+                if dep.get("task_id") == task_id_str:
+                    # Update the status of this dependent task
+                    dependent_task_id = uuid.UUID(task_dict["task_id"])
+                    self.update_task_status_based_on_dependencies(dependent_task_id)
+
+    def _convert_dict_to_task(self, task_dict: dict) -> Task:
+        """Convert task dictionary to Task object.
+
+        Args:
+            task_dict: Task dictionary.
+
+        Returns:
+            Task object.
+
+        """
+        # Convert string IDs back to UUID objects
+        task_id = uuid.UUID(task_dict["task_id"])
+        parent_task_id = uuid.UUID(task_dict["parent_task_id"]) if task_dict.get("parent_task_id") else None
+        subtasks = [uuid.UUID(subtask_id) for subtask_id in task_dict.get("subtasks", [])]
+
+        # Convert dependency dictionaries to TaskDependency objects using list comprehension
+        dependencies = [
+            TaskDependency(
+                task_id=uuid.UUID(dep_dict["task_id"]),
+                description=dep_dict["description"],
+                is_blocking=dep_dict.get("is_blocking", True),
+            )
+            for dep_dict in task_dict.get("dependencies", [])
+        ]
+
+        # Create Task object
+        return Task(
+            description=task_dict["description"],
+            task_id=task_id,
+            priority=task_dict.get("priority", "MEDIUM"),
+            status=task_dict.get("status", "PENDING"),
+            complexity=task_dict.get("complexity", "MODERATE"),
+            dependencies=dependencies,
+            parent_task_id=parent_task_id,
+            subtasks=subtasks,
+            assigned_role=task_dict.get("assigned_role"),
+            assigned_agent_id=task_dict.get("assigned_agent_id"),
+            metadata=task_dict.get("metadata", {}),
+            result=task_dict.get("result"),
+            error=task_dict.get("error"),
+            created_at=task_dict.get("created_at"),
+            updated_at=task_dict.get("updated_at"),
+            completed_at=task_dict.get("completed_at"),
+        )
 
 
 class InMemoryStateManager(StateManager):
