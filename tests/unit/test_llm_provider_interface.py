@@ -31,7 +31,7 @@ class MockLLMProvider:
         self,
         messages: list[HumanMessage],
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> str:
         """Generate response from messages.
 
@@ -51,7 +51,7 @@ class MockLLMProvider:
         self,
         messages: list[HumanMessage],
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> AsyncGenerator[str, None]:
         """Generate response stream from messages.
 

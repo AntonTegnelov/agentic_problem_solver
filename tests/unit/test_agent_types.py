@@ -175,8 +175,8 @@ def test_simple_agent_coordinator_register_agent_factory() -> None:
 
     coordinator.register_agent_factory("test_type", factory)
     # Access to private member is acceptable in tests
-    assert "test_type" in coordinator._agent_factories
-    assert coordinator._agent_factories["test_type"] == factory
+    assert "test_type" in coordinator._agent_factories  # noqa: SLF001
+    assert coordinator._agent_factories["test_type"] == factory  # noqa: SLF001
 
 
 def test_simple_agent_coordinator_create_agent() -> None:
