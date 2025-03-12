@@ -59,6 +59,11 @@ class TestableGeminiProvider(GeminiProvider):
         """Expose _validate_response for testing."""
         return self._validate_response(response)
 
+    def set_config(self, config: GeminiConfig | None) -> None:
+        """Set both config and _config for testing."""
+        self.config = config
+        self._config = config
+
     @property
     def model(self) -> ModelProtocol | None:
         """Expose _model for testing."""
@@ -132,8 +137,7 @@ class TestGeminiProvider:
     def test_initialize_no_config(self) -> None:
         """Test _initialize method with no config."""
         provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
-        provider.config = None
-        provider._config = None
+        provider.set_config(None)
         with pytest.raises(ConfigError, match="Provider not configured"):
             provider.initialize()
 
@@ -141,8 +145,7 @@ class TestGeminiProvider:
         """Test _initialize method with no API key."""
         provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
         config = GeminiConfig(api_key=None)
-        provider.config = config
-        provider._config = config
+        provider.set_config(config)
         with pytest.raises(ConfigError, match="API key not found"):
             provider.initialize()
 
@@ -151,8 +154,7 @@ class TestGeminiProvider:
         with patch("google.generativeai.configure"):
             provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
             config = GeminiConfig(api_key="test_key", model="invalid-model")
-            provider.config = config
-            provider._config = config
+            provider.set_config(config)
             with pytest.raises(InvalidModelError):
                 provider.initialize()
 
@@ -167,8 +169,7 @@ class TestGeminiProvider:
         ):
             provider = TestableGeminiProvider.__new__(TestableGeminiProvider)
             config = GeminiConfig(api_key="test_key", model="gemini-2.0-flash-lite")
-            provider.config = config
-            provider._config = config
+            provider.set_config(config)
             with pytest.raises(ConfigError):
                 provider.initialize()
 

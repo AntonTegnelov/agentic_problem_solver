@@ -30,6 +30,16 @@ class MessageHandler:
     _sequence: int = field(default=0)
     router: MessageRouter = field(default_factory=MessageRouter)
 
+    @property
+    def sequence(self) -> int:
+        """Get the current sequence number.
+
+        Returns:
+            Current sequence number.
+
+        """
+        return self._sequence
+
     def register_handler(self, message_type: str, handler: Callable[[Message], None]) -> None:
         """Register message handler.
 

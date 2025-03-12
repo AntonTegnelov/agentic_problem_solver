@@ -48,6 +48,12 @@ A powerful AI-powered problem-solving system that breaks down complex programmin
    export LOG_FILE=agent.log  # Log file path
    ```
 
+5. Set up pre-commit hooks (recommended for developers):
+
+   ```bash
+   python scripts/setup_pre_commit_hooks.py
+   ```
+
 ## Usage
 
 ### Command Line Interface
@@ -87,6 +93,30 @@ agent = SolverAgent(provider=provider)
 # Process a task
 result = agent.process("Create a simple calculator in Python")
 print(result)
+```
+
+## Development
+
+### Utility Scripts
+
+The project includes several utility scripts to maintain consistency:
+
+- `scripts/generate_requirements.py`: Generates requirements.txt from pyproject.toml
+- `scripts/update_env_example.py`: Updates .env.example based on .env
+- `scripts/check_package_consistency.py`: Checks consistency between package configuration files
+- `scripts/setup_pre_commit_hooks.py`: Sets up Git pre-commit hooks for project consistency
+
+### Pre-commit Hooks
+
+The pre-commit hooks automatically check:
+
+- Package configuration consistency across pyproject.toml, setup.py, and requirements.txt
+- Environment variable consistency between .env and .env.example
+
+To set up the hooks:
+
+```bash
+python scripts/setup_pre_commit_hooks.py
 ```
 
 ## Documentation
