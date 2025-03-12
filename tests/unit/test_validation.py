@@ -31,7 +31,7 @@ def test_validate_task_empty_description() -> None:
 def test_validate_task_invalid_task_id() -> None:
     """Test that a task with an invalid task_id fails validation."""
     task = Task(description="Test task")
-    task.task_id = "not-a-uuid"  # type: ignore
+    task.task_id = "not-a-uuid"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Task ID must be a UUID" in error
@@ -40,7 +40,7 @@ def test_validate_task_invalid_task_id() -> None:
 def test_validate_task_invalid_priority() -> None:
     """Test that a task with an invalid priority fails validation."""
     task = Task(description="Test task")
-    task.priority = "invalid"  # type: ignore
+    task.priority = "invalid"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Task priority must be a TaskPriority enum" in error
@@ -49,7 +49,7 @@ def test_validate_task_invalid_priority() -> None:
 def test_validate_task_invalid_status() -> None:
     """Test that a task with an invalid status fails validation."""
     task = Task(description="Test task")
-    task.status = "invalid"  # type: ignore
+    task.status = "invalid"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Task status must be a TaskStatus enum" in error
@@ -58,7 +58,7 @@ def test_validate_task_invalid_status() -> None:
 def test_validate_task_invalid_complexity() -> None:
     """Test that a task with an invalid complexity fails validation."""
     task = Task(description="Test task")
-    task.complexity = "invalid"  # type: ignore
+    task.complexity = "invalid"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Task complexity must be a TaskComplexity enum" in error
@@ -67,7 +67,7 @@ def test_validate_task_invalid_complexity() -> None:
 def test_validate_task_invalid_dependencies() -> None:
     """Test that a task with invalid dependencies fails validation."""
     task = Task(description="Test task")
-    task.dependencies = "not-a-list"  # type: ignore
+    task.dependencies = "not-a-list"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Task dependencies must be a list" in error
@@ -76,7 +76,7 @@ def test_validate_task_invalid_dependencies() -> None:
 def test_validate_task_invalid_dependency_type() -> None:
     """Test that a task with a dependency of the wrong type fails validation."""
     task = Task(description="Test task")
-    task.dependencies = ["not-a-dependency"]  # type: ignore
+    task.dependencies = ["not-a-dependency"]  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Dependency at index 0 must be a TaskDependency" in error
@@ -85,7 +85,7 @@ def test_validate_task_invalid_dependency_type() -> None:
 def test_validate_task_invalid_dependency_task_id() -> None:
     """Test that a task with a dependency with an invalid task_id fails validation."""
     task = Task(description="Test task")
-    dependency = TaskDependency(task_id="not-a-uuid", description="Dependency")  # type: ignore
+    dependency = TaskDependency(task_id="not-a-uuid", description="Dependency")  # type: ignore[assignment]
     task.dependencies = [dependency]
     is_valid, error = validate_task(task)
     assert not is_valid
@@ -105,7 +105,7 @@ def test_validate_task_empty_dependency_description() -> None:
 def test_validate_task_invalid_parent_task_id() -> None:
     """Test that a task with an invalid parent_task_id fails validation."""
     task = Task(description="Test task")
-    task.parent_task_id = "not-a-uuid"  # type: ignore
+    task.parent_task_id = "not-a-uuid"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Parent task ID must be a UUID" in error
@@ -114,7 +114,7 @@ def test_validate_task_invalid_parent_task_id() -> None:
 def test_validate_task_invalid_subtasks() -> None:
     """Test that a task with invalid subtasks fails validation."""
     task = Task(description="Test task")
-    task.subtasks = "not-a-list"  # type: ignore
+    task.subtasks = "not-a-list"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Subtasks must be a list" in error
@@ -123,7 +123,7 @@ def test_validate_task_invalid_subtasks() -> None:
 def test_validate_task_invalid_subtask_id() -> None:
     """Test that a task with an invalid subtask ID fails validation."""
     task = Task(description="Test task")
-    task.subtasks = ["not-a-uuid"]  # type: ignore
+    task.subtasks = ["not-a-uuid"]  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Subtask ID at index 0 must be a UUID" in error
@@ -132,7 +132,7 @@ def test_validate_task_invalid_subtask_id() -> None:
 def test_validate_task_invalid_metadata() -> None:
     """Test that a task with invalid metadata fails validation."""
     task = Task(description="Test task")
-    task.metadata = "not-a-dict"  # type: ignore
+    task.metadata = "not-a-dict"  # type: ignore[assignment]
     is_valid, error = validate_task(task)
     assert not is_valid
     assert "Metadata must be a dictionary" in error
@@ -148,7 +148,7 @@ def test_validate_task_list_valid() -> None:
 
 def test_validate_task_list_not_a_list() -> None:
     """Test that a non-list fails validation."""
-    tasks = "not-a-list"  # type: ignore
+    tasks = "not-a-list"  # type: ignore[assignment]
     is_valid, error = validate_task_list(tasks)
     assert not is_valid
     assert "Expected a list of tasks" in error
@@ -156,7 +156,7 @@ def test_validate_task_list_not_a_list() -> None:
 
 def test_validate_task_list_invalid_item() -> None:
     """Test that a list with a non-Task item fails validation."""
-    tasks = [Task(description="Task 1"), "not-a-task"]  # type: ignore
+    tasks = [Task(description="Task 1"), "not-a-task"]  # type: ignore[assignment]
     is_valid, error = validate_task_list(tasks)
     assert not is_valid
     assert "Item at index 1 must be a Task" in error
