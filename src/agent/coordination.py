@@ -165,6 +165,22 @@ class InMemoryAgentRegistry(AgentRegistry):
                 result.append(info)
         return result
 
+    def find_agents_by_parent(self, parent_id: str) -> list[AgentInfo]:
+        """Find agents by parent ID.
+
+        Args:
+            parent_id: Parent ID to search for.
+
+        Returns:
+            List of agent information with the specified parent.
+
+        """
+        result = []
+        for info in self._agent_info.values():
+            if info.parent_id == parent_id:
+                result.append(info)
+        return result
+
     def get_parent_agent(self, agent_id: str) -> Agent | None:
         """Get parent agent of the specified agent.
 
