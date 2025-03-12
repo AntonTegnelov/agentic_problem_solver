@@ -127,7 +127,7 @@
         - [x] Attempted but encountered ConfigError: "Model is required" - needs API keys and model configuration
     - [x] Add end-to-end CLI test, where it checks if "APS solve" works
     - [ ] Create integration tests
-      - [ ] Test provider factory with different providers
+      - [x] Test provider factory with different providers
       - [ ] Test message flow with different handlers
       - [ ] Test configuration system with different configs
       - [ ] Test error handling with different scenarios
@@ -142,7 +142,6 @@
       - [x] Add unit tests for agent state management
       - [x] Add unit tests for agent step processing
       - [x] Add unit tests for agent coordination
-      - [ ] Create integration tests for provider factory
       - [ ] Add end-to-end agent communication tests
     - [ ] Improve documentation:
       - [x] Update architecture documentation with current components
@@ -162,23 +161,6 @@
   - [x] Create logging system
   - [x] Add configuration options for the agent
   - [x] Implement prompt templates
-  - [ ] Enable use of the program by writing something in the terminal like: APS solve "Create a calculator app in Typescript and deploy it to amazon"
-  - [ ] verify that it works
-  - [ ] write unit tests
-  - [ ] write integration tests
-
-  write documentation
-
-  - [ ] Tutorials: Lessons that take the reader by the hand through a series of steps to complete a project (or meaningful exercise). Geared towards the user's learning.
-  - [ ] How-To Guides: Guides that take the reader through the steps required to solve a common problem (problem-oriented recipes).
-  - [x] References: Explanations that clarify and illuminate a particular topic. Geared towards understanding.
-    - [x] Message System Reference
-    - [x] Agent System Reference
-    - [ ] Provider System Reference
-    - [ ] Configuration System Reference
-  - [ ] Explanations: Technical descriptions of the machinery and how to operate it (key classes, functions, APIs, and so forth). Think Encyclopedia article.
-  - [ ] examples.py: A Python script file that gives simple examples of how to use the project.
-  - [ ] implement doctest.py so that code examples are correct
 
 - create CI/CD that
 
@@ -421,3 +403,16 @@
 - [ ] Add PR templates with testing requirements
 - [ ] Set up automated testing with existing test structure
 - [ ] Implement version tagging
+
+### Write Documentation
+
+- [ ] Tutorials: Lessons that take the reader by the hand through a series of steps to complete a project (or meaningful exercise). Geared towards the user's learning.
+- [ ] How-To Guides: Guides that take the reader through the steps required to solve a common problem (problem-oriented recipes).
+- [x] References: Explanations that clarify and illuminate a particular topic. Geared towards understanding.
+  - [x] Message System Reference
+  - [x] Agent System Reference
+  - [ ] Provider System Reference
+  - [ ] Configuration System Reference
+- [ ] Explanations: Technical descriptions of the machinery and how to operate it (key classes, functions, APIs, and so forth). Think Encyclopedia article.
+- [ ] examples.py: A Python script file that gives simple examples of how to use the project.
+- [ ] implement doctest.py so that code examples are correct
