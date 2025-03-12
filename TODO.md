@@ -12,7 +12,7 @@
   - [x] Add agent factory methods in `src/agent/agent_types/__init__.py` for role-based instantiation
   - [x] Update `AgentRegistry` protocol in `src/agent/agent_types/agent_types.py` with hierarchical query methods
   - [x] Create unit tests in `tests/unit/test_specialized_agents.py` for the new agent types
-  - [ ] Create integration tests in `tests/integration/test_agent_hierarchy.py` for multi-tier workflow
+  - [x] Create integration tests in `tests/integration/test_agent_hierarchy.py` for multi-tier workflow
   - [ ] Update documentation in `docs/explanation/hierarchical_agents.md` with architecture details
 
 - enable the ai to break down the prompt into TODO lists following a standardized format
