@@ -8,6 +8,7 @@ from src.prompts.templates import (
     ARCHITECT_SYSTEM_DESIGN_PROMPT,
     ARCHITECTURAL_BREAKDOWN_PROMPT,
     EXECUTION_PROMPT,
+    PLANNER_TASK_REFINEMENT_PROMPT,
     PLANNING_PROMPT,
     ROLE_PROMPTS,
     SPECIALIZED_ROLE_PROMPTS,
@@ -107,8 +108,13 @@ class TestSpecializedRolePrompts:
         assert AgentRole.ARCHITECT in SPECIALIZED_ROLE_PROMPTS
         assert "system_design" in SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]
         assert "breakdown" in SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]
+        assert AgentRole.PLANNER in SPECIALIZED_ROLE_PROMPTS
+        assert "task_refinement" in SPECIALIZED_ROLE_PROMPTS[AgentRole.PLANNER]
+        assert "planning" in SPECIALIZED_ROLE_PROMPTS[AgentRole.PLANNER]
         assert SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]["system_design"] == ARCHITECT_SYSTEM_DESIGN_PROMPT
         assert SPECIALIZED_ROLE_PROMPTS[AgentRole.ARCHITECT]["breakdown"] == ARCHITECTURAL_BREAKDOWN_PROMPT
+        assert SPECIALIZED_ROLE_PROMPTS[AgentRole.PLANNER]["task_refinement"] == PLANNER_TASK_REFINEMENT_PROMPT
+        assert SPECIALIZED_ROLE_PROMPTS[AgentRole.PLANNER]["planning"] == PLANNING_PROMPT
 
     def test_get_specialized_role_prompt_architect_system_design(self) -> None:
         """Test get_specialized_role_prompt for ARCHITECT role with system_design type."""
@@ -168,3 +174,50 @@ class TestSpecializedRolePrompts:
         """Test get_specialized_role_prompt with invalid prompt type."""
         with pytest.raises(ConfigError, match="Invalid prompt type 'invalid_type' for role AgentRole.ARCHITECT"):
             get_specialized_role_prompt(AgentRole.ARCHITECT, "invalid_type", task_description="Test")
+
+    def test_get_specialized_role_prompt_planner_task_refinement(self) -> None:
+        """Test get_specialized_role_prompt for PLANNER role with task_refinement type."""
+        prompt = get_specialized_role_prompt(
+            AgentRole.PLANNER,
+            "task_refinement",
+            component_description="User Authentication Module",
+            component_purpose="Handle user login and registration",
+            component_interfaces=["API", "Database"],
+            component_complexity="complex",
+            component_priority="high",
+        )
+        assert "PLANNER agent specializing in task refinement" in prompt
+        assert "User Authentication Module" in prompt
+        assert "Handle user login and registration" in prompt
+        assert "API" in prompt
+        assert "Database" in prompt
+        assert "complex" in prompt
+        assert "high" in prompt
+        assert "Task Breakdown" in prompt
+        assert "Task Sequencing" in prompt
+        assert "Implementation Strategy" in prompt
+        assert "Risk Assessment" in prompt
+        assert "Acceptance Criteria" in prompt
+        assert "Resource Planning" in prompt
+        assert "JSON array" in prompt
+
+    def test_get_specialized_role_prompt_planner_planning(self) -> None:
+        """Test get_specialized_role_prompt for PLANNER role with planning type."""
+        prompt = get_specialized_role_prompt(
+            AgentRole.PLANNER,
+            "planning",
+            component_description="User Authentication Module",
+            component_purpose="Handle user login and registration",
+            component_interfaces=["API", "Database"],
+            component_complexity="complex",
+            component_priority="high",
+        )
+        assert "PLANNER agent responsible for mid-level task refinement" in prompt
+        assert "User Authentication Module" in prompt
+        assert "Handle user login and registration" in prompt
+        assert "API" in prompt
+        assert "Database" in prompt
+        assert "complex" in prompt
+        assert "high" in prompt
+        assert "implementation tasks" in prompt
+        assert "JSON array" in prompt

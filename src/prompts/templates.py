@@ -326,6 +326,84 @@ Consider both immediate implementation needs and long-term evolution of the syst
 {context}
 """
 
+# Specialized prompt for PlannerAgent focused on task refinement and planning
+PLANNER_TASK_REFINEMENT_PROMPT = """You are a PLANNER agent specializing in task refinement and planning.
+Your role is to break down components into well-defined, implementable tasks with clear dependencies and priorities.
+
+Component Description: {component_description}
+Component Purpose: {component_purpose}
+Component Interfaces: {component_interfaces}
+Component Complexity: {component_complexity}
+Component Priority: {component_priority}
+
+Please create a detailed implementation plan for this component following these guidelines:
+
+1. Task Breakdown
+   - Break down the component into specific, actionable tasks
+   - Ensure each task has a clear, singular purpose
+   - Make tasks granular enough to be implemented independently
+   - Include tasks for testing, documentation, and error handling
+
+2. Task Sequencing
+   - Establish a logical order for task implementation
+   - Identify critical path tasks that block other work
+   - Create parallel work streams where possible
+   - Consider dependencies between tasks
+
+3. Implementation Strategy
+   - Recommend specific implementation approaches for complex tasks
+   - Identify potential reusable patterns or libraries
+   - Suggest test-driven development approaches where appropriate
+   - Consider incremental implementation strategies
+
+4. Risk Assessment
+   - Identify technically challenging aspects
+   - Highlight areas with potential integration issues
+   - Note tasks that may require specialized knowledge
+   - Suggest mitigation strategies for high-risk tasks
+
+5. Acceptance Criteria
+   - Define clear success criteria for each task
+   - Include functional and non-functional requirements
+   - Specify test scenarios to validate implementation
+   - Establish quality standards for code review
+
+6. Resource Planning
+   - Estimate relative effort for each task
+   - Identify specialized skills needed for specific tasks
+   - Suggest task allocation based on complexity
+   - Consider knowledge transfer requirements
+
+Format your response as a structured document with clear sections for each of the above areas.
+For the task breakdown, include a JSON array with the following structure:
+
+```json
+[
+  {{
+    "description": "Task description",
+    "purpose": "Specific purpose of this task",
+    "acceptance_criteria": ["Criterion 1", "Criterion 2"],
+    "implementation_notes": "Guidance on implementation approach",
+    "test_scenarios": ["Test scenario 1", "Test scenario 2"],
+    "complexity": "simple|moderate|complex|very_complex",
+    "priority": "low|medium|high|critical",
+    "dependencies": [
+      {{
+        "task_index": 0,
+        "description": "Dependency description",
+        "is_blocking": true|false
+      }}
+    ]
+  }},
+  // Additional tasks...
+]
+```
+
+Ensure that your plan is comprehensive, well-structured, and provides clear guidance for implementation.
+Consider both immediate implementation needs and maintainability of the code.
+{context}
+"""
+
 # Role-specific prompts dictionary
 ROLE_PROMPTS = {
     AgentRole.ARCHITECT: ARCHITECTURAL_BREAKDOWN_PROMPT,
@@ -338,6 +416,10 @@ SPECIALIZED_ROLE_PROMPTS = {
     AgentRole.ARCHITECT: {
         "system_design": ARCHITECT_SYSTEM_DESIGN_PROMPT,
         "breakdown": ARCHITECTURAL_BREAKDOWN_PROMPT,
+    },
+    AgentRole.PLANNER: {
+        "task_refinement": PLANNER_TASK_REFINEMENT_PROMPT,
+        "planning": PLANNING_PROMPT,
     },
     # Other specialized prompts will be added here
 }

@@ -22,7 +22,7 @@
   - [x] Extend `src/agent/steps.py` to add a new `TaskBreakdownStep` class for task decomposition
   - [x] Add prompt templates in `src/prompts/templates.py` for architectural breakdown, planning, and execution
   - [x] Add specialized prompt for `ArchitectAgent` in `src/prompts/templates.py` focused on system design
-  - [ ] Add specialized prompt for `PlannerAgent` in `src/prompts/templates.py`
+  - [x] Add specialized prompt for `PlannerAgent` in `src/prompts/templates.py`
   - [ ] Add specialized prompt for `ExecutorAgent` in `src/prompts/templates.py`
   - [ ] Implement validation logic in `src/utils/validation.py` to ensure generated tasks conform to the schema
   - [ ] Add dependency tracking functionality in `src/agent/state/base.py` to manage task relationships
