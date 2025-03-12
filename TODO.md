@@ -8,7 +8,7 @@
   - [x] Add deprecation warning to `SolverAgent` in `src/agent/solver.py` while maintaining compatibility
   - [x] Create `ArchitectAgent` in `src/agent/agent_types/architect.py` for high-level task decomposition
   - [x] Create `PlannerAgent` in `src/agent/agent_types/planner.py` for mid-level task refinement
-  - [ ] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution
+  - [x] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution
   - [ ] Add agent factory methods in `src/agent/agent_types/__init__.py` for role-based instantiation
   - [ ] Update `AgentRegistry` protocol in `src/agent/agent_types/agent_types.py` with hierarchical query methods
   - [x] Create unit tests in `tests/unit/test_specialized_agents.py` for the new agent types
