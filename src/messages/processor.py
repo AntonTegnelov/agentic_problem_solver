@@ -15,7 +15,7 @@ from typing import (
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from src.common_types import Message
-from src.exceptions import AgentNotFoundError, ConfigError, RetryError
+from src.common_types.error_types import AgentNotFoundError, ConfigError, RetryError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

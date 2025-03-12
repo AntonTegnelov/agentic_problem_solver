@@ -7,8 +7,8 @@ import pytest
 
 from src.agent.agent_types.agent_types import StepResult
 from src.common_types.enums import MessagePriority
+from src.common_types.error_types import ConfigError, RetryError
 from src.common_types.message_types import Message
-from src.exceptions import ConfigError, RetryError
 from src.messages.chain import create_message_chain
 from src.messages.creation import (
     create_ai_message,

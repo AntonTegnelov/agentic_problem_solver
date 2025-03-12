@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, TypeVar
 
-from src.exceptions import ConfigError
+from src.common_types.error_types import ConfigError
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage as Message

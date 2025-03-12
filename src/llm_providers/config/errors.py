@@ -1,6 +1,6 @@
 """LLM provider configuration error classes."""
 
-from src.exceptions import ConfigError
+from src.common_types.error_types import ConfigError
 
 
 class ProviderConfigError(ConfigError):

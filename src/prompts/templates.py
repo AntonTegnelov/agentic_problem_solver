@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from src.common_types.enums import AgentStep
-from src.exceptions import ConfigError
+from src.common_types.error_types import ConfigError
 from src.messages.creation import create_human_message
 
 if TYPE_CHECKING:

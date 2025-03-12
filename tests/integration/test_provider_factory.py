@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from src.agent.result import Result
-from src.exceptions import ConfigError
+from src.common_types.error_types import ConfigError
 from src.llm_providers.config.provider_config import ProviderConfig
 from src.llm_providers.factory import LLMProviderFactory, ProviderNotFoundError
 from src.llm_providers.providers.base import BaseLLMProvider

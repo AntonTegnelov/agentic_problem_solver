@@ -1,11 +1,12 @@
 """Test provider lifecycle management."""
+
 from __future__ import annotations
 
 from datetime import datetime
 
 import pytest
 
-from src.exceptions import EmptyResponseError
+from src.common_types.error_types import EmptyResponseError
 from src.llm_providers.config.provider_config import ProviderConfig
 from src.llm_providers.lifecycle import (
     ProviderLifecycle,

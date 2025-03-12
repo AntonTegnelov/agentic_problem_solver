@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import Self
 
-from src.config.utils import load_config_from_env
-from src.exceptions import (
+from src.common_types.error_types import (
     APIKeyError,
     ConfigError,
     EmptyResponseError,
     InvalidModelError,
     RetryError,
 )
+from src.config.utils import load_config_from_env
 from src.llm_providers.lifecycle import ProviderLifecycle
 from src.llm_providers.providers.base import BaseLLMProvider
 from src.llm_providers.providers.gemini import GeminiProvider

@@ -1,6 +1,6 @@
 """LLM provider configuration."""
 
-from src.exceptions import ConfigError
+from src.common_types.error_types import ConfigError
 
 from .errors import (
     ModelConfigError,

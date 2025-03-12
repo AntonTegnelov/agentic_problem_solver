@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from src.common_types import Message
 
 from src.common_types.enums import MessagePriority
+from src.common_types.error_types import ConfigError
 from src.common_types.message_types import AIMessage, HumanMessage
-from src.exceptions import ConfigError
 from src.messages.utils import get_message_metadata, set_message_metadata
 
 MessageValue = str | int | float | bool | dict[str, "MessageValue"] | list["MessageValue"] | None

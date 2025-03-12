@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+from src.common_types.error_types import ConfigError, InvalidModelError
 from src.config import BaseConfig
-from src.exceptions import ConfigError, InvalidModelError
 from src.llm_providers.version import ModelVersion, ProviderVersion, Version
 
 

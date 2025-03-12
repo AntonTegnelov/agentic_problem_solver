@@ -10,7 +10,7 @@ from langchain_core.messages import (
 
 from src.agent.errors import AgentNotFoundError
 from src.common_types.enums import MessagePriority
-from src.exceptions import ConfigError, RetryError
+from src.common_types.error_types import ConfigError, RetryError
 from src.messages.chain import create_message_chain
 from src.messages.creation import (
     create_ai_message,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.common_types.error_types import ConfigError
 from src.common_types.message_types import (
     AIMessage,
     HumanMessage,
@@ -12,7 +13,6 @@ from src.common_types.message_types import (
     SystemMessage,
     ToolMessage,
 )
-from src.exceptions import ConfigError
 from src.messages.chain import MessageChain
 
 

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from src.exceptions import EmptyResponseError
+from src.common_types.error_types import EmptyResponseError
 
 from .providers.base import BaseLLMProvider
 from .version import ProviderVersion

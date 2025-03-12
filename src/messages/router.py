@@ -17,7 +17,7 @@ import asyncio
 from typing import TYPE_CHECKING, Callable
 
 from src.agent.errors import AgentNotFoundError
-from src.exceptions import ConfigError, RetryError
+from src.common_types.error_types import ConfigError, RetryError
 from src.messages.utils import set_message_metadata
 
 if TYPE_CHECKING:
