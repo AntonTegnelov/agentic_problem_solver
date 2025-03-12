@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, overload
 
-from src.agent.base import Agent
+# Import the Agent Protocol instead of the ABC
 from src.agent.result import Result
 from src.agent.state.base import AgentState, StateManager
 from src.common_types.message_types import Message, SystemMessage
@@ -21,8 +21,12 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-class SolverAgent(Agent):
-    """Agent that solves programming problems."""
+# Remove inheritance from Agent ABC
+class SolverAgent:
+    """Agent that solves programming problems.
+
+    This agent implements the Agent Protocol from src.agent.agent_types.agent_types.
+    """
 
     def __init__(
         self,
@@ -83,6 +87,45 @@ class SolverAgent(Agent):
         # This agent can handle any task
         return True
 
+    @overload
+    def process(self, message: str) -> str: ...
+
+    @overload
+    def process(self, message: Message) -> Result[str]: ...
+
+    def process(self, message: str | Message) -> str | Result[str]:
+        """Process a message.
+
+        Args:
+            message: Message to process (either a string or a Message object).
+
+        Returns:
+            If input is a string: The processed response as a string (for backward compatibility).
+            If input is a Message: Result containing the processed message.
+
+        Raises:
+            ValueError: If provider is not initialized.
+
+        """
+        self._validate_provider()
+
+        # Extract content from message
+        if isinstance(message, str):
+            input_data = message
+            return_result = False  # Return string for backward compatibility
+        else:
+            input_data = message.content
+            return_result = True  # Return Result object for Protocol compatibility
+
+        messages = self._prepare_state(input_data)
+
+        response = self._provider.generate(messages)
+        self.state.add_message(create_message(role="ai", content=response))
+
+        if return_result:
+            return Result(success=True, data=response, error=None)
+        return response  # Return string for backward compatibility
+
     async def process_message(self, message: Message) -> Result:
         """Process message.
 
@@ -93,21 +136,28 @@ class SolverAgent(Agent):
             Processing result.
 
         """
-        response = self.process(message.content)
-        return Result(success=True, data=response, error=None)
+        result = self.process(message)
+        # Ensure we return a Result object
+        if isinstance(result, str):
+            return Result(success=True, data=result, error=None)
+        return result
 
-    async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
+    async def process_stream(self, message: str | Message) -> AsyncGenerator[str, None]:
         """Process message with streaming.
 
         Args:
-            message: Message to process.
+            message: Message to process (either a string or a Message object).
 
         Yields:
             Chunks of processed message.
 
         """
         self._validate_provider()
-        messages = self._prepare_state(message.content)
+
+        # Extract content from message
+        input_data = message if isinstance(message, str) else message.content
+
+        messages = self._prepare_state(input_data)
 
         async for chunk in self._provider.generate_stream(messages):
             yield chunk
@@ -122,8 +172,11 @@ class SolverAgent(Agent):
             Result of message processing.
 
         """
-        response = self.process(message.content)
-        return Result(success=True, data=response, error=None)
+        result = self.process(message)
+        # Ensure we return a Result object
+        if isinstance(result, str):
+            return Result(success=True, data=result, error=None)
+        return result
 
     def receive_message(self, message: Message) -> Result[Any]:
         """Receive message from another agent.
@@ -135,8 +188,11 @@ class SolverAgent(Agent):
             Result of message processing.
 
         """
-        response = self.process(message.content)
-        return Result(success=True, data=response, error=None)
+        result = self.process(message)
+        # Ensure we return a Result object
+        if isinstance(result, str):
+            return Result(success=True, data=result, error=None)
+        return result
 
     def _prepare_messages(self, messages: list[Message]) -> list[Message]:
         """Prepare messages for processing.
@@ -190,24 +246,3 @@ class SolverAgent(Agent):
 
         # Prepare messages for provider
         return self._prepare_messages(self.state.messages)
-
-    def process(self, input_data: str) -> str:
-        """Process input data.
-
-        Args:
-            input_data: Input data to process.
-
-        Returns:
-            Processed output.
-
-        Raises:
-            ValueError: If provider is not initialized.
-
-        """
-        self._validate_provider()
-        messages = self._prepare_state(input_data)
-
-        response = self._provider.generate(messages)
-        self.state.add_message(create_message(role="ai", content=response))
-
-        return response
