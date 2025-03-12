@@ -6,12 +6,12 @@
   - [x] Add agent role enums in `src/common_types/enums.py` (ARCHITECT, PLANNER, EXECUTOR)
   - [x] Enhance `AgentInfo` in `src/common_types/agent_types.py` to include parent/child relationship tracking
   - [x] Add deprecation warning to `SolverAgent` in `src/agent/solver.py` while maintaining compatibility
-  - [ ] Create `ArchitectAgent` in `src/agent/agent_types/architect.py` for high-level task decomposition
+  - [x] Create `ArchitectAgent` in `src/agent/agent_types/architect.py` for high-level task decomposition
   - [ ] Create `PlannerAgent` in `src/agent/agent_types/planner.py` for mid-level task refinement
   - [ ] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution
   - [ ] Add agent factory methods in `src/agent/agent_types/__init__.py` for role-based instantiation
   - [ ] Update `AgentRegistry` protocol in `src/agent/agent_types/agent_types.py` with hierarchical query methods
-  - [ ] Create unit tests in `tests/unit/agent_types/test_specialized_agents.py` for the new agent types
+  - [ ] Create unit tests in `tests/unit/test_specialized_agents.py` for the new agent types
   - [ ] Create integration tests in `tests/integration/test_agent_hierarchy.py` for multi-tier workflow
   - [ ] Update documentation in `docs/explanation/hierarchical_agents.md` with architecture details
 
