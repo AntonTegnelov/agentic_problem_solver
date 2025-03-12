@@ -124,27 +124,19 @@
       - [x] Write tests for error handling
       - [x] ruff check .
         - [x] Fixed import error in messages.py (moved Generic from collections.abc to typing)
-        - [ ] Many ruff warnings in test files (S101, PLR2004, etc.) - can be addressed later
-      - [ ] try running APS solve "say hello"
         - [x] Attempted but encountered ConfigError: "Model is required" - needs API keys and model configuration
-      - [ ] add, commit and push git
+    - [x] Add end-to-end CLI test, where it checks if "APS solve" works
     - [ ] Create integration tests
       - [ ] Test provider factory with different providers
       - [ ] Test message flow with different handlers
       - [ ] Test configuration system with different configs
       - [ ] Test error handling with different scenarios
-      - [ ] ruff check .
-      - [ ] try running APS solve "say hello"
-      - [ ] add, commit and push git
     - [x] Add documentation for new architecture
       - [x] Document message system
       - [x] Document agent system
       - [ ] Document provider factory
       - [ ] Document configuration system
       - [ ] Document error handling
-      - [ ] ruff check .
-      - [ ] try running APS solve "say hello"
-      - [ ] add, commit and push git
     - [ ] Extend test coverage:
       - [x] Add unit tests for message system using existing types
       - [x] Add unit tests for agent state management
@@ -152,7 +144,6 @@
       - [x] Add unit tests for agent coordination
       - [ ] Create integration tests for provider factory
       - [ ] Add end-to-end agent communication tests
-      - [ ] have a test coverage of at least 75%
     - [ ] Improve documentation:
       - [x] Update architecture documentation with current components
       - [x] Create API reference for message system
@@ -175,7 +166,6 @@
   - [ ] verify that it works
   - [ ] write unit tests
   - [ ] write integration tests
-  - [ ] run ruff and fix all warnings
 
   write documentation
 
@@ -403,8 +393,6 @@
   - [x] Add unit tests for agent step processing
   - [x] Add unit tests for agent coordination
   - [ ] Create integration tests for provider factory
-  - [ ] Add end-to-end agent communication tests
-  - [ ] Implement performance benchmarks
 - [x] Improve documentation:
   - [x] Update architecture documentation with current components
   - [x] Create API reference for message system
@@ -417,7 +405,7 @@
 ### Code Quality
 
 - [ ] Implement consistent error handling:
-  - [ ] Use existing error types from `exceptions.py`:
+  - [ ] Use existing error types from `common_types`:
     - [ ] `APIKeyError` for provider key validation
     - [ ] `ConfigError` for configuration validation
     - [ ] `EmptyResponseError` for response validation
@@ -426,17 +414,6 @@
     - [ ] `TemperatureError` for parameter validation
   - [ ] Add error recovery mechanisms
   - [ ] Implement proper error logging
-- [ ] Improve type safety:
-  - [ ] Extend existing generic types in `agent_types.py`:
-    - [ ] `Agent[T, U]` for new agent types
-    - [ ] `Result[T]` for operation results
-    - [ ] `Message` for communication
-  - [ ] Add runtime type validation
-  - [ ] Implement stricter type bounds
-- [ ] Add performance optimizations:
-  - [ ] Implement message batching using existing message system
-  - [ ] Add caching for provider factory
-  - [ ] Optimize message routing using existing protocols
 
 ### Git Workflow
 
@@ -444,9 +421,3 @@
 - [ ] Add PR templates with testing requirements
 - [ ] Set up automated testing with existing test structure
 - [ ] Implement version tagging
-
-## Issues Found During Testing
-
-1. Import error in messages.py: `Generic` was incorrectly imported from `collections.abc` instead of `typing`. This has been fixed.
-2. Running `APS solve "say hello"` fails with `ConfigError: Model is required` - this is expected as we haven't set up API keys and model configuration for the Gemini provider.
-3. Ruff check shows many warnings in test files (S101, PLR2004, etc.) - these are mostly related to the use of `assert` in tests and magic numbers, which can be addressed later.
