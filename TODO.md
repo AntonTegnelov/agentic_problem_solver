@@ -18,7 +18,7 @@
 - enable the ai to break down the prompt into TODO lists following a standardized format
 
   - [x] Create a standardized task schema in `src/common_types/task_types.py` with fields for description, priority, dependencies, and status
-  - [ ] Add task complexity estimation fields to the schema to support delegation decisions
+  - [x] Add task complexity estimation fields to the schema to support delegation decisions
   - [ ] Extend `src/agent/steps.py` to add a new `TaskBreakdownStep` class for task decomposition
   - [ ] Add prompt templates in `src/prompts/templates.py` for architectural breakdown, planning, and execution
   - [ ] Add specialized prompt for `ArchitectAgent` in `src/prompts/templates.py` focused on system design
