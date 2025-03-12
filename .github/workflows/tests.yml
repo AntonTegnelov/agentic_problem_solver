@@ -27,9 +27,9 @@ jobs:
           cp .env.example .env
           echo "GEMINI_API_KEY=dummy_key_for_testing" >> .env
 
-      - name: Run ruff check
+      - name: Run ruff check and fix
         run: |
-          ruff check . --select=E,F,W,I,N,UP,B,A,C4,T20,PT,RET,SIM,ERA,PL,RUF --target-version=py312
+          ruff check . --select=E,F,W,I,N,UP,B,A,C4,T20,PT,RET,SIM,ERA,PL,RUF --target-version=py312 --fix
 
       - name: Run pytest with coverage
         run: |
