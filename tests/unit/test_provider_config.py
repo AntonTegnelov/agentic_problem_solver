@@ -6,7 +6,7 @@ import pytest
 
 from src.config import ConfigError
 from src.llm_providers.config.provider_config import GeminiConfig, ProviderConfig
-from src.llm_providers.version import ProviderVersion, Version
+from src.llm_providers.version import ModelVersion, ProviderVersion, Version
 
 
 class TestProviderConfig:
@@ -124,7 +124,7 @@ class TestGeminiConfig:
         # Create a mock model version that requires a higher provider version
         original_get_model = ProviderVersion.GEMINI_V1.get_model
 
-        def mock_get_model(model_name=None):
+        def mock_get_model(model_name: str | None = None) -> ModelVersion:
             model = original_get_model(model_name)
             # Set a higher minimum provider version
             model.min_provider_version = Version(2, 0, 0)
@@ -216,7 +216,7 @@ class TestGeminiConfig:
         # Create a mock model version that doesn't require a higher provider version
         original_get_model = ProviderVersion.GEMINI_V1.get_model
 
-        def mock_get_model(model_name=None):
+        def mock_get_model(model_name: str | None = None) -> ModelVersion:
             model = original_get_model(model_name)
             # Ensure the minimum provider version is compatible
             model.min_provider_version = Version(1, 0, 0)

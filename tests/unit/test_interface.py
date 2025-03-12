@@ -49,9 +49,9 @@ class TestProvider:
 
     def generate(
         self,
-        messages: list[Message],
+        messages: list[Message],  # noqa: ARG002
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> str:
         """Generate response from messages.
 
@@ -160,25 +160,16 @@ class TestLLMProviderInterface:
         messages = [MockMessage("Hello")]
 
         # Collect all chunks
-        chunks = []
-        async for chunk in provider.generate_stream(messages):
-            chunks.append(chunk)
-
+        chunks = [chunk async for chunk in provider.generate_stream(messages)]
         assert chunks == ["Test", " response", " stream"]
 
         # Test with config
         config = MockConfig()
-        chunks = []
-        async for chunk in provider.generate_stream(messages, config=config):
-            chunks.append(chunk)
-
+        chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
         assert chunks == ["Test", " response", " stream"]
 
         # Test with empty messages
-        chunks = []
-        async for chunk in provider.generate_stream([]):
-            chunks.append(chunk)
-
+        chunks = [chunk async for chunk in provider.generate_stream([])]
         assert chunks == []
 
     def test_count_tokens_method(self) -> None:
@@ -197,7 +188,7 @@ class TestLLMProviderInterface:
 
         # Invalid config
         config = MockConfig(temperature=1.5)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Temperature must be between 0 and 1"):
             provider.validate_config(config)
 
     def test_get_config_method(self) -> None:
