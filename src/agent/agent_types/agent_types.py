@@ -125,7 +125,7 @@ class Agent(Protocol[T]):
         ...
 
 
-StepResult = Result[T]
+# For backward compatibility, StepResult is now imported from src.common_types.result_types
 
 
 class AgentRegistry(Protocol):

@@ -23,8 +23,9 @@ from src.messages.utils import set_message_metadata
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from src.agent.agent_types.agent_types import Agent, StepResult
+    from src.agent.agent_types.agent_types import Agent
     from src.common_types.message_types import Message
+    from src.common_types.result_types import Result as StepResult
     from src.messages.chain import MessageChain
 
 

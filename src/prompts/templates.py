@@ -9,8 +9,8 @@ from src.common_types.error_types import ConfigError
 from src.messages.creation import create_human_message
 
 if TYPE_CHECKING:
-    from src.agent.agent_types.agent_types import StepResult
     from src.agent.state.base import AgentState
+    from src.common_types.result_types import Result as StepResult
 
 # Constants for validation
 MIN_UNDERSTANDING_LENGTH = 100  # Minimum length for understanding step

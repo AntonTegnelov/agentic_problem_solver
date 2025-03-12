@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.agent_types.agent_types import StepResult
 from src.agent.state.base import (
     AgentState,
     Context,
@@ -16,6 +15,7 @@ from src.agent.state.base import (
 )
 from src.common_types.enums import AgentStep
 from src.common_types.error_types import ConfigError
+from src.common_types.result_types import Result as StepResult
 from src.messages.creation import create_human_message, create_system_message
 
 

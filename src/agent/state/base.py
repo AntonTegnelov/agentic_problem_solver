@@ -11,8 +11,12 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+from src.agent.agent_types.agent_types import Agent
 from src.common_types import AgentNotFoundError, ConfigError
 from src.common_types.enums import AgentStep
+from src.common_types.message_types import Message
+from src.common_types.result_types import Result
+from src.common_types.result_types import Result as StepResult
 from src.messages.creation import create_structured_message
 from src.messages.utils import (
     get_message_at_index,
@@ -415,7 +419,7 @@ class AgentState:
                 messages.append(create_structured_message(role, content))
 
             # Handle step results deserialization
-            from src.agent.agent_types.agent_types import Result
+            from src.common_types.result_types import Result
 
             step_results = {
                 step: Result(
