@@ -8,9 +8,12 @@ and is similar to a "Result" or "Either" monad pattern used in many languages.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from src.common_types.error_types import AgentError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 T = TypeVar("T")
 U = TypeVar("U")

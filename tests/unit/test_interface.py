@@ -56,8 +56,8 @@ class TestProvider:
         """Generate response from messages.
 
         Args:
-            messages: Messages to generate from.
-            config: Optional generation configuration.
+            messages: Messages to generate response from.
+            config: Generation configuration.
 
         Returns:
             Generated response.

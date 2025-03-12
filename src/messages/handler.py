@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.common_types.error_types import AgentNotFoundError, RetryError
 from src.common_types.message_types import Message
@@ -14,6 +14,8 @@ from src.messages.router import MessageRouter
 from src.messages.utils import set_message_metadata
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.common_types import Message
     from src.common_types.result_types import Result
 
@@ -50,20 +52,28 @@ class MessageHandler:
         """
         self.handlers[message_type] = handler
 
-    def handle_message(self, message: Message) -> None:
+    def handle_message(self, message: Message) -> Message:
         """Handle message.
 
         Args:
             message: Message to handle.
 
+        Returns:
+            Handled message.
+
+        Raises:
+            ValueError: If message handler not found.
+
         """
         handler = self.handlers.get(message.type)
         if handler:
             handler(message)
+
         self._sequence += 1
         set_message_metadata(message, "sequence", self._sequence)
-        set_message_metadata(message, "timestamp", datetime.now(timezone.utc).isoformat())
+        set_message_metadata(message, "timestamp", datetime.now(UTC).isoformat())
         self.message_chain.messages.append(message)
+        return message
 
     def handle(self, message: Message) -> Message:
         """Handle a message.

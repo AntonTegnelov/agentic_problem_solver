@@ -14,14 +14,14 @@ Key features:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from src.common_types import AgentNotFoundError
 from src.common_types.error_types import ConfigError, RetryError
 from src.messages.utils import set_message_metadata
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
 
     from src.agent.agent_types.agent_types import Agent
     from src.common_types.message_types import Message

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
 from src.common_types import AgentInfo, AgentNotFoundError
 from src.common_types.message_types import Message
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.common_types.result_types import Result
     from src.common_types.result_types import Result as StepResult
 

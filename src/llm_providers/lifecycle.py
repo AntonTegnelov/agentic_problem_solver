@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from src.common_types.error_types import EmptyResponseError
-
-from .providers.base import BaseLLMProvider
-from .version import ProviderVersion
 
 if TYPE_CHECKING:
     from src.llm_providers.providers.base import BaseLLMProvider
     from src.llm_providers.version import ProviderVersion
 
 # Constants
-MAX_ERROR_RATE = 0.2  # 20% error rate threshold
-MAX_RESPONSE_TIME = 10.0  # 10 seconds response time threshold
+MAX_ERROR_RATE = 0.2  # 20% error rate
+MAX_RESPONSE_TIME = 5.0  # 5 seconds
+MAX_RETRIES = 3
 
 
 class ProviderState(Enum):
@@ -35,7 +33,7 @@ class ProviderState(Enum):
 class HealthStatus:
     """Provider health status."""
 
-    last_check: datetime
+    last_check: datetime.datetime
     is_healthy: bool
     error_count: int = 0
     last_error: str | None = None
@@ -52,7 +50,7 @@ class ProviderStats:
     total_cost: float = 0.0
     requests_per_minute: float = 0.0
     avg_tokens_per_request: float = 0.0
-    last_request_time: datetime | None = None
+    last_request_time: datetime.datetime | None = None
 
 
 @dataclass
@@ -63,7 +61,7 @@ class ProviderLifecycle:
     version: ProviderVersion
     state: ProviderState = ProviderState.INITIALIZING
     health: HealthStatus = field(
-        default_factory=lambda: HealthStatus(datetime.now(timezone.utc), is_healthy=True),
+        default_factory=lambda: HealthStatus(datetime.datetime.now(datetime.UTC), is_healthy=True),
     )
     stats: ProviderStats = field(default_factory=ProviderStats)
     _resources: dict[str, Any] = field(default_factory=dict)
@@ -91,7 +89,7 @@ class ProviderLifecycle:
             True if provider is healthy.
 
         """
-        self.health.last_check = datetime.now(UTC)
+        self.health.last_check = datetime.datetime.now(datetime.UTC)
 
         # Check error rate
         if self.health.total_requests > 0:
@@ -130,7 +128,7 @@ class ProviderLifecycle:
             error: Error message if request failed.
 
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
 
         # Update request stats
         self.stats.total_tokens += tokens
@@ -199,7 +197,7 @@ class ProviderLifecycle:
             error: Error message if request failed
 
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
 
         # Update request stats
         self.stats.total_requests += 1

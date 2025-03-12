@@ -9,11 +9,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage as Message
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from src.common_types import Message
 
 from src.common_types.enums import MessagePriority

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 from langchain_core.messages import (
     AIMessage,
@@ -15,10 +15,10 @@ from langchain_core.messages import (
 )
 
 # Type alias for message content
-MessageValue = Union[str, int, float, bool, dict[str, Any], list[Any], None]
+MessageValue = str | int | float | bool | dict[str, Any] | list[Any] | None
 
 # Type alias for message criteria
-CriteriaValue = Union[str, int, float, bool, None]
+CriteriaValue = str | int | float | bool | None
 CriteriaDict = dict[str, CriteriaValue]
 
 T = TypeVar("T")

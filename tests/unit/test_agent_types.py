@@ -167,10 +167,7 @@ def test_simple_agent_coordinator_register_agent_factory() -> None:
 
     registry = MockRegistry()
     coordinator = SimpleAgentCoordinator(registry)
-
-    def factory(config: dict[str, Any]) -> Agent:
-        return MockAgent(agent_id=config.get("agent_id", "test"), capabilities=["test"])
-
+    factory = lambda config: MockAgent(config)  # noqa: E731
     coordinator.register_agent_factory("test_type", factory)
     # Access to private member is acceptable in tests
     assert "test_type" in coordinator._agent_factories  # noqa: SLF001

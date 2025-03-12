@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
-
-from typing_extensions import Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from src.common_types.error_types import (
     APIKeyError,

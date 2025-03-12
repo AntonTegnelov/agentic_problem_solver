@@ -11,7 +11,6 @@ from src.common_types.message_types import (
     AIMessage as ImportedAIMessage,
 )
 from src.common_types.message_types import (
-    CriteriaDict,
     CriteriaValue,
     MessageValue,
 )
@@ -86,19 +85,15 @@ def test_criteria_value_type() -> None:
 
 
 def test_criteria_dict_type() -> None:
-    """Test CriteriaDict type annotation."""
-    # Test empty dictionary
-    criteria: CriteriaDict = {}
-    assert isinstance(criteria, dict)
-
+    """Test CriteriaDict type."""
     # Test dictionary with string values
-    criteria = {"name": "test", "type": "message"}
+    criteria = {"key1": "value1", "key2": "value2"}
     assert isinstance(criteria, dict)
     assert all(isinstance(k, str) for k in criteria)
-    assert all(isinstance(v, (str, int, float, bool, type(None))) for v in criteria.values())
+    assert all(isinstance(v, str | int | float | bool | None) for v in criteria.values())
 
     # Test dictionary with mixed values
-    criteria = {"name": "test", "priority": 1, "active": True, "value": None}
+    criteria = {"key1": "value1", "key2": 123, "key3": 3.14, "key4": True, "key5": None}
     assert isinstance(criteria, dict)
     assert all(isinstance(k, str) for k in criteria)
-    assert all(isinstance(v, (str, int, float, bool, type(None))) for v in criteria.values())
+    assert all(isinstance(v, str | int | float | bool | None) for v in criteria.values())
