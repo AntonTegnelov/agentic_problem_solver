@@ -54,7 +54,7 @@
     - [x] Ensure backward compatibility during transition
   - [ ] Plan for eventual removal of SolverAgent
     - [x] Ensure all documentation is updated to focus on hierarchical system
-    - [ ] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)
+    - [x] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)
     - [x] Remove SolverAgent implementation completely
     - [x] Verify all tests pass with SolverAgent removed
   - [ ] Update documentation
