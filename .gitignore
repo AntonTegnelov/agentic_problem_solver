@@ -33,6 +33,7 @@ ENV/
 
 # Project specific
 .env
+.log
 agent.log
 agent_memory/
 *.db
