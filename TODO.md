@@ -61,7 +61,7 @@
     - [x] remove all deprecated examples
     - [x] Remove all traces of SolverAgent in the documentation to avoid confusion (see `docs/migration/solver_agent_references.md` for a list of documentation to update)
   - [ ] Update CLI
-    - [ ] Remove any backward compatibility still left
+    - [x] Remove any backward compatibility still left
     - [ ] Review the codebase.
     - [ ] Analyzse the migration to see if it left any undesireable traces.
     - [ ] Run tests and linter
