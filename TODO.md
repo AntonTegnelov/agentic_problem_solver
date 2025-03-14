@@ -30,14 +30,14 @@
   - [x] Create unit tests in `tests/unit/test_task_breakdown.py` to verify breakdown functionality
   - [x] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
   - [x] Update documentation in `docs/howto/task_breakdown.md` with usage examples
-  - [ ] Ensure CI/CD pipeline validates the new functionality
+  - [x] Ensure CI/CD pipeline validates the new functionality
 
 - implement a safe migration path from SolverAgent to the hierarchical agent system
 
-  - [ ] Create migration documentation in `docs/howto/migration.md`
-    - [ ] Outline a clear, step-by-step migration path for users
-    - [ ] Document API differences between SolverAgent and hierarchical system
-    - [ ] Include a checklist for verifying successful migration
+  - [x] Create migration documentation in `docs/howto/migration.md`
+    - [x] Outline a clear, step-by-step migration path for users
+    - [x] Document API differences between SolverAgent and hierarchical system
+    - [x] Include a checklist for verifying successful migration
   - [ ] Transition solver agent into a temporary compatibility Layer
     - [ ] Identify all references to SolverAgent in the codebase
     - [ ] Add appropriate deprecation warnings throughout the codebase
