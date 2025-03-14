@@ -69,6 +69,7 @@
 - enable flexible delegation paths between agent types
 
   - [x] Implement task complexity analysis logic in `src/agent/agent_types/architect.py` for delegation decisions
+  - [x] Enhance task complexity analysis to use LLM for more accurate complexity determination
   - [ ] Add direct delegation capability from `ArchitectAgent` to `ExecutorAgent` for simple tasks
   - [ ] Implement sub-task complexity evaluation in `src/agent/agent_types/planner.py`
   - [ ] Add recursive delegation capability from `PlannerAgent` to additional `PlannerAgent` instances for complex sub-components
