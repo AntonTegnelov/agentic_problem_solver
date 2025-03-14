@@ -17,7 +17,6 @@ from src.common_types.message_types import Message
 
 # Suppress deprecation warnings during tests
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="src.cli.main")
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="src.agent.solver")
 
 
 @pytest.fixture

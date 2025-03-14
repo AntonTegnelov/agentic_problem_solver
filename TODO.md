@@ -55,8 +55,8 @@
   - [ ] Plan for eventual removal of SolverAgent
     - [x] Ensure all documentation is updated to focus on hierarchical system
     - [ ] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)
-    - [ ] Remove SolverAgent implementation completely
-    - [ ] Verify all tests pass with SolverAgent removed
+    - [x] Remove SolverAgent implementation completely
+    - [x] Verify all tests pass with SolverAgent removed
   - [ ] Update documentation
     - [ ] remove all deprecated examples
     - [ ] Remove all traces of SolverAgent in the documentation to avoid confusion (see `docs/migration/solver_agent_references.md` for a list of documentation to update)
