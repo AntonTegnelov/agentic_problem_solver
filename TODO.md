@@ -63,7 +63,7 @@
   - [ ] Update CLI
     - [x] Remove any backward compatibility still left
     - [x] Review the codebase.
-    - [ ] Analyzse the migration to see if it left any undesireable traces.
+    - [x] Analyzse the migration to see if it left any undesireable traces.
     - [ ] Run tests and linter
 
 - enable flexible delegation paths between agent types
