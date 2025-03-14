@@ -1,5 +1,6 @@
 """Tests for CLI main module."""
 
+import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,10 @@ from src.cli.main import TaskError, cli, main, process_message
 # These tests will need to be updated when the CLI is migrated to use
 # the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent).
 # See docs/explanation/hierarchical_agents.md for more information.
+
+# Suppress deprecation warnings during tests since we're testing deprecated functionality
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="src.cli.main")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="src.agent.solver")
 
 
 @pytest.fixture
@@ -35,23 +40,19 @@ def test_cli_group(mock_setup_logging: MagicMock) -> None:
 @patch("src.cli.main.GeminiProvider")
 @patch("src.cli.main.GeminiConfig")
 @patch("src.cli.main.load_env_var")
-@patch("src.cli.main.SolverAgent")
+@patch("src.cli.main.create_architect_agent")
 def test_solve_command_success(
-    mock_solver_agent: MagicMock,
+    mock_create_architect_agent: MagicMock,
     mock_load_env_var: MagicMock,
     mock_gemini_config: MagicMock,
     mock_gemini_provider: MagicMock,
     cli_runner: CliRunner,
 ) -> None:
-    """Test the solve command with successful execution.
-
-    DEPRECATED: This test mocks the deprecated SolverAgent and will need to be
-    updated when the CLI is migrated to use the hierarchical agent system.
-    """
+    """Test the solve command with successful execution."""
     # Mock the agent and its process method
     mock_agent_instance = MagicMock()
     mock_agent_instance.process.return_value = "Task solution"
-    mock_solver_agent.return_value = mock_agent_instance
+    mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables
     mock_load_env_var.side_effect = ["fake-api-key", "gemini-1.0-pro"]
@@ -67,7 +68,7 @@ def test_solve_command_success(
     cli_runner.invoke(cli, ["solve", "Test task"])
 
     # Check that the agent was created with the right parameters
-    mock_solver_agent.assert_called_once()
+    mock_create_architect_agent.assert_called_once()
     mock_agent_instance.process.assert_called_once()
     mock_gemini_config.assert_called_once()
 
@@ -91,27 +92,26 @@ def test_solve_command_api_key_error(
 @patch("src.cli.main.GeminiProvider")
 @patch("src.cli.main.GeminiConfig")
 @patch("src.cli.main.load_env_var")
-@patch("src.cli.main.SolverAgent")
+@patch("src.cli.main.create_architect_agent")
 def test_process_message_success(
-    mock_solver_agent: MagicMock,
+    mock_create_architect_agent: MagicMock,
     mock_load_env_var: MagicMock,
     mock_gemini_config: MagicMock,
     mock_gemini_provider: MagicMock,
 ) -> None:
-    """Test the process_message function with successful execution.
-
-    DEPRECATED: This test mocks the deprecated SolverAgent and will need to be
-    updated when the CLI is migrated to use the hierarchical agent system.
-    """
+    """Test the process_message function with successful execution."""
     # Mock the agent and its process method
     mock_agent_instance = MagicMock()
     mock_agent_instance.process.return_value = "Test response"
-    mock_solver_agent.return_value = mock_agent_instance
+    mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables
     mock_load_env_var.side_effect = ["fake-api-key", "gemini-1.0-pro"]
 
     # Mock provider config and provider
+    config_instance = MagicMock()
+    mock_gemini_config.return_value = config_instance
+
     provider_instance = MagicMock()
     mock_gemini_provider.return_value = provider_instance
 
@@ -119,7 +119,7 @@ def test_process_message_success(
     result = process_message("Test message")
 
     # Verify the agent was created and used
-    mock_solver_agent.assert_called_once()
+    mock_create_architect_agent.assert_called_once()
     mock_agent_instance.process.assert_called_once_with("Test message")
 
     # Verify the result

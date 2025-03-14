@@ -6,18 +6,12 @@ from pathlib import Path
 
 import click
 
+# Import hierarchical agent system
+from src.agent.agent_types import create_architect_agent
+
 # DEPRECATED: SolverAgent is deprecated and will be removed in a future version.
-# This import should be replaced with imports from the hierarchical agent system.
+# This import is kept for backward compatibility but should not be used in new code.
 # See docs/explanation/hierarchical_agents.md for details on the new system.
-#
-# WARNING: Code using SolverAgent directly will break when it is removed.
-# The recommended migration path is:
-# 1. For high-level task decomposition: Use ArchitectAgent from src.agent.agent_types.architect
-# 2. For mid-level planning: Use PlannerAgent from src.agent.agent_types.planner
-# 3. For implementation: Use ExecutorAgent from src.agent.agent_types.executor
-#
-# TODO: Replace this import with hierarchical agent imports before SolverAgent is removed
-from src.agent.solver import SolverAgent
 from src.agent.state.base import InMemoryStateManager
 from src.config import AgentConfig
 from src.config.utils import load_env_var
@@ -90,15 +84,16 @@ def solve(
     temperature: float = DEFAULT_TEMPERATURE,
     max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> None:
-    """Solve a programming task."""
-    try:
-        # Create configuration
-        config = AgentConfig(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    """Solve a task using the architect agent.
 
+    Args:
+        task: The task to solve.
+        model: Model to use for generation.
+        temperature: Temperature for generation.
+        max_tokens: Maximum tokens to generate.
+
+    """
+    try:
         # Create provider
         try:
             api_key = load_env_var("GEMINI_API_KEY")
@@ -114,12 +109,15 @@ def solve(
         # Create state manager
         state_manager = InMemoryStateManager()
 
-        # DEPRECATED: SolverAgent usage
-        # This code will break when SolverAgent is removed in a future version.
-        # TODO: Replace with hierarchical agent system before removal:
-        # from src.agent.agent_types.architect import ArchitectAgent
-        # agent = ArchitectAgent(provider=provider, state_manager=state_manager, config=config)
-        agent = SolverAgent(
+        # Create configuration
+        config = AgentConfig(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        # Use hierarchical agent system
+        agent = create_architect_agent(
             provider=provider,
             state_manager=state_manager,
             config=config,
@@ -135,7 +133,7 @@ def solve(
 
 
 def process_message(message: str) -> str:
-    """Process a message using the solver agent.
+    """Process a message using the architect agent.
 
     Args:
         message: The message to process.
@@ -146,10 +144,6 @@ def process_message(message: str) -> str:
     Raises:
         TaskError: If an error occurs during processing.
 
-    .. deprecated:: 0.1.0
-       This function uses the deprecated SolverAgent and will be removed in a future version.
-       Use the hierarchical agent system instead.
-
     """
     try:
         api_key = load_env_var("GEMINI_API_KEY")
@@ -157,10 +151,8 @@ def process_message(message: str) -> str:
         provider_config = GeminiConfig(api_key=api_key, model=model)
         provider = GeminiProvider(config=provider_config)
 
-        # DEPRECATED: SolverAgent usage
-        # This code will break when SolverAgent is removed in a future version.
-        # TODO: Replace with hierarchical agent system before removal
-        agent = SolverAgent(provider=provider)
+        # Use hierarchical agent system
+        agent = create_architect_agent(provider=provider)
 
         return agent.process(message)
     except Exception as err:

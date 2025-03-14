@@ -43,7 +43,8 @@
     - [x] Add appropriate deprecation warnings throughout the codebase
     - [x] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
   - [ ] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
-    - [ ] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
+    - [x] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
+    - [ ] Continue refactoring remaining deprecated components
   - [ ] Update examples to show new approach
     - [ ] Annotate existing examples with deprecation notices if they no longer apply
     - [ ] Create parallel examples showing the new hierarchical approach where it differs
