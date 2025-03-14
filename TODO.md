@@ -60,11 +60,11 @@
   - [x] Update documentation
     - [x] remove all deprecated examples
     - [x] Remove all traces of SolverAgent in the documentation to avoid confusion (see `docs/migration/solver_agent_references.md` for a list of documentation to update)
-  - [ ] Update CLI
+  - [x] Update CLI
     - [x] Remove any backward compatibility still left
     - [x] Review the codebase.
     - [x] Analyzse the migration to see if it left any undesireable traces.
-    - [ ] Run tests and linter
+    - [x] Run tests and linter
 
 - enable flexible delegation paths between agent types
 
