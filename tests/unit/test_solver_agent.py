@@ -1,7 +1,8 @@
 """Tests for the SolverAgent class."""
 
+import warnings
 from collections.abc import AsyncGenerator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -10,14 +11,18 @@ from src.agent.state.base import AgentState
 from src.common_types.message_types import HumanMessage, Message, SystemMessage
 from src.common_types.result_types import Result
 from src.messages.creation import create_message
+from src.messages.utils import set_message_metadata
 
 # DEPRECATED: Tests for SolverAgent which is deprecated and will be removed in a future version.
 # These tests will need to be updated or removed when SolverAgent is removed.
 # New features should use and test the hierarchical agent system instead.
 # See docs/explanation/hierarchical_agents.md for more information.
 #
-# TODO: Migrate these tests to use hierarchical agents before SolverAgent is removed.
-# Most test logic can be adapted to test ArchitectAgent from src.agent.agent_types.architect
+# TODO(@migration-team): Migrate these tests to use hierarchical agents  # noqa: TD003, FIX002
+# before SolverAgent is removed - see https://github.com/org/repo/issues/123
+
+# Suppress deprecation warnings during tests since we're testing deprecated functionality
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="src.agent.solver")
 
 
 @pytest.fixture
@@ -92,7 +97,7 @@ async def test_process_message(solver_agent: SolverAgent) -> None:
     """Test process_message method."""
     # DEPRECATED: This test will be removed when SolverAgent is removed.
     message = HumanMessage(content="Test message")
-    message.add_metadata("test", "value")
+    set_message_metadata(message, "test", "value")
 
     # Patch the process method to return a known value
     with patch.object(SolverAgent, "process", return_value="Test response") as mock_process:
@@ -109,8 +114,8 @@ async def test_process_stream(solver_agent: SolverAgent) -> None:
     # DEPRECATED: This test will be removed when SolverAgent is removed.
     message = "Test message"
     chunks = ["Chunk", "1", "2", "3"]
-    solver_agent._provider.generate_stream = MagicMock()
-    solver_agent._provider.generate_stream.return_value.__aiter__.return_value = chunks
+    solver_agent._provider.generate_stream = MagicMock()  # noqa: SLF001
+    solver_agent._provider.generate_stream.return_value.__aiter__.return_value = chunks  # noqa: SLF001
 
     result = [chunk async for chunk in solver_agent.process_stream(message)]
     assert result == chunks
@@ -120,7 +125,7 @@ def test_send_message(solver_agent: SolverAgent) -> None:
     """Test send_message method."""
     # DEPRECATED: This test will be removed when SolverAgent is removed.
     message = HumanMessage(content="Test message")
-    message.add_metadata("test", "value")
+    set_message_metadata(message, "test", "value")
 
     # Patch the process method to return a known value
     with patch.object(solver_agent, "process", return_value="Test response"):
@@ -140,7 +145,7 @@ def test_receive_message(solver_agent: SolverAgent) -> None:
     """Test receive_message method."""
     # DEPRECATED: This test will be removed when SolverAgent is removed.
     message = HumanMessage(content="Test message")
-    message.add_metadata("test", "value")
+    set_message_metadata(message, "test", "value")
 
     # Patch the process method to return a known value
     with patch.object(solver_agent, "process", return_value="Test response"):
@@ -181,11 +186,11 @@ def test_validate_provider() -> None:
     agent = SolverAgent(provider=MagicMock())
 
     # Should not raise when provider is set
-    agent._validate_provider()
+    agent._validate_provider()  # noqa: SLF001
 
     # Should raise ValueError when provider is not set
     with pytest.raises(ValueError, match="Provider not initialized"):
-        SolverAgent(provider=None)._validate_provider()
+        SolverAgent(provider=None)._validate_provider()  # noqa: SLF001
 
     # Test the exception is raised
     with (
@@ -196,7 +201,7 @@ def test_validate_provider() -> None:
         ),
         pytest.raises(ValueError, match="Provider not initialized"),
     ):
-        agent._validate_provider()
+        agent._validate_provider()  # noqa: SLF001
 
 
 def test_prepare_state(solver_agent: SolverAgent) -> None:
@@ -222,6 +227,65 @@ def test_prepare_state(solver_agent: SolverAgent) -> None:
         assert result == expected_messages
 
 
+def test_should_delegate_to_architect(solver_agent: SolverAgent) -> None:
+    """Test _should_delegate_to_architect method."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    # By default, it should return False for backward compatibility
+    assert solver_agent._should_delegate_to_architect() is False  # noqa: SLF001
+
+
+def test_get_architect_agent(solver_agent: SolverAgent) -> None:
+    """Test _get_architect_agent method."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    with patch("src.agent.solver.create_architect_agent") as mock_create:
+        mock_architect = MagicMock()
+        mock_create.return_value = mock_architect
+
+        # First call should create a new architect agent
+        result = solver_agent._get_architect_agent()  # noqa: SLF001
+        assert result == mock_architect
+        mock_create.assert_called_once_with(
+            provider=solver_agent._provider,  # noqa: SLF001
+            state_manager=solver_agent._state_manager,  # noqa: SLF001
+            config=solver_agent.config,
+        )
+
+        # Second call should return the cached architect agent
+        mock_create.reset_mock()
+        result2 = solver_agent._get_architect_agent()  # noqa: SLF001
+        assert result2 == mock_architect
+        mock_create.assert_not_called()
+
+
+def test_process_with_delegation(solver_agent: SolverAgent) -> None:
+    """Test process method with delegation to architect agent."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    input_message = "Test message"
+    expected_response = "Architect response"
+
+    # Create a mock architect agent
+    mock_architect = MagicMock()
+    mock_architect_result = Result(success=True, data=expected_response, error=None)
+    mock_architect.process = AsyncMock(return_value=mock_architect_result)
+
+    # Mock methods to isolate test
+    with (
+        patch.object(solver_agent, "_should_delegate_to_architect", return_value=True),
+        patch.object(solver_agent, "_get_architect_agent", return_value=mock_architect),
+        patch.object(solver_agent.state, "add_message"),
+    ):
+        # Test with string input
+        result = solver_agent.process(input_message)
+        assert result == expected_response
+
+        # Test with Message input
+        message = HumanMessage(content=input_message)
+        result = solver_agent.process(message)
+        assert isinstance(result, Result)
+        assert result.success is True
+        assert result.data == expected_response
+
+
 def test_process(solver_agent: SolverAgent, mock_provider: MagicMock) -> None:
     """Test process method with string input."""
     # DEPRECATED: This test will be removed when SolverAgent is removed.
@@ -229,13 +293,11 @@ def test_process(solver_agent: SolverAgent, mock_provider: MagicMock) -> None:
     expected_response = "Test response"
     mock_provider.generate.return_value = expected_response
 
-    # Mock methods to isolate test
+    # Mock methods to isolate test and ensure we don't delegate
     with (
+        patch.object(solver_agent, "_should_delegate_to_architect", return_value=False),
         patch.object(solver_agent, "_prepare_state", return_value=[]),
-        patch.object(
-            solver_agent.state,
-            "add_message",
-        ),
+        patch.object(solver_agent.state, "add_message"),
     ):
         result = solver_agent.process(input_message)
         assert result == expected_response
@@ -243,11 +305,9 @@ def test_process(solver_agent: SolverAgent, mock_provider: MagicMock) -> None:
     # Test with Message input
     message = HumanMessage(content="Test message")
     with (
+        patch.object(solver_agent, "_should_delegate_to_architect", return_value=False),
         patch.object(solver_agent, "_prepare_state", return_value=[]),
-        patch.object(
-            solver_agent.state,
-            "add_message",
-        ),
+        patch.object(solver_agent.state, "add_message"),
     ):
         result = solver_agent.process(message)
         assert isinstance(result, Result)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
+from src.agent.agent_types import create_architect_agent
 from src.agent.state.base import AgentState, StateManager
 from src.common_types.message_types import Message, SystemMessage
 from src.common_types.result_types import Result
@@ -14,9 +15,9 @@ from src.prompts import get_step_prompt
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+    from src.agent.agent_types import Agent
     from src.config.agent import AgentConfig
     from src.llm_providers.interface import LLMProvider
-    from src.messages import Message
 
 T = TypeVar("T")
 
@@ -57,6 +58,7 @@ class SolverAgent:
         self._state_manager = state_manager
         self._agent_id = "solver_agent"
         self.config = config
+        self._architect_agent = None
 
         # Handle both AgentState and StateManager
         if state_manager is None:
@@ -128,6 +130,32 @@ class SolverAgent:
             input_data = message.content
             return_result = True  # Return Result object for Protocol compatibility
 
+        # Check if we should delegate to the architect agent
+        # For now, we'll delegate all tasks to the architect agent
+        # In a more sophisticated implementation, we might want to check
+        # if the task is suitable for delegation
+        if self._should_delegate_to_architect():
+            architect = self._get_architect_agent()
+
+            # Create a message for the architect if needed
+            if isinstance(message, str):
+                architect_message = create_message(role="human", content=input_data)
+            else:
+                architect_message = message
+
+            # Process with architect agent
+            import asyncio
+
+            architect_result = asyncio.run(architect.process(architect_message))
+
+            # Store the result in our state
+            self.state.add_message(create_message(role="ai", content=architect_result.data))
+
+            if return_result:
+                return architect_result
+            return architect_result.data
+
+        # Fall back to original implementation if not delegating
         messages = self._prepare_state(input_data)
 
         response = self._provider.generate(messages)
@@ -257,3 +285,32 @@ class SolverAgent:
 
         # Prepare messages for provider
         return self._prepare_messages(self.state.messages)
+
+    def _should_delegate_to_architect(self) -> bool:
+        """Determine if we should delegate to the architect agent.
+
+        This is a temporary method that will be expanded as we gradually
+        migrate more functionality to the hierarchical agent system.
+
+        Returns:
+            True if we should delegate to the architect agent.
+
+        """
+        # For now, we'll return False to maintain backward compatibility
+        # This will be updated in future migration steps
+        return False
+
+    def _get_architect_agent(self) -> Agent:
+        """Get or create an architect agent.
+
+        Returns:
+            An architect agent instance.
+
+        """
+        if self._architect_agent is None:
+            self._architect_agent = create_architect_agent(
+                provider=self._provider,
+                state_manager=self._state_manager,
+                config=self.config,
+            )
+        return self._architect_agent
