@@ -44,14 +44,14 @@
     - [x] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
   - [ ] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
     - [x] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
-    - [ ] Continue refactoring remaining deprecated components
+    - [x] Continue refactoring remaining deprecated components
   - [ ] Update examples to show new approach
     - [ ] Annotate existing examples with deprecation notices if they no longer apply
     - [ ] Create parallel examples showing the new hierarchical approach where it differs
   - [ ] Update CLI code to use hierarchical agents
-    - [ ] Identify all CLI dependencies on SolverAgent (see `docs/migration/solver_agent_references.md` for details)
-    - [ ] Incrementally update each reference (+corresponding tests), testing between changes
-    - [ ] Ensure backward compatibility during transition
+    - [x] Identify all CLI dependencies on SolverAgent (see `docs/migration/solver_agent_references.md` for details)
+    - [x] Incrementally update each reference (+corresponding tests), testing between changes
+    - [x] Ensure backward compatibility during transition
   - [ ] Plan for eventual removal of SolverAgent
     - [ ] Ensure all documentation is updated to focus on hierarchical system
     - [ ] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)

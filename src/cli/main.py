@@ -1,5 +1,6 @@
 """Command line interface for the problem solver."""
 
+import asyncio
 import logging
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from src.config import AgentConfig
 from src.config.utils import load_env_var
 from src.llm_providers.config.provider_config import GeminiConfig
 from src.llm_providers.providers.gemini import GeminiProvider
+from src.messages.creation import create_message
 from src.utils.log_utils import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -123,8 +125,9 @@ def solve(
             config=config,
         )
 
-        # Process task
-        result = agent.process(task)
+        # Process task - create a human message and run it through asyncio
+        message = create_message(role="human", content=task)
+        result = asyncio.run(agent.process(message))
         click.echo(result)
 
     except Exception:
@@ -154,7 +157,10 @@ def process_message(message: str) -> str:
         # Use hierarchical agent system
         agent = create_architect_agent(provider=provider)
 
-        return agent.process(message)
+        # Create a human message and run it through asyncio
+        human_message = create_message(role="human", content=message)
+        result = asyncio.run(agent.process(human_message))
+        return str(result)
     except Exception as err:
         logger.exception(MESSAGE_ERROR)
         error_msg = f"{MESSAGE_ERROR}: {err}"
