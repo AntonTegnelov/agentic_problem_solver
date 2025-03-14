@@ -14,6 +14,7 @@ from src.agent.agent_types import (
 from src.common_types import AgentEntry, AgentInfo
 from src.common_types.enums import AgentStatus
 from src.common_types.result_types import Result
+from src.messages.creation import create_human_message
 
 
 def test_agent_info_initialization() -> None:
@@ -214,3 +215,98 @@ def test_simple_agent_coordinator_create_agent() -> None:
     # Test with invalid agent type
     with pytest.raises(ValueError, match="Invalid agent type"):
         coordinator.create_agent("invalid_type", {})
+
+
+class TestMockAgent:
+    """Tests for the MockAgent implementation."""
+
+    def test_initialization(self) -> None:
+        """Test agent initialization."""
+        agent_id = "test-agent"
+        capabilities = ["test", "code"]
+        agent = MockAgent(agent_id, capabilities)
+
+        assert agent.get_agent_id() == agent_id
+        assert agent.get_capabilities() == capabilities
+        assert agent.processed_messages == []
+
+    def test_can_handle(self) -> None:
+        """Test can_handle method."""
+        agent = MockAgent("test-agent", ["test", "code"])
+
+        # Test with capability in task
+        assert agent.can_handle("I need help with some test")
+        assert agent.can_handle("Can you write some code for me?")
+
+        # Test with capability not in task
+        assert not agent.can_handle("I need help with math")
+
+    def test_process(self) -> None:
+        """Test process method."""
+        agent = MockAgent("test-agent", ["test"])
+
+        # Test process
+        message = create_human_message("Hello")
+        result = agent.process(message)
+        assert result.success is True
+        assert result.data == "Mock result"
+
+        # Test that message was stored
+        assert len(agent.processed_messages) == 1
+        assert agent.processed_messages[0] == message
+
+    @pytest.mark.asyncio
+    async def test_process_stream(self) -> None:
+        """Test process_stream method."""
+        agent = MockAgent("test-agent", ["test"])
+        message = create_human_message("Hello")
+
+        # Test process_stream
+        chunks = [chunk async for chunk in agent.process_stream(message)]
+        assert chunks == ["Mock result"]
+
+        # Test that message was stored
+        assert len(agent.processed_messages) == 1
+        assert agent.processed_messages[0] == message
+
+    def test_send_message(self) -> None:
+        """Test send_message method."""
+        agent = MockAgent("test-agent", ["test"])
+        message = create_human_message("Hello")
+
+        # Test send_message
+        result = agent.send_message(message)
+        assert result.success is True
+        assert result.data == "Mock result"
+
+        # Test that message was stored
+        assert len(agent.processed_messages) == 1
+        assert agent.processed_messages[0] == message
+
+    def test_receive_message(self) -> None:
+        """Test receive_message method."""
+        agent = MockAgent("test-agent", ["test"])
+        message = create_human_message("Hello")
+
+        # Test receive_message
+        result = agent.receive_message(message)
+        assert result.success is True
+        assert result.data == "Mock result"
+
+        # Test that message was stored
+        assert len(agent.processed_messages) == 1
+        assert agent.processed_messages[0] == message
+
+
+class TestAgentProtocol:
+    """Tests for the Agent protocol implementation."""
+
+    @pytest.mark.asyncio
+    async def test_process_stream_implementation(self) -> None:
+        """Test the implementation of process_stream in a concrete Agent class."""
+        agent = MockAgent("test-agent", ["test"])
+        message = create_human_message("Hello")
+
+        # Test process_stream
+        chunks = [chunk async for chunk in agent.process_stream(message)]
+        assert chunks == ["Mock result"]
