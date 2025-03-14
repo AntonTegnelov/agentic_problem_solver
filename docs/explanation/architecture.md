@@ -2,11 +2,13 @@
 
 ## Overview
 
-APS is designed as a modular agent-based system for solving complex programming problems. The current implementation features a single `SolverAgent` that handles the entire problem-solving workflow, while the planned architecture will transform this into a hierarchical multi-agent system with specialized roles for more effective task decomposition and execution.
+APS is designed as a modular agent-based system for solving complex programming problems. The initial implementation featured a single `SolverAgent` that handled the entire problem-solving workflow, which has now been transformed into a hierarchical multi-agent system with specialized roles for more effective task decomposition and execution.
+
+> **IMPORTANT: The `SolverAgent` is now deprecated** and will be removed in a future version. All new development should use the hierarchical agent system.
 
 ## Current Architecture
 
-The current system is built around a protocol-based design with clear separation of concerns:
+The system is built around a protocol-based design with clear separation of concerns:
 
 ### Core Components
 
@@ -18,15 +20,19 @@ The current system is built around a protocol-based design with clear separation
 
 #### 2. Agent System (`src/agent/`)
 
-- `solver.py`: Current implementation of the primary agent
-- `agent_types/agent_types.py`: Protocol definitions for agents
+- `agent_types/`: Protocol definitions and specialized agent implementations
+  - `agent_types.py`: Protocol definitions for agents
+  - `architect.py`: Implementation of the top-level ArchitectAgent
+  - `planner.py`: Implementation of the mid-level PlannerAgent
+  - `executor.py`: Implementation of the bottom-level ExecutorAgent
+- `solver.py`: **Deprecated** - Legacy implementation of the single-agent approach
 - `state/`: Agent state management
   - `base.py`: Base state classes and interfaces
   - `memory.py`: Agent memory implementations
 - `steps/`: Step execution framework
   - `base.py`: Step abstractions
   - `executors/`: Step execution implementations
-- `coordination.py`: Basic agent coordination capabilities
+- `coordination.py`: Agent coordination capabilities for hierarchical operations
 
 #### 3. Provider System (`src/llm_providers/`)
 
@@ -50,7 +56,7 @@ The current system is built around a protocol-based design with clear separation
 
 - Consolidates common types and enums
 
-### Current Data Flow
+### Legacy Data Flow (Deprecated)
 
 1. User Input → CLI
 2. CLI → SolverAgent
@@ -61,9 +67,9 @@ The current system is built around a protocol-based design with clear separation
    - VERIFY: Test and validate the solution
 4. Results → User
 
-## Planned Hierarchical Architecture
+## Hierarchical Architecture
 
-The planned architecture will transform APS into a hierarchical multi-agent system with specialized roles:
+The current architecture implements a hierarchical multi-agent system with specialized roles:
 
 ### Hierarchical Agent Structure
 
@@ -91,7 +97,7 @@ The planned architecture will transform APS into a hierarchical multi-agent syst
 
 ### Delegation Decision Responsibility
 
-The system will implement agent-driven delegation decisions rather than using a separate delegation layer:
+The system implements agent-driven delegation decisions rather than using a separate delegation layer:
 
 - **Agent-Driven Approach**: Each agent evaluates its assigned tasks and determines the appropriate delegation strategy
 
@@ -114,15 +120,15 @@ The system will implement agent-driven delegation decisions rather than using a 
 
 ### Protocol-Based Implementation
 
-The hierarchical system will be implemented using protocols rather than inheritance:
+The hierarchical system is implemented using protocols rather than inheritance:
 
-- **Agent Protocol**: All agent types will implement the same `Agent` protocol defined in `agent_types.py`
-- **SolverAgent Transition**: The existing `SolverAgent` will be maintained for backward compatibility but marked as deprecated
-- **Specialized Implementations**: Each agent type will have its own implementation file in the `agent/agent_types/` directory
+- **Agent Protocol**: All agent types implement the same `Agent` protocol defined in `agent_types.py`
+- **SolverAgent Transition**: The existing `SolverAgent` is maintained for backward compatibility but marked as deprecated
+- **Specialized Implementations**: Each agent type has its own implementation file in the `agent/agent_types/` directory
 
 ### Enhanced Coordination System
 
-The existing coordination system will be extended to support hierarchical operations:
+The coordination system supports hierarchical operations:
 
 - **Parent-Child Relationships**: Track relationships between agents in the hierarchy
 - **Task Delegation**: Route tasks to appropriate agent types based on capabilities
@@ -131,7 +137,7 @@ The existing coordination system will be extended to support hierarchical operat
 
 ### Task Breakdown and Management
 
-A standardized task system will be implemented:
+A standardized task system is implemented:
 
 - **Task Schema**: Defined structure for tasks with description, priority, dependencies, and status
 - **Task Breakdown**: Specialized steps for decomposing complex tasks

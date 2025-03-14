@@ -1,5 +1,14 @@
 # Quick Start Guide
 
+> **⚠️ DEPRECATION NOTICE:**
+>
+> The underlying implementation of this CLI currently uses the deprecated `SolverAgent` class.
+> In future versions, it will be updated to use the hierarchical agent system.
+> The CLI interface will remain stable, but if you're using the API directly,
+> you should migrate to using the hierarchical agent system.
+>
+> See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for more information.
+
 ## Installation
 
 ```bash
@@ -48,44 +57,50 @@ APS config set model "gemini-pro"
 For complex projects, APS will break down the task into manageable steps:
 
 ```bash
-APS solve "Create a React todo app with TypeScript and deploy it to Vercel"
+APS solve "Create a web application with user authentication and a database"
 ```
 
-The system will:
+### 2. Streaming Output
 
-1. Create a project plan
-2. Set up the development environment
-3. Implement each component
-4. Add testing
-5. Handle deployment
-
-### 2. Using Different Providers
-
-Switch between different LLM providers:
+Watch the solution being generated in real-time:
 
 ```bash
-# Use OpenAI
-APS config set provider openai
-export OPENAI_API_KEY=your_key_here
-
-# Use Anthropic
-APS config set provider anthropic
-export ANTHROPIC_API_KEY=your_key_here
+APS solve --stream "Explain how to implement binary search"
 ```
 
-### 3. Customizing Behavior
-
-Control how APS approaches tasks:
+### 3. Custom Models and Parameters
 
 ```bash
-# More creative solutions
-APS config set temperature 0.9
+APS solve --model "gemini-2.0-pro" --temperature 0.9 "Generate creative poetry"
+```
 
-# More focused solutions
-APS config set temperature 0.1
+## Direct API Usage
 
-# Longer responses
-APS config set max_tokens 2000
+If you want to use the API programmatically instead of the CLI, you should use the hierarchical agent system directly:
+
+```python
+from src.agent.agent_types.architect import ArchitectAgent
+from src.agent.state.base import InMemoryStateManager
+from src.llm_providers.providers.gemini import GeminiProvider
+from src.llm_providers.config.provider_config import GeminiConfig
+
+# Set up the provider
+provider_config = GeminiConfig(
+    api_key="your_api_key_here",
+    model="gemini-2.0-pro"
+)
+provider = GeminiProvider(config=provider_config)
+
+# Create the state manager and architect agent
+state_manager = InMemoryStateManager()
+agent = ArchitectAgent(
+    provider=provider,
+    state_manager=state_manager
+)
+
+# Process a task
+result = agent.process("Create a simple calculator in Python")
+print(result.data)
 ```
 
 ## Best Practices
@@ -145,7 +160,6 @@ APS solve "Fix the API endpoint" --debug
 
 ## Next Steps
 
-- Read the [How-To Guides](../howto/) for detailed instructions
-- Check the [Reference](../reference/) for complete API documentation
-- See [Examples](../examples.py) for more use cases
-- Read [Explanations](../explanation/) for architecture details
+- Check out the [Getting Started](./getting_started.md) guide for a more detailed walkthrough
+- Explore the [API Reference](../reference/api.md) for advanced usage
+- Learn more about the [hierarchical agent system](../explanation/hierarchical_agents.md) architecture

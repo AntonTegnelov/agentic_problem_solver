@@ -6,6 +6,17 @@ from pathlib import Path
 
 import click
 
+# DEPRECATED: SolverAgent is deprecated and will be removed in a future version.
+# This import should be replaced with imports from the hierarchical agent system.
+# See docs/explanation/hierarchical_agents.md for details on the new system.
+#
+# WARNING: Code using SolverAgent directly will break when it is removed.
+# The recommended migration path is:
+# 1. For high-level task decomposition: Use ArchitectAgent from src.agent.agent_types.architect
+# 2. For mid-level planning: Use PlannerAgent from src.agent.agent_types.planner
+# 3. For implementation: Use ExecutorAgent from src.agent.agent_types.executor
+#
+# TODO: Replace this import with hierarchical agent imports before SolverAgent is removed
 from src.agent.solver import SolverAgent
 from src.agent.state.base import InMemoryStateManager
 from src.config import AgentConfig
@@ -18,9 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 CONFIG_FILE = Path("config.yaml")
-DEFAULT_MODEL = (
-    "gemini-2.0-flash-lite"  # Standard model for all operations - matches AgentConfig
-)
+DEFAULT_MODEL = "gemini-2.0-flash-lite"  # Standard model for all operations - matches AgentConfig
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 1000
 
@@ -105,7 +114,11 @@ def solve(
         # Create state manager
         state_manager = InMemoryStateManager()
 
-        # Create agent
+        # DEPRECATED: SolverAgent usage
+        # This code will break when SolverAgent is removed in a future version.
+        # TODO: Replace with hierarchical agent system before removal:
+        # from src.agent.agent_types.architect import ArchitectAgent
+        # agent = ArchitectAgent(provider=provider, state_manager=state_manager, config=config)
         agent = SolverAgent(
             provider=provider,
             state_manager=state_manager,
@@ -133,13 +146,22 @@ def process_message(message: str) -> str:
     Raises:
         TaskError: If an error occurs during processing.
 
+    .. deprecated:: 0.1.0
+       This function uses the deprecated SolverAgent and will be removed in a future version.
+       Use the hierarchical agent system instead.
+
     """
     try:
         api_key = load_env_var("GEMINI_API_KEY")
         model = load_env_var("GEMINI_MODEL")
         provider_config = GeminiConfig(api_key=api_key, model=model)
         provider = GeminiProvider(config=provider_config)
+
+        # DEPRECATED: SolverAgent usage
+        # This code will break when SolverAgent is removed in a future version.
+        # TODO: Replace with hierarchical agent system before removal
         agent = SolverAgent(provider=provider)
+
         return agent.process(message)
     except Exception as err:
         logger.exception(MESSAGE_ERROR)
@@ -148,5 +170,9 @@ def process_message(message: str) -> str:
 
 
 def main() -> None:
-    """Run the CLI application."""
-    cli()
+    """Entry point for the CLI."""
+    cli()  # pragma: no cover
+
+
+if __name__ == "__main__":
+    main()  # pragma: no cover

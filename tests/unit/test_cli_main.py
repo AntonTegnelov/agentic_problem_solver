@@ -7,6 +7,11 @@ from click.testing import CliRunner
 
 from src.cli.main import TaskError, cli, main, process_message
 
+# DEPRECATED: The CLI currently uses SolverAgent which is deprecated.
+# These tests will need to be updated when the CLI is migrated to use
+# the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent).
+# See docs/explanation/hierarchical_agents.md for more information.
+
 
 @pytest.fixture
 def cli_runner() -> CliRunner:
@@ -38,7 +43,11 @@ def test_solve_command_success(
     mock_gemini_provider: MagicMock,
     cli_runner: CliRunner,
 ) -> None:
-    """Test the solve command with successful execution."""
+    """Test the solve command with successful execution.
+
+    DEPRECATED: This test mocks the deprecated SolverAgent and will need to be
+    updated when the CLI is migrated to use the hierarchical agent system.
+    """
     # Mock the agent and its process method
     mock_agent_instance = MagicMock()
     mock_agent_instance.process.return_value = "Task solution"
@@ -89,29 +98,32 @@ def test_process_message_success(
     mock_gemini_config: MagicMock,
     mock_gemini_provider: MagicMock,
 ) -> None:
-    """Test process_message with successful execution."""
+    """Test the process_message function with successful execution.
+
+    DEPRECATED: This test mocks the deprecated SolverAgent and will need to be
+    updated when the CLI is migrated to use the hierarchical agent system.
+    """
     # Mock the agent and its process method
     mock_agent_instance = MagicMock()
-    mock_agent_instance.process.return_value = "Message response"
+    mock_agent_instance.process.return_value = "Test response"
     mock_solver_agent.return_value = mock_agent_instance
 
     # Mock environment variables
     mock_load_env_var.side_effect = ["fake-api-key", "gemini-1.0-pro"]
 
     # Mock provider config and provider
-    mock_config_instance = MagicMock()
-    mock_gemini_config.return_value = mock_config_instance
-
-    mock_provider_instance = MagicMock()
-    mock_gemini_provider.return_value = mock_provider_instance
+    provider_instance = MagicMock()
+    mock_gemini_provider.return_value = provider_instance
 
     # Call the function
     result = process_message("Test message")
 
-    # Check the result
-    assert result == "Message response"
+    # Verify the agent was created and used
+    mock_solver_agent.assert_called_once()
     mock_agent_instance.process.assert_called_once_with("Test message")
-    mock_gemini_config.assert_called_once()
+
+    # Verify the result
+    assert result == "Test response"
 
 
 @patch("src.cli.main.load_env_var")

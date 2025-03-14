@@ -160,7 +160,7 @@ class TestSpecializedRolePrompts:
         )
         assert "ARCHITECT agent specializing in system design" in prompt
         assert "Build a distributed database system" in prompt
-        assert "Additional Context" in prompt
+        assert "Context:" in prompt
         assert "Performance: High throughput required" in prompt
         assert "Consistency: Eventually consistent" in prompt
         assert "Availability: 99.99% uptime" in prompt

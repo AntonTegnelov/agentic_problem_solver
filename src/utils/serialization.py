@@ -106,7 +106,7 @@ def deserialize_task(task_dict: dict[str, Any]) -> Task:
 
         return Task(**task_data)
     except (ValueError, KeyError, TypeError) as e:
-        logger.exception("Error deserializing task: %s", e)
+        logger.exception("Error deserializing task")
         msg = f"Invalid task dictionary: {e}"
         raise ValueError(msg) from e
 
@@ -145,7 +145,7 @@ def deserialize_task_list(json_str: str) -> list[Task]:
             raise TypeError(msg)
         return [deserialize_task(task_dict) for task_dict in task_dicts]
     except json.JSONDecodeError as e:
-        logger.exception("Error decoding JSON: %s", e)
+        logger.exception("Error decoding JSON")
         msg = f"Invalid JSON string: {e}"
         raise ValueError(msg) from e
 
@@ -180,6 +180,6 @@ def json_to_task(json_str: str) -> Task:
         task_dict = json.loads(json_str)
         return deserialize_task(task_dict)
     except json.JSONDecodeError as e:
-        logger.exception("Error decoding JSON: %s", e)
+        logger.exception("Error decoding JSON")
         msg = f"Invalid JSON string: {e}"
         raise ValueError(msg) from e

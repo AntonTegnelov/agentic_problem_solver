@@ -4,9 +4,22 @@ This document provides detailed information about the key classes and functions 
 
 ## Agents
 
-### SolverAgent
+### SolverAgent (DEPRECATED)
 
-The main agent class that processes tasks and generates solutions.
+> **IMPORTANT DEPRECATION NOTICE**:
+>
+> The `SolverAgent` class is deprecated and will be removed in a future version of the APS framework.
+> It is maintained only for backward compatibility.
+>
+> Please migrate to the hierarchical agent system using:
+>
+> - `ArchitectAgent` for high-level task decomposition
+> - `PlannerAgent` for mid-level task refinement
+> - `ExecutorAgent` for low-level task execution
+>
+> For more information, see the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation.
+
+The original agent class that processes tasks and generates solutions.
 
 ```python
 class SolverAgent:
@@ -68,6 +81,24 @@ def get_agent_id(self) -> str:
     """
 ```
 
+### ArchitectAgent
+
+Top-level agent in the hierarchical system responsible for high-level task decomposition and system design.
+
+See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for details.
+
+### PlannerAgent
+
+Mid-level agent in the hierarchical system responsible for detailed task planning and refinement.
+
+See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for details.
+
+### ExecutorAgent
+
+Bottom-level agent in the hierarchical system responsible for implementing specific tasks.
+
+See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for details.
+
 ## LLM Providers
 
 ### LLMProviderFactory
@@ -98,169 +129,6 @@ class LLMProviderFactory:
 
 ##### get_provider
 
-```python
-@classmethod
-def get_provider(cls, name: str) -> type[BaseLLMProvider]:
-    """Get a provider class.
-
-    Args:
-        name: Provider name.
-
-    Returns:
-        Provider class.
-
-    Raises:
-        ProviderNotFoundError: If provider not found.
-    """
 ```
 
-##### get_provider_instance
-
-```python
-def get_provider_instance(
-    self,
-    name: str | None = None,
-    capabilities: list[str] | None = None,
-    temperature: float | None = None,
-) -> BaseLLMProvider:
-    """Get provider instance.
-
-    Args:
-        name: Provider name.
-        capabilities: Required capabilities.
-        temperature: Temperature setting.
-
-    Returns:
-        Provider instance.
-
-    Raises:
-        ConfigError: If provider creation fails.
-    """
 ```
-
-### BaseLLMProvider
-
-Base class for LLM providers.
-
-```python
-class BaseLLMProvider(ABC):
-    """Abstract base class for LLM providers."""
-
-    def __init__(self, api_key: str | None = None) -> None:
-        """Initialize provider.
-
-        Args:
-            api_key: Optional API key.
-        """
-        self.config = self._create_config(api_key)
-        self._validate_config()
-
-    @abstractmethod
-    async def generate(self, prompt: str) -> str:
-        """Generate text from prompt.
-
-        Args:
-            prompt: Input prompt.
-
-        Returns:
-            Generated text.
-        """
-
-    @abstractmethod
-    async def generate_stream(self, prompt: str) -> AsyncGenerator[str, None]:
-        """Generate text from prompt as a stream.
-
-        Args:
-            prompt: Input prompt.
-
-        Yields:
-            Generated text chunks.
-        """
-```
-
-## Message System
-
-### Message Creation
-
-#### create_human_message
-
-```python
-def create_human_message(
-    content: str,
-    metadata: dict[str, Any] | None = None,
-    **kwargs: object
-) -> HumanMessage:
-    """Create a human message.
-
-    Args:
-        content: Message content.
-        metadata: Optional metadata.
-        **kwargs: Additional keyword arguments.
-
-    Returns:
-        Human message.
-    """
-```
-
-#### create_ai_message
-
-```python
-def create_ai_message(
-    content: str,
-    metadata: dict[str, Any] | None = None,
-    **kwargs: object
-) -> AIMessage:
-    """Create an AI message.
-
-    Args:
-        content: Message content.
-        metadata: Optional metadata.
-        **kwargs: Additional keyword arguments.
-
-    Returns:
-        AI message.
-    """
-```
-
-#### create_system_message
-
-```python
-def create_system_message(
-    content: str,
-    metadata: dict[str, Any] | None = None,
-    **kwargs: object
-) -> SystemMessage:
-    """Create a system message.
-
-    Args:
-        content: Message content.
-        metadata: Optional metadata.
-        **kwargs: Additional keyword arguments.
-
-    Returns:
-        System message.
-    """
-```
-
-## Constants
-
-### AgentStep
-
-Enum defining the steps in the agent's workflow.
-
-```python
-class AgentStep(str, Enum):
-    UNDERSTAND = "understand"    # Analyze and comprehend the task
-    PLAN = "plan"                # Create a strategy to solve the task
-    EXECUTE = "execute"          # Implement the planned solution
-    VERIFY = "verify"            # Test and validate the solution
-```
-
-## Configuration
-
-### Environment Variables
-
-- `GEMINI_API_KEY`: API key for Google's Gemini model
-- `PROVIDER`: LLM provider to use (default: "gemini")
-- `LOG_LEVEL`: Logging level (default: "INFO")
-- `LOG_FILE`: Path to log file (optional)

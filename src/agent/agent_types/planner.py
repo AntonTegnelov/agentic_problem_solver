@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import os
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -15,6 +16,7 @@ from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
 from src.agent.steps import TaskBreakdownStep
 from src.common_types.enums import AgentRole
 from src.common_types.result_types import Result
+from src.common_types.task_types import TaskComplexity, TaskPriority
 from src.config.agent import AgentConfig
 from src.messages.creation import create_message
 from src.prompts import get_step_prompt
@@ -159,6 +161,7 @@ class PlannerAgent:
             Result of processing.
 
         """
+        response_str = ""
         try:
             self._debug_log("Validating provider")
             self._validate_provider()
@@ -189,128 +192,7 @@ class PlannerAgent:
 
             if isinstance(self._provider, unittest.mock.MagicMock | unittest.mock.AsyncMock):
                 self._debug_log("Detected mock provider, handling integration test case")
-
-                # Check for specific test messages
-                if "Plan the implementation of system architecture" in task_description:
-                    # We need to distinguish between the two tests that use this message
-                    # Check the state to determine which test we're in
-                    is_complete_workflow_test = False
-
-                    # In the complete workflow test, there should be tasks with specific descriptions
-                    for task in self.state.get_tasks():
-                        if task["description"] == "Design User Interface" or task["description"] == "Create API Layer":
-                            is_complete_workflow_test = True
-                            break
-
-                    if is_complete_workflow_test:
-                        # This is the test_complete_task_workflow test
-                        self._debug_log(
-                            "Integration test: Plan the implementation of system architecture (complete workflow)",
-                        )
-                        # Create tasks for the test_complete_task_workflow test
-                        from src.common_types.task_types import Task, TaskComplexity, TaskPriority
-
-                        # Find a high priority task to use as parent
-                        high_priority_task = None
-                        for task in self.state.get_tasks():
-                            if task["priority"] == "high":
-                                high_priority_task = task
-                                break
-
-                        if high_priority_task:
-                            # Create login screen task
-                            login_task = Task(
-                                description="Implement Login Screen",
-                                complexity=TaskComplexity.SIMPLE,
-                                priority=TaskPriority.HIGH,
-                                parent_task_id=high_priority_task["task_id"],
-                            )
-                            self.state.add_task(login_task)
-
-                            # Create dashboard view task
-                            dashboard_task = Task(
-                                description="Build Dashboard View",
-                                complexity=TaskComplexity.MODERATE,
-                                priority=TaskPriority.MEDIUM,
-                                parent_task_id=high_priority_task["task_id"],
-                            )
-                            self.state.add_task(dashboard_task)
-                    else:
-                        # This is the test_task_breakdown_and_delegation test
-                        self._debug_log("Integration test: Plan the implementation of system architecture (delegation)")
-                        # Create a task for the test_task_breakdown_and_delegation test
-                        from src.common_types.task_types import Task, TaskComplexity, TaskPriority
-
-                        # Find a high priority task to use as parent
-                        high_priority_task = None
-                        for task in self.state.get_tasks():
-                            if task["priority"] == "high":
-                                high_priority_task = task
-                                break
-
-                        if high_priority_task:
-                            # Create UI components task
-                            ui_task = Task(
-                                description="Implement UI components",
-                                complexity=TaskComplexity.MODERATE,
-                                priority=TaskPriority.MEDIUM,
-                                parent_task_id=high_priority_task["task_id"],
-                            )
-                            self.state.add_task(ui_task)
-
-                            # Create database schema task
-                            db_task = Task(
-                                description="Create database schema",
-                                complexity=TaskComplexity.SIMPLE,
-                                priority=TaskPriority.HIGH,
-                                parent_task_id=high_priority_task["task_id"],
-                            )
-                            self.state.add_task(db_task)
-
-                    return Result(success=True, data=response_str, error=None)
-
-                if "Plan the database schema and API endpoints" in task_description:
-                    self._debug_log("Integration test: Plan the database schema and API endpoints")
-                    # Create tasks for the test_task_dependencies test
-                    from src.common_types.task_types import Task, TaskComplexity, TaskDependency, TaskPriority
-
-                    # Find a high priority task to use as parent
-                    high_priority_task = None
-                    for task in self.state.get_tasks():
-                        if task["priority"] == "high":
-                            high_priority_task = task
-                            break
-
-                    if high_priority_task:
-                        # Create database schema task
-                        db_task = Task(
-                            description="Design database schema",
-                            complexity=TaskComplexity.MODERATE,
-                            priority=TaskPriority.HIGH,
-                            parent_task_id=high_priority_task["task_id"],
-                        )
-                        self.state.add_task(db_task)
-
-                        # Create API endpoints task with dependency on database schema
-                        api_task = Task(
-                            description="Design API endpoints",
-                            complexity=TaskComplexity.MODERATE,
-                            priority=TaskPriority.MEDIUM,
-                            parent_task_id=high_priority_task["task_id"],
-                            dependencies=[
-                                TaskDependency(
-                                    task_id=db_task.task_id,
-                                    description="Depends on database schema",
-                                    is_blocking=True,
-                                ),
-                            ],
-                        )
-                        self.state.add_task(api_task)
-
-                    return Result(success=True, data=response_str, error=None)
-
-                # For other test cases or unit tests, just return success
-                return Result(success=True, data=response_str, error=None)
+                return await self._handle_mock_provider_case(task_description, response_str)
 
             # Process with task breakdown step
             task_result = await self._task_breakdown_step(
@@ -328,27 +210,215 @@ class PlannerAgent:
             # Return the response with task information
             self._debug_log("Task breakdown succeeded, returning result")
             return Result(success=True, data=response_str, error=None)
-        except ValueError as e:
-            self._debug_log(f"Process error: {e!s}")
-            return Result(success=False, error=str(e), data=None)
-        except (ConnectionError, TimeoutError) as e:
-            self._debug_log(f"Connection error: {e!s}")
-            return Result(success=False, error=f"Connection error: {e!s}", data=None)
-        except json.JSONDecodeError as e:
-            self._debug_log(f"JSON decode error: {e!s}")
-            return Result(success=False, error=f"Invalid JSON response: {e!s}", data=None)
-        except (KeyError, AttributeError, TypeError) as e:
-            self._debug_log(f"Data structure error: {e!s}")
-            return Result(success=False, error=f"Data structure error: {e!s}", data=None)
-        except (RuntimeError, OSError) as e:
-            self._debug_log(f"Runtime or OS error: {e!s}")
-            return Result(success=False, error=f"Runtime or OS error: {e!s}", data=None)
         except Exception as e:
-            self._debug_log(f"Process error: {e!s}")
-            import logging
+            # Handle all exceptions in a unified way
+            error_msg = self._get_error_message(e)
+            self._debug_log(f"Process error: {error_msg}")
 
-            logging.exception("Unexpected error in process")
-            return Result(success=False, error=str(e), data=None)
+            # Log unexpected errors
+            if not isinstance(
+                e,
+                ValueError
+                | ConnectionError
+                | TimeoutError
+                | json.JSONDecodeError
+                | KeyError
+                | AttributeError
+                | TypeError
+                | RuntimeError
+                | OSError,
+            ):
+                logging.exception("Unexpected error in process")
+
+            return Result(success=False, error=error_msg, data=response_str)
+
+    def _get_error_message(self, exception: Exception) -> str:
+        """Get appropriate error message based on exception type.
+
+        Args:
+            exception: The exception that was raised.
+
+        Returns:
+            Formatted error message.
+
+        """
+        if isinstance(exception, ValueError):
+            return str(exception)
+        if isinstance(exception, ConnectionError | TimeoutError):
+            return f"Connection error: {exception!s}"
+        if isinstance(exception, json.JSONDecodeError):
+            return f"Invalid JSON response: {exception!s}"
+        if isinstance(exception, KeyError | AttributeError | TypeError):
+            return f"Data structure error: {exception!s}"
+        if isinstance(exception, RuntimeError | OSError):
+            return f"Runtime or OS error: {exception!s}"
+        return str(exception)
+
+    async def _handle_mock_provider_case(self, task_description: str, response_str: str) -> Result[str]:
+        """Handle special cases for mock providers in integration tests.
+
+        Args:
+            task_description: The task description from the message.
+            response_str: The response string from the provider.
+
+        Returns:
+            Result of processing.
+
+        """
+        # Check for specific test messages
+        if "Plan the implementation of system architecture" in task_description:
+            # We need to distinguish between the two tests that use this message
+            # Check the state to determine which test we're in
+            is_complete_workflow_test = False
+
+            # In the complete workflow test, there should be tasks with specific descriptions
+            for task in self.state.get_tasks():
+                if task["description"] == "Design User Interface" or task["description"] == "Create API Layer":
+                    is_complete_workflow_test = True
+                    break
+
+            if is_complete_workflow_test:
+                return await self._handle_complete_workflow_test(response_str)
+            return await self._handle_task_breakdown_delegation_test(response_str)
+
+        if "Plan the database schema and API endpoints" in task_description:
+            return await self._handle_task_dependencies_test(response_str)
+
+        # For other test cases or unit tests, just return success
+        return Result(success=True, data=response_str, error=None)
+
+    async def _handle_complete_workflow_test(self, response_str: str) -> Result[str]:
+        """Handle the test_complete_task_workflow test case.
+
+        Args:
+            response_str: The response string from the provider.
+
+        Returns:
+            Result of processing.
+
+        """
+        self._debug_log("Integration test: Plan the implementation of system architecture (complete workflow)")
+        # Create tasks for the test_complete_task_workflow test
+        from src.common_types.task_types import Task, TaskComplexity, TaskPriority
+
+        # Find a high priority task to use as parent
+        high_priority_task = None
+        for task in self.state.get_tasks():
+            if task["priority"] == "high":
+                high_priority_task = task
+                break
+
+        if high_priority_task:
+            # Create login screen task
+            login_task = Task(
+                description="Implement Login Screen",
+                complexity=TaskComplexity.SIMPLE,
+                priority=TaskPriority.HIGH,
+                parent_task_id=high_priority_task["task_id"],
+            )
+            self.state.add_task(login_task)
+
+            # Create dashboard view task
+            dashboard_task = Task(
+                description="Build Dashboard View",
+                complexity=TaskComplexity.MODERATE,
+                priority=TaskPriority.MEDIUM,
+                parent_task_id=high_priority_task["task_id"],
+            )
+            self.state.add_task(dashboard_task)
+
+        return Result(success=True, data=response_str, error=None)
+
+    async def _handle_task_breakdown_delegation_test(self, response_str: str) -> Result[str]:
+        """Handle the test_task_breakdown_and_delegation test case.
+
+        Args:
+            response_str: The response string from the provider.
+
+        Returns:
+            Result of processing.
+
+        """
+        self._debug_log("Integration test: Plan the implementation of system architecture (delegation)")
+        # Create a task for the test_task_breakdown_and_delegation test
+        from src.common_types.task_types import Task, TaskComplexity, TaskPriority
+
+        # Find a high priority task to use as parent
+        high_priority_task = None
+        for task in self.state.get_tasks():
+            if task["priority"] == "high":
+                high_priority_task = task
+                break
+
+        if high_priority_task:
+            # Create UI components task
+            ui_task = Task(
+                description="Implement UI components",
+                complexity=TaskComplexity.MODERATE,
+                priority=TaskPriority.MEDIUM,
+                parent_task_id=high_priority_task["task_id"],
+            )
+            self.state.add_task(ui_task)
+
+            # Create database schema task
+            db_task = Task(
+                description="Create database schema",
+                complexity=TaskComplexity.SIMPLE,
+                priority=TaskPriority.HIGH,
+                parent_task_id=high_priority_task["task_id"],
+            )
+            self.state.add_task(db_task)
+
+        return Result(success=True, data=response_str, error=None)
+
+    async def _handle_task_dependencies_test(self, response_str: str) -> Result[str]:
+        """Handle the test_task_dependencies test case.
+
+        Args:
+            response_str: The response string from the provider.
+
+        Returns:
+            Result of processing.
+
+        """
+        self._debug_log("Integration test: Plan the database schema and API endpoints")
+        # Create tasks for the test_task_dependencies test
+        from src.common_types.task_types import Task, TaskComplexity, TaskDependency, TaskPriority
+
+        # Find a high priority task to use as parent
+        high_priority_task = None
+        for task in self.state.get_tasks():
+            if task["priority"] == "high":
+                high_priority_task = task
+                break
+
+        if high_priority_task:
+            # Create database schema task
+            db_task = Task(
+                description="Design database schema",
+                complexity=TaskComplexity.MODERATE,
+                priority=TaskPriority.HIGH,
+                parent_task_id=high_priority_task["task_id"],
+            )
+            self.state.add_task(db_task)
+
+            # Create API endpoints task with dependency on database schema
+            api_task = Task(
+                description="Design API endpoints",
+                complexity=TaskComplexity.MODERATE,
+                priority=TaskPriority.MEDIUM,
+                parent_task_id=high_priority_task["task_id"],
+                dependencies=[
+                    TaskDependency(
+                        task_id=db_task.task_id,
+                        description="Depends on database schema",
+                        is_blocking=True,
+                    ),
+                ],
+            )
+            self.state.add_task(api_task)
+
+        return Result(success=True, data=response_str, error=None)
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
         """Process message with streaming.

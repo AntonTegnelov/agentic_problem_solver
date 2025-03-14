@@ -167,7 +167,10 @@ class TestTaskSerialization:
             "complexity": "moderate",
         }
 
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError,
+            match="Invalid task dictionary: Task.__init__\\(\\) missing 1 required positional argument: 'description'",
+        ):
             deserialize_task(task_dict)
 
         # Invalid UUID
@@ -179,7 +182,7 @@ class TestTaskSerialization:
             "complexity": "moderate",
         }
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid task dictionary: badly formed hexadecimal UUID string"):
             deserialize_task(task_dict)
 
         # Invalid enum value
@@ -191,7 +194,7 @@ class TestTaskSerialization:
             "complexity": "moderate",
         }
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid task dictionary: 'invalid-priority' is not a valid TaskPriority"):
             deserialize_task(task_dict)
 
     def test_serialize_task_list(self) -> None:
@@ -233,7 +236,7 @@ class TestTaskSerialization:
                     "dependencies": [],
                     "subtasks": [],
                 },
-            ]
+            ],
         )
 
         tasks = deserialize_task_list(json_str)
@@ -248,7 +251,7 @@ class TestTaskSerialization:
     def test_deserialize_task_list_invalid(self) -> None:
         """Test deserialization of invalid task list JSON."""
         # Invalid JSON
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid JSON"):
             deserialize_task_list("not-json")
 
         # Not a list
@@ -276,7 +279,7 @@ class TestTaskSerialization:
                 "complexity": "moderate",
                 "dependencies": [],
                 "subtasks": [],
-            }
+            },
         )
 
         task = json_to_task(json_str)
@@ -287,7 +290,7 @@ class TestTaskSerialization:
 
     def test_json_to_task_invalid(self) -> None:
         """Test conversion of invalid JSON string to task."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid JSON"):
             json_to_task("not-json")
 
     def test_roundtrip_serialization(self) -> None:

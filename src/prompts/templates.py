@@ -17,6 +17,12 @@ MIN_UNDERSTANDING_LENGTH = 100  # Minimum length for understanding step
 MIN_PLAN_LENGTH = 100  # Minimum length for plan step
 MIN_VERIFY_LENGTH = 100
 
+# Constants
+MAX_STRING_LENGTH = 5000
+MAX_CONTEXT_LENGTH = 1000
+TRUNCATED_STRING_LENGTH = 500
+TRUNCATED_CONTEXT_LENGTH = 200
+
 # System prompts
 SYSTEM_PROMPT = """You are an AI agent tasked with solving programming problems.
 Your goal is to understand the problem, create a plan, and implement a solution.
@@ -122,6 +128,8 @@ ARCHITECTURAL_BREAKDOWN_PROMPT = """You are an ARCHITECT agent responsible for h
 design and task decomposition.
 
 Task Description: {task_description}
+Complexity: {complexity}
+Priority: {priority}
 
 Please analyze this task and break it down into major architectural components following these guidelines:
 
@@ -148,23 +156,14 @@ Format your response as a JSON array of components with the following structure:
 [
   {{
     "description": "Component description",
-    "purpose": "Component purpose and responsibilities",
-    "interfaces": ["Interface 1", "Interface 2"],
     "complexity": "simple|moderate|complex|very_complex",
-    "priority": "low|medium|high|critical",
-    "dependencies": [
-      {{
-        "component_index": 0,
-        "description": "Dependency description",
-        "is_blocking": true|false
-      }}
-    ]
+    "priority": "low|medium|high|critical"
   }},
   // Additional components...
 ]
 ```
 
-Ensure that the dependencies reference other components in the list by their index (0-based).
+Ensure your breakdown is comprehensive and addresses all aspects of the task.
 {context}
 """
 
@@ -477,17 +476,116 @@ ROLE_PROMPTS = {
 SPECIALIZED_ROLE_PROMPTS = {
     AgentRole.ARCHITECT: {
         "system_design": ARCHITECT_SYSTEM_DESIGN_PROMPT,
-        "breakdown": ARCHITECTURAL_BREAKDOWN_PROMPT,
+        "breakdown": """You are an ARCHITECT agent responsible for high-level system \
+design and task decomposition.
+
+Task Description: {task_description}
+Complexity: {complexity}
+Priority: {priority}
+
+Please analyze this task and break it down into major architectural components following these guidelines:
+
+1. Identify the key components or subsystems needed
+2. Define clear interfaces between components
+3. Consider system-level design patterns and principles
+4. Establish data flow between components
+5. Identify potential technical challenges
+6. Consider scalability, maintainability, and extensibility
+7. Determine appropriate technologies and frameworks
+8. Establish naming conventions and architectural standards
+
+For each component, provide:
+- A clear description
+- Its purpose and responsibilities
+- Key interfaces with other components
+- Estimated complexity (simple, moderate, complex, very_complex)
+- Priority (low, medium, high, critical)
+- Any dependencies on other components
+
+Format your response as a JSON array of components with the following structure:
+
+```json
+[
+  {{
+    "description": "Component description",
+    "complexity": "simple|moderate|complex|very_complex",
+    "priority": "low|medium|high|critical"
+  }},
+  // Additional components...
+]
+```
+
+Ensure your breakdown is comprehensive and addresses all aspects of the task.
+{context}
+""",
     },
     AgentRole.PLANNER: {
         "task_refinement": PLANNER_TASK_REFINEMENT_PROMPT,
         "planning": PLANNING_PROMPT,
+        "breakdown": """You are a PLANNER agent specializing in task refinement and planning.
+Your role is to break down components into well-defined, implementable tasks.
+
+Task Description: {task_description}
+Complexity: {complexity}
+Priority: {priority}
+
+Please break down this task into specific, implementable subtasks:
+
+1. Identify the key implementation steps
+2. Break down complex operations into simpler tasks
+3. Define clear acceptance criteria for each subtask
+4. Consider dependencies between subtasks
+5. Prioritize subtasks based on importance and dependencies
+
+Return your breakdown as a JSON array of task objects with the following structure:
+```json
+[
+  {{
+    "description": "Subtask description",
+    "complexity": "simple|moderate|complex",
+    "priority": "low|medium|high|critical"
+  }},
+  // Additional subtasks...
+]
+```
+
+Ensure your breakdown is detailed and actionable.
+{context}
+""",
     },
     AgentRole.EXECUTOR: {
         "implementation": EXECUTOR_IMPLEMENTATION_PROMPT,
-        "execution": EXECUTION_PROMPT,
+        "breakdown": """You are an EXECUTOR agent specializing in code implementation.
+Your role is to break down implementation tasks into specific coding tasks.
+
+Task Description: {task_description}
+Complexity: {complexity}
+Priority: {priority}
+
+Please break down this implementation task into specific coding tasks:
+
+1. Identify the key functions or methods needed
+2. Define data structures and interfaces
+3. Specify error handling and edge cases
+4. Consider testing requirements
+5. Prioritize implementation steps
+
+Return your breakdown as a JSON array of task objects with the following structure:
+```json
+[
+  {{
+    "description": "Coding task description",
+    "complexity": "simple|moderate|complex",
+    "priority": "low|medium|high|critical"
+  }},
+  // Additional coding tasks...
+]
+```
+
+Ensure your breakdown is specific and focused on implementation details.
+{context}
+""",
     },
-    # Other specialized prompts will be added here
 }
 
 STEP_PROMPTS = {
@@ -617,6 +715,12 @@ def get_role_prompt(role: AgentRole, **kwargs: dict[str, Any]) -> str:
         for key, value in context_data.items():
             context_str += f"- {key}: {value}\n"
 
+    # Add default values for complexity and priority if not provided
+    if role == AgentRole.ARCHITECT and "complexity" not in kwargs:
+        kwargs["complexity"] = "moderate"
+    if role == AgentRole.ARCHITECT and "priority" not in kwargs:
+        kwargs["priority"] = "medium"
+
     # Format the prompt with provided kwargs and context
     return prompt.format(context=context_str, **kwargs)
 
@@ -648,16 +752,57 @@ def get_specialized_role_prompt(role: AgentRole, prompt_type: str, **kwargs: dic
 
     prompt = SPECIALIZED_ROLE_PROMPTS[role][prompt_type]
 
-    # Get additional context
-    context_data = kwargs.pop("context", {})
-    context_str = ""
-    if context_data:
-        context_str = "\nAdditional Context:\n"
-        for key, value in context_data.items():
-            context_str += f"- {key}: {value}\n"
+    # Add default values for complexity and priority if not provided
+    if role == AgentRole.ARCHITECT and prompt_type == "breakdown":
+        if "complexity" not in kwargs:
+            kwargs["complexity"] = "moderate"
+        if "priority" not in kwargs:
+            kwargs["priority"] = "medium"
 
-    # Format the prompt with provided kwargs and context
-    return prompt.format(context=context_str, **kwargs)
+    # Sanitize kwargs and prepare context
+    sanitized_kwargs, context_str = _prepare_prompt_kwargs_and_context(kwargs)
+
+    # Format the prompt with sanitized kwargs and context
+    try:
+        return prompt.format(context=context_str, **sanitized_kwargs)
+    except KeyError as e:
+        msg = f"Missing required key in prompt template: {e}"
+        raise ConfigError(msg) from e
+
+
+def _prepare_prompt_kwargs_and_context(kwargs: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Prepare sanitized kwargs and context string for prompt formatting.
+
+    Args:
+        kwargs: Original kwargs dictionary.
+
+    Returns:
+        Tuple of (sanitized_kwargs, context_str).
+
+    """
+    # Sanitize kwargs to prevent very long strings
+    sanitized_kwargs = {}
+    for key, value in kwargs.items():
+        if isinstance(value, str) and len(value) > MAX_STRING_LENGTH:  # If string is very long
+            sanitized_kwargs[key] = value[:TRUNCATED_STRING_LENGTH] + "... [truncated for brevity]"
+        else:
+            sanitized_kwargs[key] = value
+
+    # Initialize context_str as empty string
+    context_str = ""
+
+    # Add context data if provided
+    if "context" in sanitized_kwargs:
+        context_data = sanitized_kwargs.pop("context")
+        context_str = "\n\nContext:\n"
+        for key, value in context_data.items():
+            # Further truncate long context values
+            if isinstance(value, str) and len(value) > MAX_CONTEXT_LENGTH:
+                context_str += f"- {key}: {value[:TRUNCATED_CONTEXT_LENGTH]}... [truncated]\n"
+            else:
+                context_str += f"- {key}: {value}\n"
+
+    return sanitized_kwargs, context_str
 
 
 def validate_step_result(

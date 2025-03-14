@@ -28,9 +28,42 @@
   - [x] Add dependency tracking functionality in `src/agent/state/base.py` to manage task relationships
   - [x] Create task serialization utilities in `src/utils/serialization.py` for task interchange between agents
   - [x] Create unit tests in `tests/unit/test_task_breakdown.py` to verify breakdown functionality
-  - [ ] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
+  - [x] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
   - [ ] Update documentation in `docs/howto/task_breakdown.md` with usage examples
   - [ ] Ensure CI/CD pipeline validates the new functionality
+
+- implement a safe migration path from SolverAgent to the hierarchical agent system
+
+  - [ ] Create migration documentation in `docs/howto/migration.md`
+    - [ ] Outline a clear, step-by-step migration path for users
+    - [ ] Document API differences between SolverAgent and hierarchical system
+    - [ ] Include a checklist for verifying successful migration
+  - [ ] Transition solver agent into a temporary compatibility Layer
+    - [ ] Identify all references to SolverAgent in the codebase
+    - [ ] Add appropriate deprecation warnings throughout the codebase
+    - [ ] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
+  - [ ] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
+    - [ ] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
+  - [ ] Update examples to show new approach
+    - [ ] Annotate existing examples with deprecation notices if they no longer apply
+    - [ ] Create parallel examples showing the new hierarchical approach where it differs
+  - [ ] Update CLI code to use hierarchical agents
+    - [ ] Identify all CLI dependencies on SolverAgent
+    - [ ] Incrementally update each reference (+corresponding tests), testing between changes
+    - [ ] Ensure backward compatibility during transition
+  - [ ] Plan for eventual removal of SolverAgent
+    - [ ] Ensure all documentation is updated to focus on hierarchical system
+    - [ ] Verify that nothing uses the SolverAgent implementation anymore
+    - [ ] Remove SolverAgent implementation completely
+    - [ ] Verify all tests pass with SolverAgent removed
+  - [ ] Update documentation
+    - [ ] remove all deprecated examples
+    - [ ] Remove all traces of SolverAgent in the documentation to avoid confusion
+  - [ ] Update CLI
+    - [ ] Remove any backward compatibility still left
+    - [ ] Review the codebase.
+    - [ ] Analyzse the migration to see if it left any undesireable traces.
+    - [ ] Run tests and linter
 
 - enable flexible delegation paths between agent types
 

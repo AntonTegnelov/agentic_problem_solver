@@ -13,6 +13,11 @@ import pytest
 
 from src.cli.main import cli
 
+# DEPRECATED: The CLI currently uses SolverAgent which is deprecated.
+# These tests will need to be updated when the CLI is migrated to use
+# the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent).
+# See docs/explanation/hierarchical_agents.md for more information.
+
 
 @pytest.fixture
 def mock_env_vars() -> Generator[None, None, None]:
@@ -48,26 +53,34 @@ def test_cli_solve_command_installed() -> None:
 
 @patch("src.cli.main.SolverAgent")
 def test_cli_solve_command_execution(mock_solver_agent: MagicMock) -> None:
-    """Test that the APS solve command executes correctly with mocked dependencies."""
-    from click.testing import CliRunner
+    """Test the 'solve' command execution with mocked SolverAgent.
 
-    # Set up the mock
-    mock_agent_instance = mock_solver_agent.return_value
-    mock_agent_instance.process.return_value = "Task solution"
+    DEPRECATED: This test mocks the deprecated SolverAgent and will need to be
+    updated when the CLI is migrated to use the hierarchical agent system.
+    """
+    # Setup mock
+    instance = mock_solver_agent.return_value
+    instance.process.return_value = "Mocked response"
 
     # Create a CLI runner
+    from click.testing import CliRunner
+
     runner = CliRunner()
 
     # Run the command
-    result = runner.invoke(cli, ["solve", "Create a simple calculator"])
+    result = runner.invoke(cli, ["solve", "Test prompt"])
 
-    # Check that the command executed successfully
-    assert result.exit_code == 0
+    # Verify the command executed successfully
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
 
-    # Check that the agent was called with the correct task
-    mock_agent_instance.process.assert_called_once()
-    args, _ = mock_agent_instance.process.call_args
-    assert "Create a simple calculator" in args[0]
+    # Verify the SolverAgent was created with the right parameters
+    mock_solver_agent.assert_called_once()
+
+    # Verify the agent's process method was called
+    instance.process.assert_called_once_with("Test prompt")
+
+    # Check that the output contains our mocked response
+    assert "Mocked response" in result.output
 
 
 @pytest.mark.skipif(
@@ -75,29 +88,21 @@ def test_cli_solve_command_execution(mock_solver_agent: MagicMock) -> None:
     reason="API keys not available",
 )
 def test_cli_solve_command_real_execution() -> None:
-    """Test the APS solve command with real execution (requires API keys)."""
-    # This test will be skipped if API keys are not available
+    """Test the 'solve' command with real execution.
 
-    # Use a simple task that should complete quickly
-    task = "What is 2+2?"
+    DEPRECATED: This test uses the deprecated SolverAgent indirectly through the CLI
+    and will need to be updated when the CLI is migrated to use the hierarchical agent system.
+    """
+    # Create a CLI runner
+    from click.testing import CliRunner
 
-    try:
-        # Run the command through the CLI
-        result = subprocess.run(
-            ["python", "-m", "src", "solve", task],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,  # Set a timeout to avoid hanging tests
-        )
+    runner = CliRunner()
 
-        # Check that the command executed successfully
-        assert result.returncode == 0, f"Command failed with error: {result.stderr}"
+    # Run the command with a simple prompt
+    result = runner.invoke(cli, ["solve", "What is 2+2?"])
 
-        # Check that we got some output
-        assert result.stdout.strip(), "No output was returned from the command"
+    # Verify the command executed successfully
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
 
-    except subprocess.TimeoutExpired:
-        pytest.fail("Command timed out")
-    except Exception as e:
-        pytest.fail(f"Command failed with exception: {e}")
+    # Check that the output contains a reasonable response
+    assert "4" in result.output or "four" in result.output.lower()

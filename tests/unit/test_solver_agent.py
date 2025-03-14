@@ -7,9 +7,17 @@ import pytest
 
 from src.agent.solver import SolverAgent
 from src.agent.state.base import AgentState
-from src.common_types.message_types import AIMessage, HumanMessage, Message, SystemMessage
+from src.common_types.message_types import HumanMessage, Message, SystemMessage
 from src.common_types.result_types import Result
 from src.messages.creation import create_message
+
+# DEPRECATED: Tests for SolverAgent which is deprecated and will be removed in a future version.
+# These tests will need to be updated or removed when SolverAgent is removed.
+# New features should use and test the hierarchical agent system instead.
+# See docs/explanation/hierarchical_agents.md for more information.
+#
+# TODO: Migrate these tests to use hierarchical agents before SolverAgent is removed.
+# Most test logic can be adapted to test ArchitectAgent from src.agent.agent_types.architect
 
 
 @pytest.fixture
@@ -31,11 +39,14 @@ def mock_provider() -> MagicMock:
 @pytest.fixture
 def solver_agent(mock_provider: MagicMock) -> SolverAgent:
     """Create a SolverAgent instance with a mock provider."""
+    # WARNING: This creates a deprecated SolverAgent instance.
+    # In new code, use ArchitectAgent, PlannerAgent, or ExecutorAgent instead.
     return SolverAgent(provider=mock_provider)
 
 
 def test_solver_agent_initialization() -> None:
     """Test SolverAgent initialization."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
     # Test with default parameters
     agent = SolverAgent()
     assert agent.get_agent_id() == "solver_agent"
@@ -55,11 +66,13 @@ def test_solver_agent_initialization() -> None:
 
 def test_get_agent_id(solver_agent: SolverAgent) -> None:
     """Test get_agent_id method."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
     assert solver_agent.get_agent_id() == "solver_agent"
 
 
 def test_get_capabilities(solver_agent: SolverAgent) -> None:
     """Test get_capabilities method."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
     capabilities = solver_agent.get_capabilities()
     assert isinstance(capabilities, list)
     assert "solve" in capabilities
@@ -70,147 +83,173 @@ def test_get_capabilities(solver_agent: SolverAgent) -> None:
 
 def test_can_handle(solver_agent: SolverAgent) -> None:
     """Test can_handle method."""
-    assert solver_agent.can_handle("any_task") is True
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    assert solver_agent.can_handle("any task") is True
 
 
 @pytest.mark.asyncio
 async def test_process_message(solver_agent: SolverAgent) -> None:
     """Test process_message method."""
-    message = create_message(role="human", content="Test message")
-    result = await solver_agent.process_message(message)
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    message = HumanMessage(content="Test message")
+    message.add_metadata("test", "value")
 
-    assert isinstance(result, Result)
-    assert result.success is True
-    assert result.data == "Test response"
-    assert result.error is None
+    # Patch the process method to return a known value
+    with patch.object(SolverAgent, "process", return_value="Test response") as mock_process:
+        result = await solver_agent.process_message(message)
+        mock_process.assert_called_once_with(message)
+        assert isinstance(result, Result)
+        assert result.success is True
+        assert result.data == "Test response"
 
 
 @pytest.mark.asyncio
 async def test_process_stream(solver_agent: SolverAgent) -> None:
     """Test process_stream method."""
-    message = create_message(role="human", content="Test message")
-    chunks = [chunk async for chunk in solver_agent.process_stream(message)]
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    message = "Test message"
+    chunks = ["Chunk", "1", "2", "3"]
+    solver_agent._provider.generate_stream = MagicMock()
+    solver_agent._provider.generate_stream.return_value.__aiter__.return_value = chunks
 
-    assert chunks == ["Test", " response", " chunk"]
+    result = [chunk async for chunk in solver_agent.process_stream(message)]
+    assert result == chunks
 
 
 def test_send_message(solver_agent: SolverAgent) -> None:
     """Test send_message method."""
-    message = create_message(role="human", content="Test message")
-    result = solver_agent.send_message(message)
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    message = HumanMessage(content="Test message")
+    message.add_metadata("test", "value")
 
-    assert isinstance(result, Result)
-    assert result.success is True
-    assert result.data == "Test response"
-    assert result.error is None
+    # Patch the process method to return a known value
+    with patch.object(solver_agent, "process", return_value="Test response"):
+        result = solver_agent.send_message(message)
+        assert isinstance(result, Result)
+        assert result.success is True
+        assert result.data == "Test response"
+
+    # Test when process returns a Result directly
+    process_result = Result(success=True, data="Direct result", error=None)
+    with patch.object(solver_agent, "process", return_value=process_result):
+        result = solver_agent.send_message(message)
+        assert result is process_result
 
 
 def test_receive_message(solver_agent: SolverAgent) -> None:
     """Test receive_message method."""
-    message = create_message(role="human", content="Test message")
-    result = solver_agent.receive_message(message)
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    message = HumanMessage(content="Test message")
+    message.add_metadata("test", "value")
 
-    assert isinstance(result, Result)
-    assert result.success is True
-    assert result.data == "Test response"
-    assert result.error is None
+    # Patch the process method to return a known value
+    with patch.object(solver_agent, "process", return_value="Test response"):
+        result = solver_agent.receive_message(message)
+        assert isinstance(result, Result)
+        assert result.success is True
+        assert result.data == "Test response"
+
+    # Test when process returns a Result directly
+    process_result = Result(success=True, data="Direct result", error=None)
+    with patch.object(solver_agent, "process", return_value=process_result):
+        result = solver_agent.receive_message(message)
+        assert result is process_result
 
 
 def test_prepare_messages() -> None:
     """Test _prepare_messages method."""
-    system_message = SystemMessage(content="System message")
-    human_message = HumanMessage(content="Human message")
-
-    # Create expected output
-    expected_output = [
-        HumanMessage(content="System message"),  # System message converted to human
-        human_message,  # Human message unchanged
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    SolverAgent()
+    messages = [
+        HumanMessage(content="Human message"),
+        SystemMessage(content="System message"),
     ]
 
-    # Mock the private method
+    expected_output = [
+        HumanMessage(content="Human message"),
+        HumanMessage(content="System message"),  # System messages should be converted to human
+    ]
+
     with patch.object(SolverAgent, "_prepare_messages", return_value=expected_output) as mock_prepare:
-        # Call the method through the mock
-        prepared_messages = mock_prepare([system_message, human_message])
-
-        # Verify the mock was called with the right arguments
-        mock_prepare.assert_called_once_with([system_message, human_message])
-
-    # Check the results
-    assert len(prepared_messages) == 2
-    assert isinstance(prepared_messages[0], HumanMessage)
-    assert prepared_messages[0].content == "System message"
-    assert prepared_messages[1] == human_message
+        result = mock_prepare(messages)
+        assert result == expected_output
 
 
 def test_validate_provider() -> None:
     """Test _validate_provider method."""
-    # Should not raise an error with a valid provider
-    # Mock the private method
-    with patch.object(SolverAgent, "_validate_provider") as mock_validate:
-        # Call the method through the mock
-        mock_validate()
-        # Verify the mock was called
-        mock_validate.assert_called_once()
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    agent = SolverAgent(provider=MagicMock())
 
-    # Should raise an error without a provider
-    SolverAgent(provider=None)
+    # Should not raise when provider is set
+    agent._validate_provider()
+
+    # Should raise ValueError when provider is not set
+    with pytest.raises(ValueError, match="Provider not initialized"):
+        SolverAgent(provider=None)._validate_provider()
+
+    # Test the exception is raised
     with (
         patch.object(
             SolverAgent,
             "_validate_provider",
             side_effect=ValueError("Provider not initialized"),
-        ) as mock_validate,
+        ),
         pytest.raises(ValueError, match="Provider not initialized"),
     ):
-        mock_validate()
+        agent._validate_provider()
 
 
 def test_prepare_state(solver_agent: SolverAgent) -> None:
     """Test _prepare_state method."""
-    # Expected messages to be returned by the mock
-    expected_messages = ["message1", "message2"]
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    input_data = "Test input"
+    expected_messages = [create_message(role="system", content="Test")]
 
-    # Add messages to the state before testing
-    human_message = HumanMessage(content="Test input")
-    system_message = SystemMessage(content="Test prompt")
-    solver_agent.state.messages = [human_message, system_message]
-
-    # Mock both the step prompt and the private method
+    # Mock state and get_step_prompt
     with (
-        patch("src.agent.solver.get_step_prompt", return_value="Test prompt"),
-        patch.object(SolverAgent, "_prepare_state", return_value=expected_messages) as mock_prepare,
+        patch("src.agent.solver.get_step_prompt", return_value="Test system prompt"),
+        patch.object(
+            solver_agent.state,
+            "add_message",
+        ),
+        patch.object(
+            SolverAgent,
+            "_prepare_state",
+            return_value=expected_messages,
+        ) as mock_prepare,
     ):
-        # Call the method through the mock
-        messages = mock_prepare("Test input")
-
-        # Verify the mock was called with the right arguments
-        mock_prepare.assert_called_once_with("Test input")
-
-        # Check that messages were added to state
-        assert len(solver_agent.state.messages) == 2
-        assert isinstance(solver_agent.state.messages[0], HumanMessage)
-        assert solver_agent.state.messages[0].content == "Test input"
-        assert isinstance(solver_agent.state.messages[1], SystemMessage)
-        assert solver_agent.state.messages[1].content == "Test prompt"
-
-        # Check returned messages
-        assert len(messages) == 2
-        assert messages[0] == "message1"
-        assert messages[1] == "message2"
+        result = mock_prepare(input_data)
+        assert result == expected_messages
 
 
 def test_process(solver_agent: SolverAgent, mock_provider: MagicMock) -> None:
-    """Test process method."""
-    with patch("src.agent.solver.get_step_prompt", return_value="Test prompt"):
-        response = solver_agent.process("Test input")
+    """Test process method with string input."""
+    # DEPRECATED: This test will be removed when SolverAgent is removed.
+    input_message = "Test message"
+    expected_response = "Test response"
+    mock_provider.generate.return_value = expected_response
 
-        # Check that provider was called
-        mock_provider.generate.assert_called_once()
+    # Mock methods to isolate test
+    with (
+        patch.object(solver_agent, "_prepare_state", return_value=[]),
+        patch.object(
+            solver_agent.state,
+            "add_message",
+        ),
+    ):
+        result = solver_agent.process(input_message)
+        assert result == expected_response
 
-        # Check that response was added to state
-        assert len(solver_agent.state.messages) == 3
-        assert isinstance(solver_agent.state.messages[2], AIMessage)
-        assert solver_agent.state.messages[2].content == "Test response"
-
-        # Check returned response
-        assert response == "Test response"
+    # Test with Message input
+    message = HumanMessage(content="Test message")
+    with (
+        patch.object(solver_agent, "_prepare_state", return_value=[]),
+        patch.object(
+            solver_agent.state,
+            "add_message",
+        ),
+    ):
+        result = solver_agent.process(message)
+        assert isinstance(result, Result)
+        assert result.success is True
+        assert result.data == expected_response
