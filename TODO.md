@@ -29,7 +29,7 @@
   - [x] Create task serialization utilities in `src/utils/serialization.py` for task interchange between agents
   - [x] Create unit tests in `tests/unit/test_task_breakdown.py` to verify breakdown functionality
   - [x] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
-  - [ ] Update documentation in `docs/howto/task_breakdown.md` with usage examples
+  - [x] Update documentation in `docs/howto/task_breakdown.md` with usage examples
   - [ ] Ensure CI/CD pipeline validates the new functionality
 
 - implement a safe migration path from SolverAgent to the hierarchical agent system
