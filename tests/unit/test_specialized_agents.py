@@ -1,7 +1,7 @@
 """Unit tests for specialized agent types."""
 
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages.base import BaseMessage
@@ -193,7 +193,7 @@ class TestArchitectAgent:
         simple_result = architect_agent.analyze_task_complexity(simple_task)
         assert isinstance(simple_result, TaskComplexity)
 
-        # Test that clearly more complex tasks receive higher complexity ratings
+        # Test the rule-based approach directly
         simple_task = "Create a simple function to add two numbers."
         complex_task = (
             "Create a module with multiple files for user management. "
@@ -206,9 +206,10 @@ class TestArchitectAgent:
             "and user management."
         )
 
-        simple_complexity = architect_agent.analyze_task_complexity(simple_task)
-        complex_complexity = architect_agent.analyze_task_complexity(complex_task)
-        very_complex_complexity = architect_agent.analyze_task_complexity(very_complex_task)
+        # Test rule-based approach directly
+        simple_complexity = architect_agent._analyze_task_complexity_rule_based(simple_task)
+        complex_complexity = architect_agent._analyze_task_complexity_rule_based(complex_task)
+        very_complex_complexity = architect_agent._analyze_task_complexity_rule_based(very_complex_task)
 
         # Test that complexity increases with task complexity
         # We don't assert exact values, just the relative ordering
@@ -221,6 +222,68 @@ class TestArchitectAgent:
 
         assert complexity_values[simple_complexity] <= complexity_values[complex_complexity]
         assert complexity_values[complex_complexity] <= complexity_values[very_complex_complexity]
+
+    def test_analyze_task_complexity_with_llm(self, architect_agent: ArchitectAgent, mock_provider: MagicMock) -> None:
+        """Test analyze_task_complexity method with LLM provider."""
+
+        # Create a mock for the _get_llm_response method
+        async def mock_get_llm_response_simple(*args, **kwargs) -> str:
+            return "simple"
+
+        async def mock_get_llm_response_moderate(*args, **kwargs) -> str:
+            return "moderate"
+
+        async def mock_get_llm_response_complex(*args, **kwargs) -> str:
+            return "complex"
+
+        async def mock_get_llm_response_very_complex(*args, **kwargs) -> str:
+            return "very complex"
+
+        async def mock_get_llm_response_invalid(*args, **kwargs) -> str:
+            return "Invalid response"
+
+        # Test simple task
+        with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_simple):
+            simple_task = "Create a simple function to add two numbers."
+            simple_result = architect_agent._analyze_task_complexity_with_llm(simple_task)
+            assert simple_result == TaskComplexity.SIMPLE
+
+        # Test moderate task
+        with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_moderate):
+            moderate_task = "Create a module with a few classes."
+            moderate_result = architect_agent._analyze_task_complexity_with_llm(moderate_task)
+            assert moderate_result == TaskComplexity.MODERATE
+
+        # Test complex task
+        with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_complex):
+            complex_task = "Design a system for user authentication."
+            complex_result = architect_agent._analyze_task_complexity_with_llm(complex_task)
+            assert complex_result == TaskComplexity.COMPLEX
+
+        # Test very complex task
+        with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_very_complex):
+            very_complex_task = "Create a distributed microservices architecture."
+            very_complex_result = architect_agent._analyze_task_complexity_with_llm(very_complex_task)
+            assert very_complex_result == TaskComplexity.VERY_COMPLEX
+
+        # Test invalid response (should default to MODERATE)
+        with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_invalid):
+            invalid_task = "This will return an invalid response."
+            invalid_result = architect_agent._analyze_task_complexity_with_llm(invalid_task)
+            assert invalid_result == TaskComplexity.MODERATE
+
+    def test_analyze_task_complexity_fallback(self, architect_agent: ArchitectAgent, mock_provider: MagicMock) -> None:
+        """Test analyze_task_complexity method with fallback to rule-based approach."""
+        # Make the LLM approach raise an exception to trigger fallback
+        mock_provider.generate.side_effect = ValueError("Test exception")
+
+        # Create a simple task
+        simple_task = "Create a simple function to add two numbers."
+
+        # Mock the rule-based approach to return a known value
+        with patch.object(architect_agent, "_analyze_task_complexity_rule_based", return_value=TaskComplexity.SIMPLE):
+            result = architect_agent.analyze_task_complexity(simple_task)
+            assert result == TaskComplexity.SIMPLE
 
     def test_validate_provider(self) -> None:
         """Test _validate_provider method."""
