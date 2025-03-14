@@ -33,6 +33,7 @@ ENV/
 
 # Project specific
 .env
+logs/
 .log
 agent.log
 agent_memory/
