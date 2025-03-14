@@ -41,6 +41,7 @@ Examples:
 
 """
 
+import asyncio
 import sys
 
 from src.cli.main import cli
@@ -148,8 +149,53 @@ def main() -> None:
     cli()
 
 
+async def hierarchical_agent_example_async() -> None:
+    """Use the hierarchical agent system directly with async/await.
+
+    This example demonstrates how to use the hierarchical agent system
+    instead of the deprecated SolverAgent with proper async/await syntax.
+    """
+    import os
+
+    from src.agent.agent_types import create_architect_agent
+    from src.agent.state.base import InMemoryStateManager
+    from src.llm_providers.config.provider_config import GeminiConfig
+    from src.llm_providers.providers.gemini import GeminiProvider
+    from src.messages.creation import create_message
+
+    # Set up the provider with your API key
+    api_key = os.environ.get("GEMINI_API_KEY")
+    provider_config = GeminiConfig(
+        api_key=api_key,
+        model="gemini-2.0-pro",
+    )
+    provider = GeminiProvider(config=provider_config)
+
+    # Create the state manager and architect agent
+    state_manager = InMemoryStateManager()
+    agent = create_architect_agent(
+        provider=provider,
+        state_manager=state_manager,
+    )
+
+    # Process a task
+    message = create_message(
+        role="human",
+        content="Write a function to calculate the factorial of a number in Python.",
+    )
+
+    # Process the message with the agent
+    result = await agent.process(message)
+
+    # Check if the processing was successful
+    if result.success:
+        pass
+    else:
+        pass
+
+
 def hierarchical_agent_example() -> None:
-    """Example of using the hierarchical agent system directly.
+    """Use the hierarchical agent system directly.
 
     This example demonstrates how to use the hierarchical agent system
     instead of the deprecated SolverAgent.
@@ -179,17 +225,31 @@ def hierarchical_agent_example() -> None:
 
     # Create the state manager and architect agent
     state_manager = InMemoryStateManager()
-    create_architect_agent(
+    agent = create_architect_agent(
         provider=provider,
         state_manager=state_manager,
     )
 
     # Process a task
-    create_message(role="human", content="Write a function to calculate the factorial of a number in Python.")
+    message = create_message(
+        role="human",
+        content="Write a function to calculate the factorial of a number in Python.",
+    )
 
-    # Note: This is an async function, so in a real application you would use:
-    # result = await agent.process(message)
-    # print(result.data)
+    # Since this is a synchronous function but the agent.process is async,
+    # we need to run it in an event loop
+    try:
+        # For Python 3.7+
+        result = asyncio.run(agent.process(message))
+
+        # Check if the processing was successful
+        if result.success:
+            pass
+        else:
+            pass
+    except RuntimeError:
+        # If already running in an event loop
+        pass
 
 
 if __name__ == "__main__":
