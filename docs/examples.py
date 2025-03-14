@@ -2,15 +2,6 @@
 
 This module demonstrates common usage patterns for the CLI interface.
 
-> **⚠️ DEPRECATION NOTICE:**
->
-> The underlying implementation of this CLI currently uses the deprecated `SolverAgent` class.
-> In future versions, it will be updated to use the hierarchical agent system.
-> The CLI interface will remain stable, but if you're using the API directly,
-> you should migrate to using the hierarchical agent system.
->
-> See the [Hierarchical Agent System](./explanation/hierarchical_agents.md) documentation for more information.
-
 Examples:
     >>> from src.cli.main import cli
     >>> from click.testing import CliRunner
@@ -153,7 +144,7 @@ async def hierarchical_agent_example_async() -> None:
     """Use the hierarchical agent system directly with async/await.
 
     This example demonstrates how to use the hierarchical agent system
-    instead of the deprecated SolverAgent with proper async/await syntax.
+    with proper async/await syntax.
     """
     import os
 
@@ -197,8 +188,7 @@ async def hierarchical_agent_example_async() -> None:
 def hierarchical_agent_example() -> None:
     """Use the hierarchical agent system directly.
 
-    This example demonstrates how to use the hierarchical agent system
-    instead of the deprecated SolverAgent.
+    This example demonstrates how to use the hierarchical agent system.
 
     Examples:
         >>> # This is a demonstration only and won't run in doctest
@@ -248,8 +238,76 @@ def hierarchical_agent_example() -> None:
         else:
             pass
     except RuntimeError:
-        # If already running in an event loop
-        pass
+        # If we're already in an event loop (e.g., in Jupyter notebook)
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(agent.process(message))
+
+        # Check if the processing was successful
+        if result.success:
+            pass
+        else:
+            pass
+
+
+def advanced_hierarchical_example() -> None:
+    """Use the hierarchical agent system with custom configuration.
+
+    This example demonstrates how to use the hierarchical agent system
+    with custom configuration options.
+    """
+    import os
+
+    from src.agent.agent_types import create_architect_agent
+    from src.agent.state.base import InMemoryStateManager
+    from src.config.agent_config import AgentConfig
+    from src.llm_providers.config.provider_config import GeminiConfig
+    from src.llm_providers.providers.gemini import GeminiProvider
+    from src.messages.creation import create_message
+
+    # Set up the provider with your API key and custom configuration
+    api_key = os.environ.get("GEMINI_API_KEY")
+    provider_config = GeminiConfig(
+        api_key=api_key,
+        model="gemini-2.0-pro",
+        temperature=0.7,
+        max_tokens=1000,
+    )
+    provider = GeminiProvider(config=provider_config)
+
+    # Create custom agent configuration
+    agent_config = AgentConfig(
+        max_tokens=1000,
+        temperature=0.7,
+    )
+
+    # Create the state manager and architect agent
+    state_manager = InMemoryStateManager()
+    agent = create_architect_agent(
+        provider=provider,
+        state_manager=state_manager,
+        config=agent_config,
+    )
+
+    # Process a task
+    message = create_message(
+        role="human",
+        content="Write a function to calculate the factorial of a number in Python.",
+    )
+
+    # Run the agent in an event loop
+    try:
+        result = asyncio.run(agent.process(message))
+        if result.success:
+            pass
+        else:
+            pass
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(agent.process(message))
+        if result.success:
+            pass
+        else:
+            pass
 
 
 if __name__ == "__main__":
