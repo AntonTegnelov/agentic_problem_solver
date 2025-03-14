@@ -22,6 +22,7 @@ def mock_provider() -> MagicMock:
     async def mock_generate(_messages: list[BaseMessage]) -> str:
         return "Test response"
 
+    # Create a proper async generator for streaming
     async def mock_stream(_messages: list[BaseMessage]) -> AsyncGenerator[str, None]:
         chunks = ["Mock", " stream", " response"]
         for chunk in chunks:
@@ -29,7 +30,10 @@ def mock_provider() -> MagicMock:
 
     # Set up the generate method
     provider.generate = AsyncMock(side_effect=mock_generate)
-    provider.generate_stream = AsyncMock(side_effect=mock_stream)
+
+    # Instead of using AsyncMock with side_effect for the generator,
+    # we'll return the generator function directly
+    provider.generate_stream = mock_stream
     provider.__bool__.return_value = True
     return provider
 
@@ -125,10 +129,8 @@ class TestArchitectAgent:
         # Use async list comprehension instead of for loop
         chunks = [chunk async for chunk in architect_agent.process_stream(message)]
 
-        # Check that the provider was called
-        assert mock_provider.generate_stream.called
-
-        # Check the result
+        # Since we're now using a direct function for generate_stream, we can't check .called
+        # Instead, check that the result matches what we expect from our mock
         assert chunks == ["Mock", " stream", " response"]
 
     def test_parent_child_relationship(self, architect_agent: ArchitectAgent) -> None:
@@ -265,10 +267,8 @@ class TestPlannerAgent:
         # Use async list comprehension instead of for loop
         chunks = [chunk async for chunk in planner_agent.process_stream(message)]
 
-        # Check that the provider was called
-        assert mock_provider.generate_stream.called
-
-        # Check the result
+        # Since we're now using a direct function for generate_stream, we can't check .called
+        # Instead, check that the result matches what we expect from our mock
         assert chunks == ["Mock", " stream", " response"]
 
     def test_parent_child_relationship(self, planner_agent: PlannerAgent) -> None:
@@ -415,10 +415,8 @@ class TestExecutorAgent:
         # Use async list comprehension instead of for loop
         chunks = [chunk async for chunk in executor_agent.process_stream(message)]
 
-        # Check that the provider was called
-        assert mock_provider.generate_stream.called
-
-        # Check the result
+        # Since we're now using a direct function for generate_stream, we can't check .called
+        # Instead, check that the result matches what we expect from our mock
         assert chunks == ["Mock", " stream", " response"]
 
     def test_parent_child_relationship(self, executor_agent: ExecutorAgent) -> None:
