@@ -63,7 +63,7 @@ def test_provider_configuration(provider_factory: LLMProviderFactory) -> None:
     """Test provider configuration loading and validation."""
     config = ProviderConfig(
         provider_name="gemini",
-        model="gemini-pro",
+        model="gemini-1.5-pro",
         temperature=0.7,
         api_key="test_key",
     )
@@ -71,7 +71,7 @@ def test_provider_configuration(provider_factory: LLMProviderFactory) -> None:
     # Initialize provider
     provider = provider_factory.create_provider("gemini", config)
     assert isinstance(provider, GeminiProvider)
-    assert provider.config.model == "gemini-pro"
+    assert provider.config.model == "gemini-1.5-pro"
     assert provider.config.temperature == 0.7
 
 
@@ -87,7 +87,7 @@ def test_provider_fallback(provider_factory: LLMProviderFactory) -> None:
 
     fallback_config = ProviderConfig(
         provider_name="gemini",
-        model="gemini-pro",
+        model="gemini-1.5-pro",
         temperature=0.7,
         api_key="test_key",
     )
@@ -118,7 +118,7 @@ def test_provider_lifecycle(provider_factory: LLMProviderFactory) -> None:
     """Test provider lifecycle management."""
     config = ProviderConfig(
         provider_name="gemini",
-        model="gemini-pro",
+        model="gemini-1.5-pro",
         temperature=0.7,
         api_key="test_key",
     )
@@ -136,7 +136,7 @@ def test_provider_lifecycle(provider_factory: LLMProviderFactory) -> None:
     # Test provider with different config creates new instance
     different_config = ProviderConfig(
         provider_name="gemini",
-        model="gemini-pro",
+        model="gemini-1.5-pro",
         temperature=0.8,  # Different temperature
         api_key="test_key",
     )
