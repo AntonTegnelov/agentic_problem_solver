@@ -39,7 +39,7 @@
     - [x] Document API differences between SolverAgent and hierarchical system
     - [x] Include a checklist for verifying successful migration
   - [ ] Transition solver agent into a temporary compatibility Layer
-    - [ ] Identify all references to SolverAgent in the codebase
+    - [x] Identify all references to SolverAgent in the codebase
     - [ ] Add appropriate deprecation warnings throughout the codebase
     - [ ] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
   - [ ] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
