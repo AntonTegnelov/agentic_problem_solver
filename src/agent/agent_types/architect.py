@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
@@ -110,21 +111,239 @@ class ArchitectAgent:
             task: Task to check.
 
         Returns:
-            True if agent can handle task.
+            True if agent can handle task, False otherwise.
 
         """
-        # Architect agent handles high-level tasks that require decomposition
-        high_level_keywords = [
+        # Architect can handle any high-level task
+        keywords = [
             "design",
             "architect",
             "system",
+            "structure",
+            "framework",
+            "high-level",
             "decompose",
             "break down",
-            "structure",
-            "high-level",
-            "architecture",
         ]
-        return any(keyword in task.lower() for keyword in high_level_keywords)
+        return any(keyword in task.lower() for keyword in keywords)
+
+    def analyze_task_complexity(self, task_description: str) -> TaskComplexity:
+        """Analyze task complexity to determine appropriate delegation path.
+
+        This method examines the task description to estimate its complexity
+        and determine whether it should be delegated to a PlannerAgent or
+        directly to an ExecutorAgent.
+
+        If an LLM provider is available, it will be used to determine complexity.
+        Otherwise, a rule-based approach is used as a fallback.
+
+        Args:
+            task_description: Description of the task to analyze.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        # If provider is available, use LLM to determine complexity
+        if self._provider is not None:
+            try:
+                return self._analyze_task_complexity_with_llm(task_description)
+            except (ValueError, RuntimeError, ConnectionError, TimeoutError):
+                # If LLM analysis fails, fall back to rule-based approach
+                return self._analyze_task_complexity_rule_based(task_description)
+
+        # If no provider, use rule-based approach
+        return self._analyze_task_complexity_rule_based(task_description)
+
+    def _analyze_task_complexity_with_llm(self, task_description: str) -> TaskComplexity:
+        """Use LLM to analyze task complexity.
+
+        Args:
+            task_description: Description of the task to analyze.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        import asyncio
+
+        # Create a prompt for the LLM to analyze task complexity
+        prompt = f"""
+        Analyze the complexity of the following task and classify it as one of:
+        - SIMPLE: Task can be directly executed without further decomposition
+        - MODERATE: Task may benefit from some planning but is relatively straightforward
+        - COMPLEX: Task requires significant planning and decomposition
+        - VERY_COMPLEX: Task requires multiple levels of planning and decomposition
+
+        Task: {task_description}
+
+        Respond with only one of: SIMPLE, MODERATE, COMPLEX, or VERY_COMPLEX.
+        """
+
+        # Create a message for the LLM
+        from src.messages.creation import create_human_message
+
+        message = create_human_message(content=prompt)
+
+        # Get the response from the LLM
+        response = asyncio.run(self._get_llm_response(message))
+
+        # Parse the response to get the complexity
+        response_text = response.lower().strip()
+
+        # Map the response to TaskComplexity enum
+        if "simple" in response_text:
+            return TaskComplexity.SIMPLE
+        if "moderate" in response_text:
+            return TaskComplexity.MODERATE
+        if "complex" in response_text and "very" not in response_text:
+            return TaskComplexity.COMPLEX
+        if "very complex" in response_text:
+            return TaskComplexity.VERY_COMPLEX
+
+        # Default to MODERATE if response doesn't match any expected value
+        return TaskComplexity.MODERATE
+
+    async def _get_llm_response(self, message: Message) -> str:
+        """Get response from LLM provider.
+
+        Args:
+            message: Message to send to LLM.
+
+        Returns:
+            Response from LLM as string.
+
+        Raises:
+            ValueError: If provider is not initialized.
+
+        """
+        self._validate_provider()
+        messages = [message]
+        response = await self._provider.generate(messages)
+        return str(response)
+
+    def _analyze_task_complexity_rule_based(self, task_description: str) -> TaskComplexity:
+        """Analyze task complexity using rule-based approach.
+
+        This is the original implementation that uses regex patterns and scoring
+        to determine task complexity.
+
+        Args:
+            task_description: Description of the task to analyze.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        # Complexity score thresholds
+        simple_threshold = 3
+        moderate_threshold = 6
+        complex_threshold = 10
+
+        # Indicators of simple tasks
+        simple_indicators = [
+            r"\bsimple\b",
+            r"\beasy\b",
+            r"\bstraightforward\b",
+            r"\bbasic\b",
+            r"\bminimal\b",
+            r"\bsingle\b",
+            r"\bone\b file",
+            r"\bone\b function",
+            r"\bsmall\b",
+        ]
+
+        # Indicators of moderate complexity
+        moderate_indicators = [
+            r"\bmoderate\b",
+            r"\bmultiple\b files",
+            r"\bfew\b files",
+            r"\bseveral\b",
+            r"\binterface\b",
+            r"\bcomponent\b",
+            r"\bmodule\b",
+            r"\bclass\b",
+        ]
+
+        # Indicators of complex tasks
+        complex_indicators = [
+            r"\bcomplex\b",
+            r"\bcomplicated\b",
+            r"\bdifficult\b",
+            r"\badvanced\b",
+            r"\bsystem\b",
+            r"\barchitecture\b",
+            r"\bframework\b",
+            r"\bintegration\b",
+            r"\bmultiple components\b",
+            r"\bcoordination\b",
+        ]
+
+        # Indicators of very complex tasks
+        very_complex_indicators = [
+            r"\bvery complex\b",
+            r"\bhighly complex\b",
+            r"\bextremely\b",
+            r"\bentire system\b",
+            r"\bfull architecture\b",
+            r"\bcomplete redesign\b",
+            r"\bdistributed\b",
+            r"\bscalable\b",
+            r"\bmicroservices\b",
+            r"\benterprise\b",
+        ]
+
+        # Count matches for each complexity level
+        simple_count = sum(1 for pattern in simple_indicators if re.search(pattern, task_description, re.IGNORECASE))
+        moderate_count = sum(
+            1 for pattern in moderate_indicators if re.search(pattern, task_description, re.IGNORECASE)
+        )
+        complex_count = sum(1 for pattern in complex_indicators if re.search(pattern, task_description, re.IGNORECASE))
+        very_complex_count = sum(
+            1 for pattern in very_complex_indicators if re.search(pattern, task_description, re.IGNORECASE)
+        )
+
+        # Additional complexity factors
+        length_factor = len(task_description) / 500  # Longer descriptions often indicate more complex tasks
+
+        # Check for multiple requirements or steps
+        requirement_indicators = ["must", "should", "needs to", "required", "necessary"]
+        requirement_count = sum(1 for indicator in requirement_indicators if indicator in task_description.lower())
+
+        # Check for technical complexity
+        technical_indicators = [
+            "algorithm",
+            "optimization",
+            "performance",
+            "security",
+            "concurrency",
+            "async",
+            "parallel",
+            "database",
+            "authentication",
+            "authorization",
+        ]
+        technical_count = sum(1 for indicator in technical_indicators if indicator in task_description.lower())
+
+        # Calculate weighted complexity score
+        complexity_score = (
+            simple_count * 1
+            + moderate_count * 2
+            + complex_count * 3
+            + very_complex_count * 4
+            + min(length_factor, 3)  # Cap the length factor at 3
+            + min(requirement_count / 2, 2)  # Cap the requirement factor at 2
+            + min(technical_count / 2, 2)  # Cap the technical factor at 2
+        )
+
+        # Determine complexity level based on score
+        if complexity_score <= simple_threshold:
+            return TaskComplexity.SIMPLE
+        if complexity_score <= moderate_threshold:
+            return TaskComplexity.MODERATE
+        if complexity_score <= complex_threshold:
+            return TaskComplexity.COMPLEX
+        return TaskComplexity.VERY_COMPLEX
 
     async def process(self, message: Message) -> Result[str]:
         """Process a message.
@@ -158,17 +377,30 @@ class ArchitectAgent:
                     # For test_process in TestArchitectAgent
                     result = Result(success=True, data="Test response", error=None)
                 else:
-                    # Create tasks using the task breakdown step
+                    # Analyze task complexity
                     task_description = message.content
-                    await self._task_breakdown_step(
-                        state=self.state,
-                        task_description=task_description,
-                        complexity=TaskComplexity.COMPLEX,
-                        priority=TaskPriority.HIGH,
-                    )
+                    task_complexity = self.analyze_task_complexity(task_description)
 
-                    # Return the response (with or without task information)
-                    result = Result(success=True, data=str(response), error=None)
+                    # For simple tasks, delegate directly to an ExecutorAgent
+                    if task_complexity == TaskComplexity.SIMPLE:
+                        self.state.add_message(
+                            create_message(
+                                role="system",
+                                content="Task complexity analyzed as SIMPLE. Delegating directly to ExecutorAgent.",
+                            ),
+                        )
+                        result = await self.delegate_to_executor(task_description)
+                    else:
+                        # For more complex tasks, use the task breakdown step
+                        await self._task_breakdown_step(
+                            state=self.state,
+                            task_description=task_description,
+                            complexity=task_complexity,
+                            priority=TaskPriority.HIGH,
+                        )
+
+                        # Return the response (with or without task information)
+                        result = Result(success=True, data=str(response), error=None)
         except ValueError as e:
             result = Result(success=False, error=str(e), data=None)
         except (ConnectionError, TimeoutError) as e:
@@ -398,3 +630,42 @@ class ArchitectAgent:
         # Add system message with role
         self.state.add_message(create_message(role="system", content=prompt))
         return self.state.get_messages()
+
+    async def delegate_to_executor(self, task: str) -> Result[str]:
+        """Delegate a task directly to an ExecutorAgent.
+
+        This method is used for simple tasks that don't require further planning.
+        It creates a new ExecutorAgent, establishes a parent-child relationship,
+        and delegates the task to it.
+
+        Args:
+            task: The task to delegate.
+
+        Returns:
+            Result containing the execution result.
+
+        Raises:
+            ValueError: If provider is not initialized.
+
+        """
+        self._validate_provider()
+
+        # Import ExecutorAgent here to avoid circular imports
+        from src.agent.agent_types.executor import ExecutorAgent
+
+        # Create a new ExecutorAgent
+        executor_agent = ExecutorAgent(
+            provider=self._provider,
+            config=self._config,
+        )
+
+        # Establish parent-child relationship
+        executor_id = executor_agent.get_agent_id()
+        executor_agent.set_parent(self._agent_id)
+        self.add_child(executor_id)
+
+        # Create a message for the executor
+        message = create_human_message(content=task)
+
+        # Delegate the task
+        return await executor_agent.process(message)
