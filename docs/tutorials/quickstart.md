@@ -1,14 +1,5 @@
 # Quick Start Guide
 
-> **⚠️ DEPRECATION NOTICE:**
->
-> The underlying implementation of this CLI currently uses the deprecated `SolverAgent` class.
-> In future versions, it will be updated to use the hierarchical agent system.
-> The CLI interface will remain stable, but if you're using the API directly,
-> you should migrate to using the hierarchical agent system.
->
-> See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for more information.
-
 ## Installation
 
 ```bash

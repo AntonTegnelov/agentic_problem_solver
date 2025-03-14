@@ -24,32 +24,9 @@ To switch between different LLM providers:
 
 ## Customizing Agent Behavior
 
-> **⚠️ DEPRECATION NOTICE:**
->
-> The examples below using `SolverAgent` are deprecated and will be removed in a future version.
-> Use the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent) instead.
-> See the [Migration Guide](./migration.md) for details on transitioning to the hierarchical system.
-
 ### Adjusting Temperature
 
 Control the agent's creativity vs determinism:
-
-#### Deprecated Approach (Do Not Use)
-
-```python
-from src.agent.solver import SolverAgent  # DEPRECATED: Use hierarchical agents instead
-from src.llm_providers.providers.gemini import GeminiProvider
-
-# Create provider and agent
-provider = GeminiProvider()
-agent = SolverAgent(provider=provider)  # DEPRECATED: Use create_architect_agent() instead
-
-# Process a task
-result = agent.process("Create a simple calculator in Python")
-print(result)
-```
-
-#### Recommended Approach
 
 ```python
 from src.agent.agent_types import create_architect_agent
@@ -69,14 +46,6 @@ print(result.data)
 ### Setting Token Limits
 
 Control the length of generated responses:
-
-#### Deprecated Approach (Do Not Use)
-
-```python
-agent = SolverAgent(config={"max_tokens": 1000})  # DEPRECATED: Use create_architect_agent() instead
-```
-
-#### Recommended Approach
 
 ```python
 from src.agent.agent_types import create_architect_agent

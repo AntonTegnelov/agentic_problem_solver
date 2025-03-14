@@ -83,16 +83,18 @@ Available options:
 ### Python API
 
 ```python
-from src.agent.solver import SolverAgent
+from src.agent.agent_types import create_architect_agent
 from src.llm_providers.providers.gemini import GeminiProvider
+from src.messages.creation import create_message
 
 # Create provider and agent
 provider = GeminiProvider()
-agent = SolverAgent(provider=provider)
+agent = create_architect_agent(provider=provider)
 
 # Process a task
-result = agent.process("Create a simple calculator in Python")
-print(result)
+message = create_message(role="human", content="Create a simple calculator in Python")
+result = await agent.process(message)
+print(result.data)
 ```
 
 ## Development

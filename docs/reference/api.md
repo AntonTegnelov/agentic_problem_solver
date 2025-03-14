@@ -4,26 +4,13 @@ This document provides detailed information about the key classes and functions 
 
 ## Agents
 
-### SolverAgent (DEPRECATED)
+### ArchitectAgent
 
-> **IMPORTANT DEPRECATION NOTICE**:
->
-> The `SolverAgent` class is deprecated and will be removed in a future version of the APS framework.
-> It is maintained only for backward compatibility.
->
-> Please migrate to the hierarchical agent system using:
->
-> - `ArchitectAgent` for high-level task decomposition
-> - `PlannerAgent` for mid-level task refinement
-> - `ExecutorAgent` for low-level task execution
->
-> For more information, see the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation.
-
-The original agent class that processes tasks and generates solutions.
+Top-level agent in the hierarchical system responsible for high-level task decomposition and system design.
 
 ```python
-class SolverAgent:
-    """Agent that solves programming problems."""
+class ArchitectAgent:
+    """Agent that handles high-level task decomposition and system design."""
 
     def __init__(
         self,
@@ -45,7 +32,7 @@ class SolverAgent:
 ##### process
 
 ```python
-def process(self, message: Message) -> Result[str]:
+async def process(self, message: Message) -> Result[str]:
     """Process a message.
 
     Args:
@@ -80,12 +67,6 @@ def get_agent_id(self) -> str:
         Agent ID.
     """
 ```
-
-### ArchitectAgent
-
-Top-level agent in the hierarchical system responsible for high-level task decomposition and system design.
-
-See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for details.
 
 ### PlannerAgent
 
@@ -129,6 +110,164 @@ class LLMProviderFactory:
 
 ##### get_provider
 
+```python
+@classmethod
+def get_provider(
+    cls,
+    name: str | None = None,
+    config: LLMConfig | None = None,
+) -> BaseLLMProvider:
+    """Get a provider instance.
+
+    Args:
+        name: Provider name.
+        config: Provider configuration.
+
+    Returns:
+        Provider instance.
+    """
 ```
 
+##### create_provider
+
+```python
+@classmethod
+def create_provider(
+    cls,
+    name: str,
+    config: LLMConfig | None = None,
+) -> BaseLLMProvider:
+    """Create a new provider instance.
+
+    Args:
+        name: Provider name.
+        config: Provider configuration.
+
+    Returns:
+        Provider instance.
+    """
+```
+
+## Message System
+
+### Message
+
+Base message class for communication between components.
+
+```python
+class Message:
+    """Message class for communication between components."""
+
+    def __init__(
+        self,
+        role: str,
+        content: str,
+        metadata: dict | None = None,
+    ):
+        """Initialize message.
+
+        Args:
+            role: Message role.
+            content: Message content.
+            metadata: Optional message metadata.
+        """
+```
+
+### MessageChain
+
+Container for a sequence of related messages.
+
+```python
+class MessageChain:
+    """Container for a sequence of related messages."""
+
+    def __init__(
+        self,
+        messages: list[Message] | None = None,
+    ):
+        """Initialize message chain.
+
+        Args:
+            messages: Optional initial messages.
+        """
+```
+
+#### Methods
+
+##### add_message
+
+```python
+def add_message(self, message: Message) -> None:
+    """Add a message to the chain.
+
+    Args:
+        message: Message to add.
+    """
+```
+
+##### get_messages
+
+```python
+def get_messages(self) -> list[Message]:
+    """Get all messages in the chain.
+
+    Returns:
+        List of messages.
+    """
+```
+
+## Configuration
+
+### AgentConfig
+
+Configuration for agent behavior.
+
+```python
+class AgentConfig(BaseConfig):
+    """Configuration for agent behavior."""
+
+    def __init__(
+        self,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        retry_count: int | None = None,
+        retry_delay: float | None = None,
+        **kwargs,
+    ):
+        """Initialize agent configuration.
+
+        Args:
+            max_tokens: Maximum tokens to generate.
+            temperature: Temperature for generation.
+            retry_count: Number of retries for failed operations.
+            retry_delay: Delay between retries in seconds.
+            **kwargs: Additional configuration options.
+        """
+```
+
+### LLMConfig
+
+Configuration for LLM providers.
+
+```python
+class LLMConfig(BaseConfig):
+    """Configuration for LLM providers."""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        **kwargs,
+    ):
+        """Initialize LLM configuration.
+
+        Args:
+            api_key: API key for the provider.
+            model: Model name.
+            temperature: Temperature for generation.
+            max_tokens: Maximum tokens to generate.
+            **kwargs: Additional configuration options.
+        """
 ```
