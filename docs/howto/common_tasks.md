@@ -24,29 +24,66 @@ To switch between different LLM providers:
 
 ## Customizing Agent Behavior
 
+> **⚠️ DEPRECATION NOTICE:**
+>
+> The examples below using `SolverAgent` are deprecated and will be removed in a future version.
+> Use the hierarchical agent system (ArchitectAgent, PlannerAgent, ExecutorAgent) instead.
+> See the [Migration Guide](./migration.md) for details on transitioning to the hierarchical system.
+
 ### Adjusting Temperature
 
 Control the agent's creativity vs determinism:
 
+#### Deprecated Approach (Do Not Use)
+
 ```python
-from src.agent.solver import SolverAgent
+from src.agent.solver import SolverAgent  # DEPRECATED: Use hierarchical agents instead
 from src.llm_providers.providers.gemini import GeminiProvider
 
 # Create provider and agent
 provider = GeminiProvider()
-agent = SolverAgent(provider=provider)
+agent = SolverAgent(provider=provider)  # DEPRECATED: Use create_architect_agent() instead
 
 # Process a task
 result = agent.process("Create a simple calculator in Python")
 print(result)
 ```
 
+#### Recommended Approach
+
+```python
+from src.agent.agent_types import create_architect_agent
+from src.llm_providers.providers.gemini import GeminiProvider
+from src.messages.creation import create_message
+
+# Create provider and agent
+provider = GeminiProvider()
+agent = create_architect_agent(provider=provider)
+
+# Process a task
+message = create_message(role="human", content="Create a simple calculator in Python")
+result = await agent.process(message)
+print(result.data)
+```
+
 ### Setting Token Limits
 
 Control the length of generated responses:
 
+#### Deprecated Approach (Do Not Use)
+
 ```python
-agent = SolverAgent(config={"max_tokens": 1000})
+agent = SolverAgent(config={"max_tokens": 1000})  # DEPRECATED: Use create_architect_agent() instead
+```
+
+#### Recommended Approach
+
+```python
+from src.agent.agent_types import create_architect_agent
+from src.config.agent_config import AgentConfig
+
+config = AgentConfig(max_tokens=1000)
+agent = create_architect_agent(config=config)
 ```
 
 ## Error Handling
@@ -57,11 +94,16 @@ The agent automatically validates input and handles errors:
 
 ```python
 from langchain_core.messages import HumanMessage
+from src.messages.creation import create_message
+from src.agent.agent_types import create_architect_agent
+
+# Create agent
+agent = create_architect_agent()
 
 # Invalid input will be caught and handled
-message = HumanMessage(content="")  # Empty input
-response = await agent._process_message_impl(message)
-print(response.content)  # Will contain error message
+message = create_message(role="human", content="")  # Empty input
+response = await agent.process(message)
+print(response.error)  # Will contain error message
 ```
 
 ### Recovering from Errors
@@ -76,8 +118,8 @@ If an error occurs, you can:
 
 2. Try again with valid input:
    ```python
-   message = HumanMessage(content="Write a valid Python function")
-   response = await agent._process_message_impl(message)
+   message = create_message(role="human", content="Write a valid Python function")
+   response = await agent.process(message)
    ```
 
 ## Logging and Debugging

@@ -2,6 +2,15 @@
 
 This module demonstrates common usage patterns for the CLI interface.
 
+> **⚠️ DEPRECATION NOTICE:**
+>
+> The underlying implementation of this CLI currently uses the deprecated `SolverAgent` class.
+> In future versions, it will be updated to use the hierarchical agent system.
+> The CLI interface will remain stable, but if you're using the API directly,
+> you should migrate to using the hierarchical agent system.
+>
+> See the [Hierarchical Agent System](./explanation/hierarchical_agents.md) documentation for more information.
+
 Examples:
     >>> from src.cli.main import cli
     >>> from click.testing import CliRunner
@@ -137,6 +146,50 @@ def main() -> None:
         sys.exit(1)
 
     cli()
+
+
+def hierarchical_agent_example() -> None:
+    """Example of using the hierarchical agent system directly.
+
+    This example demonstrates how to use the hierarchical agent system
+    instead of the deprecated SolverAgent.
+
+    Examples:
+        >>> # This is a demonstration only and won't run in doctest
+        >>> # hierarchical_agent_example()
+        >>> print("Example of using hierarchical agents")
+        Example of using hierarchical agents
+
+    """
+    import os
+
+    from src.agent.agent_types import create_architect_agent
+    from src.agent.state.base import InMemoryStateManager
+    from src.llm_providers.config.provider_config import GeminiConfig
+    from src.llm_providers.providers.gemini import GeminiProvider
+    from src.messages.creation import create_message
+
+    # Set up the provider with your API key
+    api_key = os.environ.get("GEMINI_API_KEY")
+    provider_config = GeminiConfig(
+        api_key=api_key,
+        model="gemini-2.0-pro",
+    )
+    provider = GeminiProvider(config=provider_config)
+
+    # Create the state manager and architect agent
+    state_manager = InMemoryStateManager()
+    create_architect_agent(
+        provider=provider,
+        state_manager=state_manager,
+    )
+
+    # Process a task
+    create_message(role="human", content="Write a function to calculate the factorial of a number in Python.")
+
+    # Note: This is an async function, so in a real application you would use:
+    # result = await agent.process(message)
+    # print(result.data)
 
 
 if __name__ == "__main__":
