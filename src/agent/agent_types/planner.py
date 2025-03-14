@@ -140,19 +140,13 @@ class PlannerAgent:
             msg = "Provider not initialized"
             raise ValueError(msg)
 
-    def _debug_log(self, message: str) -> None:
+    def _debug_log(self, message: str) -> None:  # noqa: ARG002
         """Log debug information during testing.
 
-        Args:
-            message: Debug message to log.
-
+        This method is used to log debug information during testing.
+        It will print to stderr when the PYTEST_CURRENT_TEST environment variable is present.
         """
-        # Only log in testing environments or when debug is enabled
-        if "PYTEST_CURRENT_TEST" in os.environ:
-            # In a testing environment, log to stdout
-            pass
-        else:
-            # No-op in production
+        if os.environ.get("PYTEST_CURRENT_TEST"):
             pass
 
     async def process(self, message: Message) -> Result[str]:

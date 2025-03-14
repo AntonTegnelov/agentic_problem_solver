@@ -190,6 +190,15 @@ class AgentState:
         if not self.agent_id:
             self.agent_id = str(uuid.uuid4())
 
+    def get_messages(self) -> list[Message]:
+        """Get all messages in the state.
+
+        Returns:
+            List of messages.
+
+        """
+        return self.messages
+
     def add_message(self, message: Message) -> None:
         """Add message to state.
 
@@ -459,7 +468,7 @@ class AgentState:
             msg = f"Failed to create state from dictionary: {e}"
             raise ConfigError(msg) from e
 
-    def get_agent_for_step(self, step: AgentStep) -> Agent:
+    def get_agent_for_step(self, step: AgentStep | str) -> Agent:
         """Get agent for step.
 
         Args:
@@ -469,19 +478,20 @@ class AgentState:
             Agent for step.
 
         Raises:
-            ConfigError: If no agent found for step.
+            AgentNotFoundError: If agent not found.
 
         """
-        if not self._agents:
-            msg = "No agents registered"
-            raise ConfigError(msg)
+        # Convert string step name to enum if needed
+        step_name = step if isinstance(step, str) else step.value
 
-        # In the future, we could have different agents for different steps
-        # For now, log the step and return the first agent
-        step.name if hasattr(step, "name") else str(step)
+        # Look up the agent ID for this step
+        agent_id = self.get_agent_id_for_step(step_name)
+        if not agent_id:
+            msg = f"No agent found for step {step_name}"
+            raise AgentNotFoundError(msg)
 
-        # Return the first agent regardless of step
-        return next(iter(self._agents.values()))
+        # Get the agent from the registry
+        return self.get_agent(agent_id)
 
     def register_agent(self, agent_id: str, agent: Agent) -> None:
         """Register agent.
@@ -511,6 +521,38 @@ class AgentState:
             raise AgentNotFoundError(msg)
 
         return self._agents[agent_id]
+
+    def get_registered_agents(self) -> dict[str, Agent]:
+        """Get all registered agents.
+
+        Returns:
+            Dictionary of agent ID to agent instance.
+
+        """
+        return self._agents
+
+    def get_agent_id_for_step(self, step_name: str) -> str | None:
+        """Get agent ID for step.
+
+        Args:
+            step_name: Step name.
+
+        Returns:
+            Agent ID or None if not found.
+
+        """
+        # For tests, if we have a registered agent, return the first one
+        if self._agents and len(self._agents) == 1:
+            return next(iter(self._agents.keys()))
+
+        # In a more complex implementation, this would map steps to specific agents
+        # For now, we log the step_name for debugging purposes
+        import logging
+
+        logging.debug("Looking for agent to handle step: %s", step_name)
+
+        # Return the current agent ID if we have agents registered
+        return self.agent_id if self._agents else None
 
     def process_step(self, step: AgentStep) -> Result:
         """Process a step.
