@@ -122,7 +122,7 @@ class TestArchitectAgent:
         assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_process_stream(self, architect_agent: ArchitectAgent, mock_provider: MagicMock) -> None:
+    async def test_process_stream(self, architect_agent: ArchitectAgent) -> None:
         """Test process_stream method."""
         message = HumanMessage(content="Design a system")
 
@@ -260,7 +260,7 @@ class TestPlannerAgent:
         assert result.error is None
 
     @pytest.mark.asyncio
-    async def test_process_stream(self, planner_agent: PlannerAgent, mock_provider: MagicMock) -> None:
+    async def test_process_stream(self, planner_agent: PlannerAgent) -> None:
         """Test process_stream method."""
         message = HumanMessage(content="Plan the implementation")
 
@@ -408,7 +408,7 @@ class TestExecutorAgent:
         assert result.error is None
 
     @pytest.mark.asyncio
-    async def test_process_stream(self, executor_agent: ExecutorAgent, mock_provider: MagicMock) -> None:
+    async def test_process_stream(self, executor_agent: ExecutorAgent) -> None:
         """Test process_stream method."""
         message = HumanMessage(content="Implement this function")
 

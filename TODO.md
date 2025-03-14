@@ -48,16 +48,16 @@
   - [x] Update examples to show new approach
     - [x] Annotate existing examples with deprecation notices if they no longer apply
     - [x] Create parallel examples showing the new hierarchical approach where it differs
-  - [ ] Update CLI code to use hierarchical agents
+  - [x] Update CLI code to use hierarchical agents
     - [x] Identify all CLI dependencies on SolverAgent (see `docs/migration/solver_agent_references.md` for details)
     - [x] Incrementally update each reference (+corresponding tests), testing between changes
     - [x] Ensure backward compatibility during transition
-  - [ ] Plan for eventual removal of SolverAgent
+  - [x] Plan for eventual removal of SolverAgent
     - [x] Ensure all documentation is updated to focus on hierarchical system
     - [x] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)
     - [x] Remove SolverAgent implementation completely
     - [x] Verify all tests pass with SolverAgent removed
-  - [ ] Update documentation
+  - [x] Update documentation
     - [x] remove all deprecated examples
     - [x] Remove all traces of SolverAgent in the documentation to avoid confusion (see `docs/migration/solver_agent_references.md` for a list of documentation to update)
   - [ ] Update CLI

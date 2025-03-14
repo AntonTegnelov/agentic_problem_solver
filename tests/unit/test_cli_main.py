@@ -1,6 +1,5 @@
 """Tests for CLI main module."""
 
-import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,9 +7,6 @@ from click.testing import CliRunner
 
 from src.cli.main import TaskError, cli, main, process_message
 from src.common_types.message_types import Message
-
-# Suppress deprecation warnings during tests
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="src.cli.main")
 
 
 @pytest.fixture

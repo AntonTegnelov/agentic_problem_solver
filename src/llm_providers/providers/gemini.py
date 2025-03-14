@@ -119,8 +119,8 @@ class GeminiProvider(BaseLLMProvider):
         genai.configure(api_key=self._config.api_key)
         model_name = self._config.model or self._default_model
 
-        # Validate model name
-        valid_models = ["gemini-pro", "gemini-pro-vision", "gemini-2.0-flash-lite"]
+        # Validate model name against the models in the provider version
+        valid_models = list(ProviderVersion.GEMINI_V1.supported_models.keys())
         if model_name not in valid_models:
             msg = f"Invalid model name: {model_name}. Valid models are: {', '.join(valid_models)}"
             raise InvalidModelError(msg)

@@ -1,0 +1,42 @@
+---
+description: Best practices for testing private or protected functions
+globs: .py
+alwaysApply: true
+---
+# Best Practices
+
+## 1. Test Through Public Interfaces (Preferred)
+The most recommended approach is to test private functions indirectly through public interfaces:
+This approach respects encapsulation and tests the behavior rather than implementation details.
+
+## 2. Use pytest's Monkeypatch
+For more complex cases, use pytest's monkeypatch fixture:
+    def test_with_monkeypatch(monkeypatch):
+        from module import MyClass
+        
+        mock_results = []
+        
+        def mock_private_function(self, arg):
+            mock_results.append(arg)
+            return "mocked_result"
+        
+        monkeypatch.setattr(MyClass, "_private_function", mock_private_function)
+        
+        instance = MyClass()
+        instance.public_method()
+        
+        assert mock_results == ["expected_value"]
+## 3. Disable Linter Warnings Selectively
+If you need to test private functions directly, configure your linter to allow it in test files:
+For Pylint:
+Add a comment to disable the specific warning:
+    # test_module.py
+    def test_private_function():
+        from module import MyClass
+        instance = MyClass()
+        # pylint: disable=protected-access
+        result = instance._private_function()
+        assert result == expected_value
+        
+## Conclusion
+The most recommended approach is testing through public interfaces. If you must test private functions directly, use Monkeypatch. I nothing else is working, configure your linter to suppress specific warnings in test files. NEVER compromise your code's encapsulation for testability.

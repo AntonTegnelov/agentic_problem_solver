@@ -9,10 +9,6 @@ import click
 
 # Import hierarchical agent system
 from src.agent.agent_types import create_architect_agent
-
-# DEPRECATED: SolverAgent is deprecated and will be removed in a future version.
-# This import is kept for backward compatibility but should not be used in new code.
-# See docs/explanation/hierarchical_agents.md for details on the new system.
 from src.agent.state.base import InMemoryStateManager
 from src.config import AgentConfig
 from src.config.utils import load_env_var
@@ -99,7 +95,10 @@ def solve(
         # Create provider
         try:
             api_key = load_env_var("GEMINI_API_KEY")
-            model = load_env_var("GEMINI_MODEL")
+            # Only use the environment variable if no model is explicitly provided via CLI
+            if model == DEFAULT_MODEL:
+                env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
+                model = env_model
             provider_config = GeminiConfig(api_key=api_key, model=model)
             provider = GeminiProvider(config=provider_config)
         except ValueError as e:
