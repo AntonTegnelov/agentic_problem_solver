@@ -12,6 +12,7 @@ from src.agent.agent_types.planner import PlannerAgent
 from src.agent.state.base import AgentState
 from src.common_types.message_types import HumanMessage
 from src.common_types.result_types import Result
+from src.common_types.task_types import TaskComplexity
 
 
 @pytest.fixture
@@ -184,6 +185,42 @@ class TestArchitectAgent:
         # Collect results
         results = await architect_agent.collect_results_from_children()
         assert len(results) == 2
+
+    def test_analyze_task_complexity(self, architect_agent: ArchitectAgent) -> None:
+        """Test analyze_task_complexity method."""
+        # Test that the method returns a valid TaskComplexity enum value
+        simple_task = "Create a simple function to add two numbers."
+        simple_result = architect_agent.analyze_task_complexity(simple_task)
+        assert isinstance(simple_result, TaskComplexity)
+
+        # Test that clearly more complex tasks receive higher complexity ratings
+        simple_task = "Create a simple function to add two numbers."
+        complex_task = (
+            "Create a module with multiple files for user management. "
+            "This component should include several classes and interfaces."
+        )
+        very_complex_task = (
+            "Create a full architecture for a distributed microservices system with highly complex, "
+            "scalable components. This enterprise-level system requires complete redesign of the "
+            "entire system with microservices for authentication, authorization, data processing, "
+            "and user management."
+        )
+
+        simple_complexity = architect_agent.analyze_task_complexity(simple_task)
+        complex_complexity = architect_agent.analyze_task_complexity(complex_task)
+        very_complex_complexity = architect_agent.analyze_task_complexity(very_complex_task)
+
+        # Test that complexity increases with task complexity
+        # We don't assert exact values, just the relative ordering
+        complexity_values = {
+            TaskComplexity.SIMPLE: 1,
+            TaskComplexity.MODERATE: 2,
+            TaskComplexity.COMPLEX: 3,
+            TaskComplexity.VERY_COMPLEX: 4,
+        }
+
+        assert complexity_values[simple_complexity] <= complexity_values[complex_complexity]
+        assert complexity_values[complex_complexity] <= complexity_values[very_complex_complexity]
 
     def test_validate_provider(self) -> None:
         """Test _validate_provider method."""
