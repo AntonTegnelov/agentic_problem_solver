@@ -245,7 +245,7 @@ def test_process_message_api_key_error(mock_load_env_var: MagicMock) -> None:
     mock_load_env_var.side_effect = ValueError(error_msg)
 
     # Verify the function raises the expected error
-    with pytest.raises(TaskError, match=f"Error processing message: {error_msg}"):
+    with pytest.raises(TaskError, match=f"Configuration error: {error_msg}"):
         process_message("Test message")
 
 
@@ -263,7 +263,7 @@ def test_process_message_agent_error(mock_create_architect_agent: MagicMock) -> 
     # Mock environment variables
     with (
         patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "GEMINI_MODEL": "test-model"}),
-        pytest.raises(TaskError, match=f"Error processing message: {error_msg}"),
+        pytest.raises(TaskError, match=f"Agent error: {error_msg}"),
     ):
         process_message("Test message")
 

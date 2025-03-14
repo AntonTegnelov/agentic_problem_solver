@@ -10,6 +10,7 @@ import click
 # Import hierarchical agent system
 from src.agent.agent_types import create_architect_agent
 from src.agent.state.base import InMemoryStateManager
+from src.common_types.error_types import AgentError
 from src.config import AgentConfig
 from src.config.utils import load_env_var
 from src.llm_providers.config.provider_config import GeminiConfig
@@ -49,6 +50,56 @@ class TaskError(RuntimeError):
     def __init__(self, message: str) -> None:
         """Initialize error."""
         super().__init__(message)
+
+
+def setup_agent(
+    model: str = DEFAULT_MODEL,
+    temperature: float = DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> tuple:
+    """Set up the agent with provider and configuration.
+
+    Args:
+        model: Model to use for generation.
+        temperature: Temperature for generation.
+        max_tokens: Maximum tokens to generate.
+
+    Returns:
+        Tuple containing the agent and any other resources.
+
+    Raises:
+        ValueError: If API key is not found or other configuration errors.
+
+    """
+    # Create provider
+    api_key = load_env_var("GEMINI_API_KEY")
+
+    # Only use the environment variable if no model is explicitly provided
+    if model == DEFAULT_MODEL:
+        env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
+        model = env_model
+
+    provider_config = GeminiConfig(api_key=api_key, model=model)
+    provider = GeminiProvider(config=provider_config)
+
+    # Create state manager
+    state_manager = InMemoryStateManager()
+
+    # Create configuration
+    config = AgentConfig(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    # Create architect agent
+    agent = create_architect_agent(
+        provider=provider,
+        state_manager=state_manager,
+        config=config,
+    )
+
+    return agent, provider, state_manager
 
 
 @click.group()
@@ -92,53 +143,43 @@ def solve(
 
     """
     try:
-        # Create provider
+        # Set up the agent
         try:
-            api_key = load_env_var("GEMINI_API_KEY")
-            # Only use the environment variable if no model is explicitly provided via CLI
-            if model == DEFAULT_MODEL:
-                env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
-                model = env_model
-            provider_config = GeminiConfig(api_key=api_key, model=model)
-            provider = GeminiProvider(config=provider_config)
+            agent, _, _ = setup_agent(model, temperature, max_tokens)
         except ValueError as e:
             if "API key" in str(e):
                 click.echo(API_KEY_ERROR, err=True)
                 sys.exit(1)
             raise
 
-        # Create state manager
-        state_manager = InMemoryStateManager()
-
-        # Create configuration
-        config = AgentConfig(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-        # Use hierarchical agent system
-        agent = create_architect_agent(
-            provider=provider,
-            state_manager=state_manager,
-            config=config,
-        )
-
         # Process task - create a human message and run it through asyncio
         message = create_message(role="human", content=task)
         result = asyncio.run(agent.process(message))
         click.echo(result)
 
+    except AgentError as e:
+        logger.exception("Agent error")
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
     except Exception:
         logger.exception(TASK_ERROR)
+        click.echo("An unexpected error occurred. Check logs for details.", err=True)
         sys.exit(1)
 
 
-def process_message(message: str) -> str:
+def process_message(
+    message: str,
+    model: str | None = None,
+    temperature: float = DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> str:
     """Process a message using the architect agent.
 
     Args:
         message: The message to process.
+        model: Model to use for generation. If None, uses environment variable or default.
+        temperature: Temperature for generation.
+        max_tokens: Maximum tokens to generate.
 
     Returns:
         The processed response.
@@ -148,18 +189,24 @@ def process_message(message: str) -> str:
 
     """
     try:
-        api_key = load_env_var("GEMINI_API_KEY")
-        model = load_env_var("GEMINI_MODEL")
-        provider_config = GeminiConfig(api_key=api_key, model=model)
-        provider = GeminiProvider(config=provider_config)
+        # Use the model from parameters or default
+        model_to_use = model or DEFAULT_MODEL
 
-        # Use hierarchical agent system
-        agent = create_architect_agent(provider=provider)
+        # Set up the agent
+        agent, _, _ = setup_agent(model_to_use, temperature, max_tokens)
 
         # Create a human message and run it through asyncio
         human_message = create_message(role="human", content=message)
         result = asyncio.run(agent.process(human_message))
         return str(result)
+    except ValueError as err:
+        logger.exception("Configuration error")
+        error_msg = f"Configuration error: {err}"
+        raise TaskError(error_msg) from err
+    except AgentError as err:
+        logger.exception("Agent error")
+        error_msg = f"Agent error: {err}"
+        raise TaskError(error_msg) from err
     except Exception as err:
         logger.exception(MESSAGE_ERROR)
         error_msg = f"{MESSAGE_ERROR}: {err}"
