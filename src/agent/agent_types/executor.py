@@ -6,9 +6,11 @@ for low-level task execution in the hierarchical agent system.
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.state.base import AgentState, StateManager
+from src.common_types.enums import AgentRole
 from src.common_types.result_types import Result
 from src.messages.creation import create_message
 from src.prompts import get_step_prompt
@@ -79,6 +81,15 @@ class ExecutorAgent:
         """
         return ["execution", "implementation", "coding", "low-level", "detail-oriented"]
 
+    def get_role(self) -> str:
+        """Get agent role.
+
+        Returns:
+            Agent role.
+
+        """
+        return AgentRole.EXECUTOR.value
+
     def can_handle(self, task: str) -> bool:
         """Check if agent can handle task.
 
@@ -139,6 +150,18 @@ class ExecutorAgent:
 
         response = self._provider.generate(messages)
         self.state.add_message(create_message(role="ai", content=response))
+
+        # Mark tasks as completed
+        tasks = self.state.get_tasks()
+        for task_dict in tasks:
+            # Check if task is a subtask (has parent_task_id) and is pending
+            if task_dict.get("parent_task_id") and task_dict["status"] == "pending":
+                # Get task by ID and update its status
+                task_id = task_dict["task_id"]
+                task = self.state.get_task_by_id(uuid.UUID(task_id))
+                if task:
+                    task.status = "completed"
+                    self.state.update_task(task)
 
         return Result(success=True, data=response, error=None)
 
