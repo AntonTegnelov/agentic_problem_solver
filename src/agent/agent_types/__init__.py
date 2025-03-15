@@ -87,7 +87,7 @@ def create_architect_agent(
     # Create a wrapper class that adapts the async process method to the sync interface
     # and inherits from ArchitectAgent to pass isinstance checks
     class SyncArchitectAgent(ArchitectAgent):
-        def __init__(self, async_agent) -> None:
+        def __init__(self, async_agent: ArchitectAgent) -> None:
             self._async_agent = async_agent
             # Don't call super().__init__ to avoid creating a new agent
             # Just copy the attributes from the wrapped agent
@@ -102,7 +102,7 @@ def create_architect_agent(
             """
             return await self._async_agent.process(message)
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
 
@@ -131,7 +131,7 @@ def create_planner_agent(
     # Create a wrapper class that adapts the async process method to the sync interface
     # and inherits from PlannerAgent to pass isinstance checks
     class SyncPlannerAgent(PlannerAgent):
-        def __init__(self, async_agent) -> None:
+        def __init__(self, async_agent: PlannerAgent) -> None:
             self._async_agent = async_agent
             # Don't call super().__init__ to avoid creating a new agent
             # Just copy the attributes from the wrapped agent
@@ -146,7 +146,7 @@ def create_planner_agent(
             """
             return await self._async_agent.process(message)
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
 
@@ -175,7 +175,7 @@ def create_executor_agent(
     # Create a wrapper class that adapts the async process method to the sync interface
     # and inherits from ExecutorAgent to pass isinstance checks
     class SyncExecutorAgent(ExecutorAgent):
-        def __init__(self, async_agent) -> None:
+        def __init__(self, async_agent: ExecutorAgent) -> None:
             self._async_agent = async_agent
             # Don't call super().__init__ to avoid creating a new agent
             # Just copy the attributes from the wrapped agent
@@ -190,7 +190,7 @@ def create_executor_agent(
             """
             return await self._async_agent.process(message)
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
 
