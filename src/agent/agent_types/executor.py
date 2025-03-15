@@ -434,6 +434,9 @@ class ExecutorAgent:
             task.execution_logs.append(iteration_log)
             self._debug_log(iteration_log)
 
+            # Update progress tracking before processing
+            self._update_task_progress(task)
+
             # Create a message from the task
             message_content = self._create_task_execution_message(task)
             message = create_message(content=message_content)
@@ -448,6 +451,9 @@ class ExecutorAgent:
                 # Progress to the next execution stage
                 task = self._advance_execution_stage(task)
 
+                # Update progress tracking after advancing stage
+                self._update_task_progress(task)
+
                 # Check if task is complete
                 if (
                     task.execution_stage == ExecutionStage.FINALIZING
@@ -458,6 +464,9 @@ class ExecutorAgent:
                     completion_log = f"Task completed successfully after {task.execution_attempts} iterations"
                     task.execution_logs.append(completion_log)
                     self._debug_log(completion_log)
+
+                    # Set progress to 100% when task is completed
+                    self._update_task_progress(task, progress=1.0)
 
                 return Result(success=True, data=task, error=None)
             # Handle failure
@@ -485,6 +494,101 @@ class ExecutorAgent:
             error_message = f"Timeout error in task iteration: {e!s}"
             self._debug_log(error_message)
             return Result(success=False, data=task, error=error_message)
+
+    def _update_task_progress(self, task: Task, progress: float | None = None) -> None:
+        """Update task progress based on execution stage or explicit progress value.
+
+        This method calculates and updates the progress of a task based on its current
+        execution stage or an explicitly provided progress value. It stores the progress
+        information in the task's metadata and updates the agent's state.
+
+        Args:
+            task: The task to update progress for.
+            progress: Optional explicit progress value (0.0 to 1.0).
+                     If not provided, progress is calculated based on execution stage.
+
+        """
+        # If progress is explicitly provided, use that value
+        if progress is not None:
+            # Ensure progress is between 0 and 1
+            progress_value = max(0.0, min(1.0, progress))
+        else:
+            # Calculate progress based on execution stage
+            progress_value = self._calculate_progress_from_stage(task)
+
+        # Initialize progress tracking metadata if it doesn't exist
+        if "progress_tracking" not in task.metadata:
+            task.metadata["progress_tracking"] = {}
+
+        progress_tracking = task.metadata["progress_tracking"]
+
+        # Update progress information
+        progress_tracking["progress_percentage"] = progress_value
+        progress_tracking["last_updated"] = time.time()
+        progress_tracking["current_stage"] = str(task.execution_stage) if task.execution_stage else "UNKNOWN"
+
+        # Add status message based on execution stage
+        if task.execution_stage:
+            progress_tracking["status_message"] = f"Executing {task.execution_stage.value} stage"
+
+        # Add progress history if it doesn't exist
+        if "progress_history" not in progress_tracking:
+            progress_tracking["progress_history"] = []
+
+        # Add current progress to history
+        progress_tracking["progress_history"].append(
+            {
+                "timestamp": time.time(),
+                "progress": progress_value,
+                "stage": str(task.execution_stage) if task.execution_stage else "UNKNOWN",
+                "attempt": task.execution_attempts,
+            },
+        )
+
+        # Update task in agent state if available
+        if hasattr(self, "state") and hasattr(self.state, "update_task"):
+            self.state.update_task(task)
+
+            # If this task has a parent, update parent task progress
+            if task.parent_task_id and hasattr(self.state, "update_parent_task_progress"):
+                self.state.update_parent_task_progress(task.parent_task_id)
+
+        # Log progress update
+        self._debug_log(f"Updated task progress: {progress_value:.1%} ({task.execution_stage})")
+
+    def _calculate_progress_from_stage(self, task: Task) -> float:
+        """Calculate task progress based on execution stage.
+
+        Args:
+            task: The task to calculate progress for.
+
+        Returns:
+            Progress value between 0.0 and 1.0.
+
+        """
+        # Define progress weights for each stage
+        stage_weights = {
+            ExecutionStage.PLANNING: 0.1,
+            ExecutionStage.IMPLEMENTING: 0.4,
+            ExecutionStage.TESTING: 0.7,
+            ExecutionStage.REFINING: 0.9,
+            ExecutionStage.FINALIZING: 1.0,
+        }
+
+        # Get base progress from current stage
+        base_progress = stage_weights.get(task.execution_stage, 0.1)
+
+        # Adjust progress based on verification status if in testing or later stages
+        if task.execution_stage in [ExecutionStage.TESTING, ExecutionStage.REFINING, ExecutionStage.FINALIZING]:
+            if task.verification_status == VerificationStatus.PASSED:
+                # Add a small boost for passed verification
+                base_progress += 0.05
+            elif task.verification_status == VerificationStatus.FAILED:
+                # Reduce progress slightly for failed verification
+                base_progress -= 0.05
+
+        # Ensure progress is between 0 and 1
+        return max(0.0, min(1.0, base_progress))
 
     def _create_task_execution_message(self, task: Task) -> str:
         """Create a message for task execution.
