@@ -604,3 +604,74 @@ class TestExecutorAgent:
         # Should raise ValueError
         with pytest.raises(ValueError, match="Provider not initialized"):
             agent._validate_provider()
+
+    @pytest.mark.asyncio
+    async def test_iterate_task(self, executor_agent: ExecutorAgent, mock_provider: MagicMock) -> None:
+        """Test the iterate_task method."""
+        # Create a task
+
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.message_types import HumanMessage
+        from src.common_types.result_types import Result
+        from src.common_types.task_types import Task, TaskStatus
+
+        task = Task(description="Test task")
+
+        # Mock the create_message function and process method
+        with (
+            patch("src.agent.agent_types.executor.create_message") as mock_create_message,
+            patch.object(executor_agent, "process") as mock_process,
+        ):
+            # Set up the mock to return a HumanMessage
+            mock_create_message.return_value = HumanMessage(content="Test task execution")
+
+            # Set up the mock process to return a successful response
+            mock_process.return_value = Result(success=True, data="Task execution result", error=None)
+
+            # Call the iterate_task method
+            result = await executor_agent.iterate_task(task)
+
+            # Verify the result
+            assert result.success is True
+            assert isinstance(result.data, Task)
+
+            # Verify task was updated correctly
+            updated_task = result.data
+            assert updated_task.execution_attempts == 1
+            assert updated_task.created_at is not None
+            assert updated_task.updated_at is not None
+            assert updated_task.status == TaskStatus.IN_PROGRESS
+            assert updated_task.execution_stage == ExecutionStage.IMPLEMENTING  # Should have advanced from PLANNING
+            assert updated_task.result == "Task execution result"
+            assert "planning_result" in updated_task.execution_metadata
+
+            # Test a second iteration
+            mock_process.return_value = Result(success=True, data="Second task execution result", error=None)
+            second_result = await executor_agent.iterate_task(updated_task)
+            second_task = second_result.data
+
+            assert second_task.execution_attempts == 2
+            assert second_task.execution_stage == ExecutionStage.TESTING  # Should have advanced from IMPLEMENTING
+            assert "implementation_result" in second_task.execution_metadata
+
+            # Test failure case
+            mock_process.return_value = Result(success=False, data=None, error="Test error")
+
+            failure_result = await executor_agent.iterate_task(task)
+            assert failure_result.success is False
+            assert isinstance(failure_result.data, Task)
+            assert "Test error" in str(failure_result.error)
+
+            # Test completion case
+            complete_task = Task(description="Complete task")
+            complete_task.execution_stage = ExecutionStage.FINALIZING
+            complete_task.verification_status = VerificationStatus.PASSED
+
+            mock_process.return_value = Result(success=True, data="Final result", error=None)
+
+            completion_result = await executor_agent.iterate_task(complete_task)
+            completed_task = completion_result.data
+
+            assert completed_task.status == TaskStatus.COMPLETED
+            assert completed_task.completed_at is not None
+            assert "final_result" in completed_task.execution_metadata
