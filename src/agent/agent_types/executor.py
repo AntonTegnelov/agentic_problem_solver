@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
@@ -15,6 +16,7 @@ from src.common_types.enums import AgentRole
 from src.common_types.result_types import Result
 from src.messages.creation import create_message
 from src.prompts import get_step_prompt
+from src.utils.log_utils import DelegationInfo, get_logger, log_delegation_decision
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -53,10 +55,11 @@ class ExecutorAgent:
         self.config = config
         self._parent_id: str | None = None
         self._child_ids: list[str] = []
+        self._logger = get_logger(f"agent.executor.{self._agent_id}")
 
         # Set parent_id from config if provided
-        if config and "parent_id" in config:
-            self._parent_id = config["parent_id"]
+        if config and hasattr(config, "parent_id"):
+            self._parent_id = config.parent_id
 
         # Handle both AgentState and StateManager
         if state_manager is None:
@@ -179,8 +182,6 @@ class ExecutorAgent:
             return Result(success=False, error=f"Runtime error: {e!s}", data=None)
         except Exception as e:
             # Log unexpected errors but still return a structured result
-            import logging
-
             logging.exception("Unexpected error in executor process")
             return Result(success=False, error=f"Unexpected error: {e!s}", data=None)
 
@@ -290,31 +291,53 @@ class ExecutorAgent:
         self._parent_id = None
 
     async def delegate_to_child(self, child_agent_id: str, task: str) -> Result[Any]:
-        """Delegate a task to a child agent.
+        """Delegate task to child agent.
+
+        As an ExecutorAgent is a leaf node in the agent hierarchy,
+        it typically doesn't have child agents to delegate to.
+        This method logs the attempt and returns a failure result.
 
         Args:
-            child_agent_id: ID of the child agent to delegate to.
+            child_agent_id: Child agent ID.
             task: Task to delegate.
 
         Returns:
-            Result of delegation.
+            Result of delegation (always failure for ExecutorAgent).
 
         """
-        # This is a leaf node in the hierarchy, so it doesn't support delegation
-        # In a real implementation, this would be overridden by subclasses that can delegate
-        self._debug_log(
-            f"Executor agent cannot delegate tasks. Ignoring delegation to {child_agent_id} for task: {task}",
+        # Log the delegation attempt
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id=child_agent_id,
+                task=task,
+                reason="ExecutorAgent cannot delegate to child agents as it's a leaf node",
+                additional_info={"delegation_status": "rejected"},
+            ),
         )
-        return Result.failure("Executor agent has no child agents and cannot delegate tasks")
+
+        return Result.failure(
+            f"ExecutorAgent {self._agent_id} cannot delegate to child agents as it's a leaf node",
+        )
 
     async def collect_results_from_children(self) -> dict[str, Result[Any]]:
         """Collect results from child agents.
 
+        As an ExecutorAgent is a leaf node in the agent hierarchy,
+        it doesn't have child agents to collect results from.
+        This method logs the attempt and returns an empty dictionary.
+
         Returns:
-            Dictionary of agent IDs to results.
+            Empty dictionary as ExecutorAgent has no children.
 
         """
-        # ExecutorAgent is a leaf node with no children, so return empty dict
+        # Log the collection attempt
+        self._logger.info(
+            "ExecutorAgent %s has no child agents to collect results from",
+            self._agent_id,
+        )
+
         return {}
 
     def _prepare_messages(self, messages: list[Message]) -> list[Message]:
@@ -371,6 +394,4 @@ class ExecutorAgent:
             message: Message to log.
 
         """
-        import logging
-
         logging.getLogger(__name__).debug(message)

@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING, Any
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
 from src.common_types import AgentInfo, AgentNotFoundError
 from src.common_types.message_types import Message
+from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
+from src.utils.log_utils import DelegationInfo, get_logger, log_delegation_decision
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from src.common_types.result_types import Result
     from src.common_types.result_types import Result as StepResult
 
 
@@ -378,6 +379,7 @@ class AgentCoordinator:
         """
         self._registry = registry
         self._factories: dict[str, Callable[..., Agent]] = {}
+        self._logger = get_logger("agent.coordinator")
 
     def register_agent_factory(self, agent_type: str, factory: Callable[..., Agent]) -> None:
         """Register agent factory.
@@ -489,48 +491,125 @@ class AgentCoordinator:
         target_role: str | None = None,
         complexity: str | None = None,
     ) -> Result:
-        """Delegate task using flexible delegation paths.
+        """Delegate a task using flexible delegation paths.
 
-        This method supports flexible delegation based on task complexity and agent roles:
-        - Direct delegation from Architect to Executor for simple tasks
-        - Standard delegation from Architect to Planner for complex tasks
-        - Recursive delegation from Planner to another Planner for complex sub-components
-        - Standard delegation from Planner to Executor for implementable tasks
+        This method supports delegation based on role, complexity, or capabilities.
+        It determines the most appropriate agent to handle the task based on the
+        provided criteria and the source agent's position in the hierarchy.
 
         Args:
-            source_agent_id: Source agent ID.
+            source_agent_id: ID of the agent delegating the task.
             task: Task to delegate.
-            target_role: Optional target agent role (ARCHITECT, PLANNER, EXECUTOR).
-            complexity: Optional task complexity (SIMPLE, MODERATE, COMPLEX).
+            target_role: Optional target role for delegation.
+            complexity: Optional task complexity for delegation decisions.
 
         Returns:
-            Task result.
-
-        Raises:
-            AgentNotFoundError: If source agent not found.
-            ValueError: If no suitable target agent found.
+            Result of delegation.
 
         """
-        source_agent = self._registry.get_agent(source_agent_id)
-        source_info = self._registry.get_agent_info(source_agent_id)
+        try:
+            source_agent = self._registry.get_agent(source_agent_id)
+            source_role = None
 
-        # Determine target agent based on parameters
-        if target_role:
-            target_agent_id = self._find_agent_by_role(source_agent, target_role)
-        elif complexity:
-            source_role = getattr(source_info, "role", None)
-            target_agent_id = self._find_agent_by_complexity(source_agent_id, source_role, complexity)
-        else:
-            target_agent_id = self._find_agent_by_capability(source_agent, task)
+            # Try to get the role from the agent info
+            try:
+                source_info = self._registry.get_agent_info(source_agent_id)
+                if hasattr(source_info, "role"):
+                    source_role = source_info.role
+            except (AttributeError, KeyError, TypeError) as e:
+                # If we can't get the role, log the error and continue without it
+                self._logger.debug("Could not get role from agent info: %s", str(e))
 
-        # Establish parent-child relationship if not already established
-        if target_agent_id not in source_agent.get_child_ids():
-            self._registry.register_parent_child_relationship(source_agent_id, target_agent_id)
+            # Determine target agent based on provided criteria
+            target_agent_id = None
+            delegation_reason = ""
 
-        # Delegate the task to the target agent
-        target_agent = self._registry.get_agent(target_agent_id)
-        message = create_human_message(task)
-        return await target_agent.process(message)
+            # If target role is specified, find an agent with that role
+            if target_role:
+                target_agent_id = self._find_agent_by_role(source_agent, target_role)
+                delegation_reason = f"Role-based delegation to {target_role}"
+
+            # If complexity is specified, find an agent based on complexity
+            elif complexity:
+                target_agent_id = self._find_agent_by_complexity(
+                    source_agent_id,
+                    source_role,
+                    complexity,
+                )
+                delegation_reason = f"Complexity-based delegation ({complexity})"
+
+            # Otherwise, find an agent based on task capabilities
+            else:
+                target_agent_id = self._find_agent_by_capability(source_agent, task)
+                delegation_reason = "Capability-based delegation"
+
+            if not target_agent_id:
+                log_delegation_decision(
+                    logger=self._logger,
+                    delegation_info=DelegationInfo(
+                        source_agent_id=source_agent_id,
+                        target_agent_id="none",
+                        task=task,
+                        reason="No suitable agent found for delegation",
+                        additional_info={
+                            "target_role": target_role,
+                            "complexity": complexity,
+                        },
+                    ),
+                )
+                return Result.failure("No suitable agent found for delegation")
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=source_agent_id,
+                    target_agent_id=target_agent_id,
+                    task=task,
+                    reason=delegation_reason,
+                    additional_info={
+                        "target_role": target_role,
+                        "complexity": complexity,
+                    },
+                ),
+            )
+
+            # Create a message for the target agent
+            message = create_human_message(content=task)
+
+            # Get the target agent and delegate the task
+            target_agent = self._registry.get_agent(target_agent_id)
+            return await target_agent.process(message)
+
+        except AgentNotFoundError as e:
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=source_agent_id,
+                    target_agent_id="error",
+                    task=task,
+                    reason=f"Agent not found: {e!s}",
+                    additional_info={
+                        "error_type": "AgentNotFoundError",
+                    },
+                ),
+            )
+            return Result.failure(f"Agent not found: {e!s}")
+
+        except (ValueError, TypeError, RuntimeError) as e:
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=source_agent_id,
+                    target_agent_id="error",
+                    task=task,
+                    reason=f"Delegation error: {e!s}",
+                    additional_info={
+                        "error_type": type(e).__name__,
+                    },
+                ),
+            )
+            return Result.failure(f"Delegation error: {e!s}")
 
     def _find_agent_by_role(self, source_agent: Agent, target_role: str) -> str:
         """Find an agent by role.
@@ -561,26 +640,73 @@ class AgentCoordinator:
         return target_agents[0].agent_id
 
     def _find_agent_by_complexity(self, source_agent_id: str, source_role: str | None, complexity: str) -> str:
-        """Find an agent based on source role and task complexity.
+        """Find an agent based on task complexity.
 
         Args:
-            source_agent_id: Source agent ID.
-            source_role: Source agent role.
+            source_agent_id: ID of the source agent.
+            source_role: Role of the source agent, if available.
             complexity: Task complexity.
 
         Returns:
-            Target agent ID.
-
-        Raises:
-            ValueError: If no suitable agent found or unsupported source role.
+            ID of the target agent.
 
         """
-        if source_role == "ARCHITECT":
-            return self._architect_delegation_by_complexity(complexity)
-        if source_role == "PLANNER":
-            return self._planner_delegation_by_complexity(source_agent_id, complexity)
-        msg = f"Unsupported source agent role for flexible delegation: {source_role}"
-        raise ValueError(msg)
+        # Determine the appropriate delegation based on source agent role and complexity
+        if source_role == "architect":
+            target_agent_id = self._architect_delegation_by_complexity(complexity)
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=source_agent_id,
+                    target_agent_id=target_agent_id,
+                    task=f"Complexity-based task ({complexity})",
+                    reason=f"Architect delegating based on {complexity} complexity",
+                    additional_info={"complexity": complexity},
+                ),
+            )
+
+            return target_agent_id
+
+        if source_role == "planner":
+            target_agent_id = self._planner_delegation_by_complexity(source_agent_id, complexity)
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=source_agent_id,
+                    target_agent_id=target_agent_id,
+                    task=f"Complexity-based task ({complexity})",
+                    reason=f"Planner delegating based on {complexity} complexity",
+                    additional_info={"complexity": complexity},
+                ),
+            )
+
+            return target_agent_id
+
+        # Default case - find an executor
+        executor_agents = self._registry.find_agents_by_role("executor")
+        if executor_agents:
+            target_agent_id = executor_agents[0].agent_id
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=source_agent_id,
+                    target_agent_id=target_agent_id,
+                    task=f"Complexity-based task ({complexity})",
+                    reason="Default delegation to executor",
+                    additional_info={"complexity": complexity},
+                ),
+            )
+
+            return target_agent_id
+
+        # If no suitable agent found, return the source agent ID
+        return source_agent_id
 
     def _architect_delegation_by_complexity(self, complexity: str) -> str:
         """Determine delegation path for Architect agent based on complexity.

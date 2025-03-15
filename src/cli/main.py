@@ -3,17 +3,21 @@
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
 # Import hierarchical agent system
-from src.agent.agent_types import create_architect_agent
-from src.agent.state.base import InMemoryStateManager
-from src.common_types.error_types import AgentError
-from src.config import AgentConfig
+from src.agent.agent_types import Agent, create_architect_agent
+from src.agent.state.base import InMemoryStateManager, StateManager
+from src.common_types.error_types import AgentError, ConfigError
+from src.config.agent import AgentConfig
+from src.config.constants import (
+    DEFAULT_MODEL,
+    DEFAULT_TEMPERATURE,
+)
 from src.config.utils import load_env_var
-from src.llm_providers.config.provider_config import GeminiConfig
-from src.llm_providers.providers.gemini import GeminiProvider
+from src.llm_providers.providers.gemini import GeminiConfig, GeminiProvider
 from src.messages.creation import create_message
 from src.utils.log_utils import setup_logging
 
@@ -21,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 CONFIG_FILE = Path("config.yaml")
-DEFAULT_MODEL = "gemini-2.0-flash-lite"  # Standard model for all operations - matches AgentConfig
-DEFAULT_TEMPERATURE = 0.7
-DEFAULT_MAX_TOKENS = 1000
+DEFAULT_MAX_TOKENS = 1000  # Default max tokens for generation
 
 # Error messages
 TASK_ERROR = "Error processing task"
@@ -55,8 +57,8 @@ def setup_agent(
     model: str = DEFAULT_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
     max_tokens: int = DEFAULT_MAX_TOKENS,
-) -> tuple:
-    """Set up the agent with provider and configuration.
+) -> tuple[Agent[Any], object, StateManager]:
+    """Set up the agent with the given parameters.
 
     Args:
         model: Model to use for generation.
@@ -64,41 +66,46 @@ def setup_agent(
         max_tokens: Maximum tokens to generate.
 
     Returns:
-        Tuple containing the agent and any other resources.
+        A tuple of (agent, provider, state_manager).
 
     Raises:
         ValueError: If API key is not found or other configuration errors.
 
     """
-    # Create provider
-    api_key = load_env_var("GEMINI_API_KEY")
+    try:
+        # Create provider
+        api_key = load_env_var("GEMINI_API_KEY")
 
-    # Only use the environment variable if no model is explicitly provided
-    if model == DEFAULT_MODEL:
-        env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
-        model = env_model
+        # Only use the environment variable if no model is explicitly provided
+        if model == DEFAULT_MODEL:
+            env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
+            model = env_model
 
-    provider_config = GeminiConfig(api_key=api_key, model=model)
-    provider = GeminiProvider(config=provider_config)
+        provider_config = GeminiConfig(api_key=api_key, model=model)
+        provider = GeminiProvider(config=provider_config)
 
-    # Create state manager
-    state_manager = InMemoryStateManager()
+        # Create state manager
+        state_manager = InMemoryStateManager()
 
-    # Create configuration
-    config = AgentConfig(
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
+        # Create configuration
+        config = AgentConfig(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
-    # Create architect agent
-    agent = create_architect_agent(
-        provider=provider,
-        state_manager=state_manager,
-        config=config,
-    )
-
-    return agent, provider, state_manager
+        # Create architect agent
+        agent = create_architect_agent(
+            provider=provider,
+            state_manager=state_manager,
+            config=config,
+        )
+    except ConfigError as e:
+        # Convert ConfigError to ValueError with a descriptive message
+        msg = f"Configuration error: {e}"
+        raise ValueError(msg) from e
+    else:
+        return agent, provider, state_manager
 
 
 @click.group()

@@ -74,6 +74,7 @@ class AgentConfig(BaseConfig):
     task_timeout: int = DEFAULT_TASK_TIMEOUT
     max_steps: int = DEFAULT_MAX_STEPS
     name: str | None = None
+    parent_id: str | None = None  # Parent agent ID for hierarchical relationships
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""

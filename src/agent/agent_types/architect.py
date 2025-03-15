@@ -63,8 +63,8 @@ class ArchitectAgent:
         self._logger = get_logger(f"agent.architect.{self._agent_id}")
 
         # Set parent_id from config if provided
-        if config and "parent_id" in config:
-            self._parent_id = config["parent_id"]
+        if config and hasattr(config, "parent_id"):
+            self._parent_id = config.parent_id
 
         # Handle both AgentState and StateManager
         if state_manager is None:

@@ -17,6 +17,7 @@ from src.common_types import AgentInfo as CommonAgentInfo
 from src.common_types.enums import AgentRole
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
+from src.config.agent import AgentConfig
 
 T = TypeVar("T")
 
@@ -39,20 +40,20 @@ def create_agent(
     role: AgentRole,
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: dict | None = None,
+    config: AgentConfig | None = None,
     parent_id: str | None = None,
 ) -> Agent[Any]:
-    """Create an agent based on the specified role.
+    """Create an agent of the specified role.
 
     Args:
-        role: The role of the agent to create.
+        role: Agent role.
         provider: LLM provider.
         state_manager: State manager or agent state.
         config: Agent configuration.
         parent_id: Optional parent agent ID for hierarchical relationships.
 
     Returns:
-        An agent instance of the specified role.
+        An agent instance.
 
     Raises:
         ValueError: If the role is not supported.
@@ -71,7 +72,7 @@ def create_agent(
 def create_architect_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: dict | None = None,
+    config: AgentConfig | None = None,
     parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create an architect agent.
@@ -88,10 +89,10 @@ def create_architect_agent(
     """
     # Prepare config with parent_id if provided
     if config is None:
-        config = {}
+        config = AgentConfig()
 
     if parent_id is not None:
-        config["parent_id"] = parent_id
+        config.parent_id = parent_id
 
     agent = ArchitectAgent(provider=provider, state_manager=state_manager, config=config)
 
@@ -133,7 +134,7 @@ def create_architect_agent(
 def create_planner_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: dict | None = None,
+    config: AgentConfig | None = None,
     parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create a planner agent.
@@ -150,10 +151,10 @@ def create_planner_agent(
     """
     # Prepare config with parent_id if provided
     if config is None:
-        config = {}
+        config = AgentConfig()
 
     if parent_id is not None:
-        config["parent_id"] = parent_id
+        config.parent_id = parent_id
 
     agent = PlannerAgent(provider=provider, state_manager=state_manager, config=config)
 
@@ -195,7 +196,7 @@ def create_planner_agent(
 def create_executor_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
-    config: dict | None = None,
+    config: AgentConfig | None = None,
     parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create an executor agent.
@@ -212,10 +213,10 @@ def create_executor_agent(
     """
     # Prepare config with parent_id if provided
     if config is None:
-        config = {}
+        config = AgentConfig()
 
     if parent_id is not None:
-        config["parent_id"] = parent_id
+        config.parent_id = parent_id
 
     agent = ExecutorAgent(provider=provider, state_manager=state_manager, config=config)
 
