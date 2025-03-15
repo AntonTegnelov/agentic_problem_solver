@@ -98,8 +98,8 @@
   - [x] Implement capability-based task routing in `src/agent/coordination.py` to match tasks to appropriate agents
   - [x] Add task complexity evaluation to support flexible delegation decisions
   - [x] Implement progress tracking in `src/agent/state/base.py` to monitor delegated tasks
-  - [ ] Add message routing capabilities in `src/messages/routing.py` for hierarchical message delivery
-  - [ ] Add result aggregation functionality in `src/
+  - [x] Add message routing capabilities in `src/messages/routing.py` for hierarchical message delivery
+  - [x] Add result aggregation functionality in `src/agent/coordination.py` to collect and combine results from child agents
 
 - enable the executor agent to systematically solve the TODO lists prompting themselves until the TODO is done
 

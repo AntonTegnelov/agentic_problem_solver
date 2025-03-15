@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
@@ -16,6 +17,7 @@ from src.utils.log_utils import DelegationInfo, get_logger, log_delegation_decis
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from src.agent.state.base import AgentState
     from src.common_types.result_types import Result as StepResult
 
 # Constants
@@ -1373,6 +1375,183 @@ class AgentCoordinator:
                 "delegation_results": delegation_results,
             },
         )
+
+    async def aggregate_results(
+        self,
+        parent_agent_id: str,
+        task_ids: list[str] | None = None,
+    ) -> Result:
+        """Aggregate results from multiple child agents.
+
+        This method collects and combines results from child agents, providing a
+        consolidated view of all subtask results for a parent agent.
+
+        Args:
+            parent_agent_id: ID of the parent agent.
+            task_ids: Optional list of specific task IDs to aggregate results for.
+                      If not provided, all tasks for the parent agent's children will be used.
+
+        Returns:
+            Result containing aggregated data from all child agents.
+
+        """
+        try:
+            # Get the parent agent
+            parent_agent = self._registry.get_agent(parent_agent_id)
+
+            # Get all child agents
+            child_agents = self._registry.get_child_agents(parent_agent_id)
+            if not child_agents:
+                return Result.success(
+                    data={"message": "No child agents found for aggregation"},
+                    message="No results to aggregate",
+                )
+
+            # Get the parent agent's state
+            parent_state = parent_agent.get_state()
+            if not parent_state:
+                return Result.failure(
+                    error=ValueError("Parent agent has no state"),
+                    message="Cannot aggregate results without parent state",
+                )
+
+            # Get tasks to aggregate
+            tasks_to_aggregate = self._get_tasks_to_aggregate(parent_state, task_ids, child_agents)
+
+            # Process tasks and collect results
+            aggregated_results, task_counts = self._process_tasks(parent_state, tasks_to_aggregate)
+
+            # Create summary
+            summary = self._create_result_summary(task_counts, len(tasks_to_aggregate), parent_state)
+
+            # Return aggregated results
+            return Result.success(
+                data={
+                    "summary": summary,
+                    "results": aggregated_results,
+                },
+                message="Successfully aggregated results from child agents",
+            )
+
+        except AgentNotFoundError as e:
+            error_msg = f"Agent not found during result aggregation: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+        except (ValueError, TypeError, RuntimeError) as e:
+            error_msg = f"Error during result aggregation: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def _get_tasks_to_aggregate(
+        self,
+        parent_state: AgentState,
+        task_ids: list[str] | None,
+        child_agents: list[Agent],
+    ) -> list:
+        """Get the list of tasks to aggregate based on filters.
+
+        Args:
+            parent_state: The parent agent's state.
+            task_ids: Optional list of specific task IDs to filter by.
+            child_agents: List of child agents.
+
+        Returns:
+            List of tasks to aggregate.
+
+        """
+        all_tasks = parent_state.get_tasks()
+
+        if task_ids:
+            # Filter tasks by provided task IDs
+            return [task for task in all_tasks if task.get("task_id") in task_ids]
+        # Filter tasks by child agent IDs
+        child_agent_ids = [agent.get_agent_id() for agent in child_agents]
+        return [task for task in all_tasks if task.get("assigned_agent_id") in child_agent_ids]
+
+    def _process_tasks(self, parent_state: AgentState, tasks_to_aggregate: list) -> tuple[list, dict]:
+        """Process tasks and collect results and counts.
+
+        Args:
+            parent_state: The parent agent's state.
+            tasks_to_aggregate: List of tasks to process.
+
+        Returns:
+            Tuple containing aggregated results list and task counts dictionary.
+
+        """
+        aggregated_results = []
+        task_counts = {
+            "success_count": 0,
+            "failure_count": 0,
+            "in_progress_count": 0,
+        }
+
+        for task in tasks_to_aggregate:
+            task_id = task.get("task_id")
+            task_obj = parent_state.get_task_by_id(uuid.UUID(task_id))
+
+            if not task_obj:
+                continue
+
+            # Get task status and result
+            status = task_obj.status
+            result = task_obj.result
+            error = task_obj.error
+
+            # Track counts by status
+            if status == TaskStatus.COMPLETED:
+                task_counts["success_count"] += 1
+            elif status == TaskStatus.FAILED:
+                task_counts["failure_count"] += 1
+            elif status in [TaskStatus.IN_PROGRESS, TaskStatus.PENDING, TaskStatus.BLOCKED]:
+                task_counts["in_progress_count"] += 1
+
+            # Get progress information
+            progress_info = parent_state.get_task_progress(task_obj.task_id)
+
+            # Add to aggregated results
+            aggregated_results.append(
+                {
+                    "task_id": str(task_obj.task_id),
+                    "description": task_obj.description,
+                    "status": status.value if hasattr(status, "value") else status,
+                    "result": result,
+                    "error": error,
+                    "progress": progress_info.get("progress", 0.0),
+                    "assigned_agent_id": task_obj.assigned_agent_id,
+                },
+            )
+
+        return aggregated_results, task_counts
+
+    def _create_result_summary(self, task_counts: dict, total_tasks: int, parent_state: AgentState) -> dict:
+        """Create a summary of the aggregated results.
+
+        Args:
+            task_counts: Dictionary with task counts by status.
+            total_tasks: Total number of tasks.
+            parent_state: The parent agent's state.
+
+        Returns:
+            Summary dictionary.
+
+        """
+        success_count = task_counts["success_count"]
+        failure_count = task_counts["failure_count"]
+        in_progress_count = task_counts["in_progress_count"]
+
+        # Calculate overall success rate
+        total_completed = success_count + failure_count
+        success_rate = success_count / total_completed if total_completed > 0 else 0
+
+        return {
+            "total_tasks": total_tasks,
+            "completed_tasks": success_count,
+            "failed_tasks": failure_count,
+            "in_progress_tasks": in_progress_count,
+            "success_rate": success_rate,
+            "overall_progress": parent_state.get_overall_progress(),
+        }
 
     def _find_agent_by_role(self, source_agent: Agent, target_role: str) -> str:
         """Find an agent by role.
