@@ -9,6 +9,7 @@ from src.common_types import AgentInfo, AgentNotFoundError
 from src.common_types.enums import AgentRole
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
+from src.common_types.task_types import TaskComplexity, TaskStatus
 from src.messages.creation import create_human_message
 from src.utils.log_utils import DelegationInfo, get_logger, log_delegation_decision
 
@@ -16,6 +17,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from src.common_types.result_types import Result as StepResult
+
+# Constants
+DESCRIPTION_TRUNCATION_LENGTH = 100
+MIN_CAPABILITY_MATCH_THRESHOLD = 0.3
 
 
 class InMemoryAgentRegistry(AgentRegistry):
@@ -1128,6 +1133,214 @@ class AgentCoordinator:
             )
             return Result.failure(f"Delegation error: {e!s}")
 
+    async def delegate_hierarchical_tasks(
+        self,
+        source_agent_id: str,
+        task: str,
+        parent_task_id: str | None = None,
+    ) -> Result:
+        """Delegate a task hierarchically by breaking it down and assigning subtasks.
+
+        This method:
+        1. Uses the source agent to break down the task into subtasks
+        2. Delegates each subtask to an appropriate agent based on complexity and role
+        3. Tracks the delegated tasks and their relationships
+
+        Args:
+            source_agent_id: ID of the agent delegating the task.
+            task: High-level task to break down and delegate.
+            parent_task_id: Optional ID of a parent task.
+
+        Returns:
+            Result containing information about the delegated tasks.
+
+        """
+        try:
+            # Get the source agent and prepare for task breakdown
+            preparation_result = self._prepare_for_hierarchical_delegation(source_agent_id)
+            if not preparation_result.success:
+                return preparation_result
+
+            source_agent, agent_role = preparation_result.data
+
+            # Break down the task into subtasks
+            breakdown_result = await self._break_down_task(source_agent, agent_role, task, parent_task_id)
+            if not breakdown_result.success:
+                return breakdown_result
+
+            subtasks = breakdown_result.data
+
+            # Delegate the subtasks
+            return await self._delegate_subtasks(source_agent_id, subtasks)
+
+        except AgentNotFoundError as e:
+            error_msg = f"Agent not found: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error_msg)
+        except (ValueError, TypeError, RuntimeError) as e:
+            error_msg = f"Delegation error: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error_msg)
+
+    def _prepare_for_hierarchical_delegation(self, source_agent_id: str) -> Result:
+        """Prepare for hierarchical delegation by getting the source agent and determining its role.
+
+        Args:
+            source_agent_id: ID of the agent delegating the task.
+
+        Returns:
+            Result containing the source agent and its role.
+
+        """
+        # Get the source agent
+        source_agent = self._registry.get_agent(source_agent_id)
+        source_role = None
+
+        # Try to get the role from the agent info
+        try:
+            source_info = self._registry.get_agent_info(source_agent_id)
+            if hasattr(source_info, "role"):
+                source_role = source_info.role
+        except (AttributeError, KeyError, TypeError) as e:
+            # If we can't get the role, log the error and continue without it
+            self._logger.debug("Could not get role from agent info: %s", str(e))
+
+        # Get the agent's state
+        state = source_agent.get_state()
+        if not state:
+            return Result.failure("Agent has no state")
+
+        # Convert string role to AgentRole enum if needed
+        from src.common_types.enums import AgentRole
+
+        agent_role = None
+        if source_role:
+            try:
+                agent_role = AgentRole(source_role.upper())
+            except (ValueError, AttributeError):
+                self._logger.warning(
+                    "Invalid role %s for agent %s, using default",
+                    source_role,
+                    source_agent_id,
+                )
+
+        # If we couldn't determine the role, default to ARCHITECT
+        if not agent_role:
+            agent_role = AgentRole.ARCHITECT
+
+        return Result(success=True, data=(source_agent, agent_role))
+
+    async def _break_down_task(
+        self,
+        source_agent: Agent,
+        agent_role: AgentRole,
+        task: str,
+        parent_task_id: str | None = None,
+    ) -> Result:
+        """Break down a task into subtasks.
+
+        Args:
+            source_agent: The agent breaking down the task.
+            agent_role: The role of the agent.
+            task: The task to break down.
+            parent_task_id: Optional ID of a parent task.
+
+        Returns:
+            Result containing the subtasks.
+
+        """
+        # Create a TaskBreakdownStep for the source agent's role
+        from src.agent.steps import TaskBreakdownStep
+
+        # Create the task breakdown step
+        breakdown_step = TaskBreakdownStep(agent_role=agent_role)
+        breakdown_step.set_agent(source_agent)
+
+        # Break down the task
+        self._logger.info(
+            "Breaking down task for agent %s with role %s",
+            source_agent.get_agent_id(),
+            agent_role,
+        )
+
+        breakdown_result = await breakdown_step(
+            state=source_agent.get_state(),
+            task_description=task,
+            parent_task_id=parent_task_id,
+        )
+
+        if not breakdown_result.success:
+            error_msg = f"Task breakdown failed: {breakdown_result.error}"
+            self._logger.error(error_msg)
+            return Result.failure(error_msg)
+
+        # Get the subtasks from the result
+        subtasks = breakdown_result.data
+        if not subtasks:
+            return Result.failure("No subtasks were created during breakdown")
+
+        self._logger.info("Created %d subtasks", len(subtasks))
+        return Result(success=True, data=subtasks)
+
+    async def _delegate_subtasks(self, source_agent_id: str, subtasks: list) -> Result:
+        """Delegate subtasks to appropriate agents.
+
+        Args:
+            source_agent_id: ID of the agent delegating the tasks.
+            subtasks: List of subtasks to delegate.
+
+        Returns:
+            Result containing information about the delegated tasks.
+
+        """
+        # Delegate each subtask to an appropriate agent
+        delegation_results = []
+        for subtask in subtasks:
+            # Determine the appropriate agent based on task complexity
+            complexity = subtask.complexity.value.upper()
+
+            self._logger.info(
+                "Delegating subtask with complexity %s: %s",
+                complexity,
+                subtask.description[:DESCRIPTION_TRUNCATION_LENGTH]
+                + ("..." if len(subtask.description) > DESCRIPTION_TRUNCATION_LENGTH else ""),
+            )
+
+            # Delegate the task using flexible delegation
+            delegation_result = await self.delegate_task_flexible(
+                source_agent_id=source_agent_id,
+                task=subtask.description,
+                complexity=complexity,
+            )
+
+            # Update the subtask with the delegation result
+            if delegation_result.success:
+                subtask.status = TaskStatus.IN_PROGRESS
+                # Check if agent_id is in the result data dictionary
+                if isinstance(delegation_result.data, dict) and "agent_id" in delegation_result.data:
+                    subtask.assigned_agent_id = delegation_result.data["agent_id"]
+            else:
+                subtask.status = TaskStatus.FAILED
+                subtask.error = delegation_result.error
+
+            delegation_results.append(
+                {
+                    "task_id": str(subtask.task_id),
+                    "success": delegation_result.success,
+                    "assigned_agent_id": subtask.assigned_agent_id,
+                    "error": delegation_result.error if not delegation_result.success else None,
+                },
+            )
+
+        # Return the results
+        return Result(
+            success=True,
+            data={
+                "subtasks": [str(subtask.task_id) for subtask in subtasks],
+                "delegation_results": delegation_results,
+            },
+        )
+
     def _find_agent_by_role(self, source_agent: Agent, target_role: str) -> str:
         """Find an agent by role.
 
@@ -1542,79 +1755,138 @@ class AgentCoordinator:
         return categorized_capabilities[category]
 
     def find_most_capable_agent_for_task(self, task: str, required_capabilities: list[str] | None = None) -> str | None:
-        """Find the most capable agent for a specific task.
-
-        This method analyzes the task and finds the agent with the best capability
-        match for handling it.
+        """Find the most capable agent for a given task.
 
         Args:
-            task: The task description.
-            required_capabilities: Optional list of specific capabilities required for the task.
-                If not provided, capabilities will be extracted from the task description.
+            task: Task description.
+            required_capabilities: Optional list of required capabilities.
 
         Returns:
-            ID of the most capable agent, or None if no suitable agent is found.
+            Agent ID of the most capable agent, or None if no suitable agent found.
 
         """
-        # Extract capabilities from task if not provided
+        # Extract task capabilities if not provided
         task_capabilities = required_capabilities or self._extract_task_capabilities(task)
-
         if not task_capabilities:
-            self._logger.warning("No capabilities could be extracted from task: %s", task)
+            self._logger.warning("No capabilities extracted from task: %s", task)
             return None
 
-        # Find agents with matching capabilities
-        candidate_scores: dict[str, float] = {}
+        # Find agents that can handle the task based on capabilities
+        candidate_agents = {}
 
         for agent_id, agent in self._registry.get_agents().items():
             agent_capabilities = agent.get_capabilities()
+            # Calculate capability match score
             match_score = self._calculate_capability_match_score(task_capabilities, agent_capabilities)
-
             if match_score > 0:
-                # Also consider agent's current status and load
-                agent_info = self._registry.get_agent_info(agent_id)
-                status_penalty = 0.0
+                candidate_agents[agent_id] = match_score
 
-                # Apply penalties based on agent status
-                if hasattr(agent_info, "status"):
-                    if agent_info.status == "busy":
-                        status_penalty = 0.2
-                    elif agent_info.status == "overloaded":
-                        status_penalty = 0.4
-
-                # Apply penalty based on number of child agents (as a proxy for load)
-                child_count = len(agent.get_child_ids())
-                child_penalty = min(0.1 * child_count, 0.3)  # Cap at 0.3
-
-                # Calculate final score
-                final_score = match_score - status_penalty - child_penalty
-
-                # Create a summary of the task for logging
-                task_summary = task
-                if len(task) > self._TASK_SUMMARY_MAX_LENGTH:
-                    task_summary = task[: self._TASK_SUMMARY_MAX_LENGTH] + "..."
-
-                # Log the decision factors
-                delegation_info = DelegationInfo(
-                    source_id="coordinator",
-                    target_id=agent_id,
-                    task_summary=task_summary,
-                    decision_factors={
-                        "capability_match": match_score,
-                        "status_penalty": status_penalty,
-                        "child_penalty": child_penalty,
-                        "final_score": final_score,
-                    },
-                )
-                log_delegation_decision(self._logger, delegation_info)
-
-                candidate_scores[agent_id] = final_score
-
-        # Find the agent with the highest score
-        if candidate_scores:
-            return max(candidate_scores.items(), key=lambda x: x[1])[0]
+        # Sort candidates by match score (highest first)
+        if candidate_agents:
+            sorted_candidates = sorted(candidate_agents.items(), key=lambda x: x[1], reverse=True)
+            return sorted_candidates[0][0]
 
         return None
+
+    async def route_task_by_capability(
+        self,
+        task: str,
+        source_agent_id: str | None = None,
+        required_capabilities: list[str] | None = None,
+        task_complexity: TaskComplexity | None = None,
+    ) -> Result:
+        """Route a task to the most appropriate agent based on capabilities.
+
+        This method analyzes the task, extracts required capabilities, and finds
+        the most suitable agent to handle it. It considers both capability matching
+        and task complexity to make optimal routing decisions.
+
+        Args:
+            task: Task description.
+            source_agent_id: Optional ID of the agent initiating the routing.
+            required_capabilities: Optional list of required capabilities.
+            task_complexity: Optional task complexity for better agent matching.
+
+        Returns:
+            Result containing the target agent ID and routing information.
+
+        """
+        self._logger.debug("Routing task by capability: %s", task[:DESCRIPTION_TRUNCATION_LENGTH])
+
+        # Extract task capabilities if not provided
+        task_capabilities = required_capabilities or self._extract_task_capabilities(task)
+        if not task_capabilities:
+            return Result.failure("Could not extract capabilities from task")
+
+        # Log the extracted capabilities
+        self._logger.debug("Extracted capabilities: %s", task_capabilities)
+
+        # Consider task complexity in routing decision
+        complexity_str = task_complexity.value if task_complexity else "moderate"
+
+        # Find the most suitable agent based on capabilities and complexity
+        target_agent_id = None
+
+        # If we have a source agent, avoid routing back to it
+        excluded_agent_ids = [source_agent_id] if source_agent_id else []
+
+        # Find candidate agents with matching capabilities
+        candidate_agents = {}
+        for agent_id, agent in self._registry.get_agents().items():
+            if agent_id in excluded_agent_ids:
+                continue
+
+            agent_capabilities = agent.get_capabilities()
+            match_score = self._calculate_capability_match_score(task_capabilities, agent_capabilities)
+
+            # Only consider agents with a reasonable match score
+            if match_score >= MIN_CAPABILITY_MATCH_THRESHOLD:
+                # Get agent info to check role for complexity matching
+                try:
+                    agent_info = self._registry.get_agent_info(agent_id)
+                    agent_role = getattr(agent_info, "role", None)
+
+                    # Adjust score based on complexity-role alignment
+                    if (
+                        agent_role
+                        and complexity_str
+                        and (
+                            (agent_role == "EXECUTOR" and complexity_str in ["simple", "moderate"])
+                            or (agent_role == "PLANNER" and complexity_str in ["moderate", "complex"])
+                            or (agent_role == "ARCHITECT" and complexity_str in ["complex", "very_complex"])
+                        )
+                    ):
+                        match_score *= 1.2
+
+                    candidate_agents[agent_id] = match_score
+                except (AgentNotFoundError, AttributeError):
+                    # If we can't get agent info, just use the base match score
+                    candidate_agents[agent_id] = match_score
+
+        # Sort candidates by adjusted match score (highest first)
+        if candidate_agents:
+            sorted_candidates = sorted(candidate_agents.items(), key=lambda x: x[1], reverse=True)
+            target_agent_id = sorted_candidates[0][0]
+            match_score = sorted_candidates[0][1]
+
+            self._logger.info(
+                "Selected agent %s for task with match score %.2f",
+                target_agent_id,
+                match_score,
+            )
+
+            # Create routing result with detailed information
+            routing_info = {
+                "target_agent_id": target_agent_id,
+                "match_score": match_score,
+                "capabilities": task_capabilities,
+                "complexity": complexity_str,
+                "candidates": dict(sorted_candidates[:3]),  # Include top 3 candidates
+            }
+
+            return Result(success=True, data=routing_info)
+
+        return Result.failure("No suitable agent found for the task based on capabilities")
 
 
 class AgentFactory:

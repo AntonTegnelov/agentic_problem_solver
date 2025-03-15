@@ -91,12 +91,11 @@
   - [x] Add unit tests in `tests/unit/test_agent_creation.py` to verify agent creation workflow
   - [x] Create integration tests in `tests/integration/test_dynamic_agents.py` to verify agent creation workflow
   - [x] Update documentation in `docs/howto/agent_creation.md` with usage examples
-  - [ ] Ensure CI/CD pipeline validates the new functionality
 
 - combine the two approaches and make the top agent break down the problem into TODO lists and delegate them to new agents
 
-  - [ ] Extend `AgentCoordinator` in `src/agent/coordination.py` to implement hierarchical task delegation
-  - [ ] Implement capability-based task routing in `src/agent/coordination.py` to match tasks to appropriate agents
+  - [x] Extend `AgentCoordinator` in `src/agent/coordination.py` to implement hierarchical task delegation
+  - [x] Implement capability-based task routing in `src/agent/coordination.py` to match tasks to appropriate agents
   - [ ] Add task complexity evaluation to support flexible delegation decisions
   - [ ] Implement progress tracking in `src/agent/state/base.py` to monitor delegated tasks
   - [ ] Add message routing capabilities in `src/messages/routing.py` for hierarchical message delivery
