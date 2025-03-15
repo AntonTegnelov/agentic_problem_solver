@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from src.common_types.enums import AgentRole
+from src.common_types.enums import AgentRole, ExecutionStage, VerificationStatus
 from src.common_types.task_types import (
     Task,
     TaskComplexity,
@@ -121,3 +121,32 @@ class TestTaskTypes:
         assert task.created_at == now
         assert task.updated_at == now
         assert task.completed_at is None
+
+    def test_task_with_execution_tracking_fields(self) -> None:
+        """Test Task with execution tracking fields."""
+        # Test default values
+        task = Task(description="Test task")
+        assert task.execution_stage is None
+        assert task.verification_status is None
+        assert task.execution_attempts == 0
+        assert task.execution_logs == []
+        assert task.verification_details == {}
+        assert task.execution_metadata == {}
+
+        # Test custom values
+        task = Task(
+            description="Test task with execution tracking",
+            execution_stage=ExecutionStage.IMPLEMENTING,
+            verification_status=VerificationStatus.PENDING,
+            execution_attempts=2,
+            execution_logs=["Attempt 1 failed", "Attempt 2 in progress"],
+            verification_details={"test_coverage": 85, "linting_passed": True},
+            execution_metadata={"last_execution_time": 1234567890},
+        )
+
+        assert task.execution_stage == ExecutionStage.IMPLEMENTING
+        assert task.verification_status == VerificationStatus.PENDING
+        assert task.execution_attempts == 2
+        assert task.execution_logs == ["Attempt 1 failed", "Attempt 2 in progress"]
+        assert task.verification_details == {"test_coverage": 85, "linting_passed": True}
+        assert task.execution_metadata == {"last_execution_time": 1234567890}

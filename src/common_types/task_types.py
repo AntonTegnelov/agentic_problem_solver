@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
-    from src.common_types.enums import AgentRole
+    from src.common_types.enums import AgentRole, ExecutionStage, VerificationStatus
 
 T = TypeVar("T")
 
@@ -104,3 +104,11 @@ class Task:
     created_at: float | None = None
     updated_at: float | None = None
     completed_at: float | None = None
+
+    # Execution tracking fields
+    execution_stage: ExecutionStage | None = None
+    verification_status: VerificationStatus | None = None
+    execution_attempts: int = 0
+    execution_logs: list[str] = field(default_factory=list)
+    verification_details: dict[str, Any] = field(default_factory=dict)
+    execution_metadata: dict[str, Any] = field(default_factory=dict)

@@ -105,7 +105,7 @@
 
   - [ ] Enhance common types for task execution
     - [x] Add execution-related enums in `src/common_types/enums.py` (EXECUTION_STAGE, VERIFICATION_STATUS)
-    - [ ] Extend task schema in `src/common_types/task_types.py` with execution tracking fields
+    - [x] Extend task schema in `src/common_types/task_types.py` with execution tracking fields
   - [ ] Enhance `ExecutorAgent` in `src/agent/agent_types/executor.py` with self-prompting capabilities
     - [ ] Add task iteration mechanism
     - [ ] Implement progress tracking
