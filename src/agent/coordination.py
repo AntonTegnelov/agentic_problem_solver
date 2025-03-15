@@ -25,6 +25,7 @@ class InMemoryAgentRegistry(AgentRegistry):
         """Initialize agent registry."""
         self._agents: dict[str, Agent] = {}
         self._agent_info: dict[str, AgentInfo] = {}
+        self._hierarchy_cache: dict[str, dict[str, list[str]]] = {}
 
     def register_agent(self, agent: Agent, info: AgentInfo | None = None) -> None:
         """Register agent.
@@ -81,6 +82,9 @@ class InMemoryAgentRegistry(AgentRegistry):
         self._agents.pop(agent_id)
         if agent_id in self._agent_info:
             self._agent_info.pop(agent_id)
+
+        # Invalidate hierarchy cache
+        self._hierarchy_cache.clear()
 
     def get_agent(self, agent_id: str) -> Agent:
         """Get agent by ID.
@@ -275,6 +279,11 @@ class InMemoryAgentRegistry(AgentRegistry):
         parent_agent = self._agents[parent_id]
         child_agent = self._agents[child_id]
 
+        # Check for circular relationships
+        if self._would_create_cycle(parent_id, child_id):
+            msg = f"Cannot create circular relationship between {parent_id} and {child_id}"
+            raise ValueError(msg)
+
         # Remove existing parent-child relationship if any
         existing_parent_id = child_agent.get_parent_id()
         if existing_parent_id and existing_parent_id in self._agents:
@@ -291,6 +300,9 @@ class InMemoryAgentRegistry(AgentRegistry):
 
         if child_id in self._agent_info:
             self._agent_info[child_id].parent_id = parent_id
+
+        # Invalidate hierarchy cache
+        self._hierarchy_cache.clear()
 
     def remove_parent_child_relationship(self, parent_id: str, child_id: str) -> None:
         """Remove parent-child relationship between agents.
@@ -326,6 +338,9 @@ class InMemoryAgentRegistry(AgentRegistry):
             if child_id in self._agent_info:
                 self._agent_info[child_id].parent_id = None
 
+            # Invalidate hierarchy cache
+            self._hierarchy_cache.clear()
+
     def get_agent_hierarchy(self, root_agent_id: str) -> dict[str, list[str]]:
         """Get the agent hierarchy starting from the specified root agent.
 
@@ -343,8 +358,16 @@ class InMemoryAgentRegistry(AgentRegistry):
             msg = f"Root agent not found: {root_agent_id}"
             raise AgentNotFoundError(msg)
 
+        # Check if hierarchy is cached
+        if root_agent_id in self._hierarchy_cache:
+            return self._hierarchy_cache[root_agent_id].copy()
+
         hierarchy = {}
         self._build_hierarchy(root_agent_id, hierarchy)
+
+        # Cache the hierarchy
+        self._hierarchy_cache[root_agent_id] = hierarchy.copy()
+
         return hierarchy
 
     def _build_hierarchy(self, agent_id: str, hierarchy: dict[str, list[str]]) -> None:
@@ -367,6 +390,305 @@ class InMemoryAgentRegistry(AgentRegistry):
         for child_id in valid_child_ids:
             self._build_hierarchy(child_id, hierarchy)
 
+    def _would_create_cycle(self, parent_id: str, child_id: str) -> bool:
+        """Check if adding a parent-child relationship would create a cycle.
+
+        Args:
+            parent_id: Potential parent agent ID.
+            child_id: Potential child agent ID.
+
+        Returns:
+            True if a cycle would be created, False otherwise.
+
+        """
+        # If child is the same as parent, it's a cycle
+        if parent_id == child_id:
+            return True
+
+        # Check if parent is a descendant of child
+        current_id = parent_id
+        visited = set()
+
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            if current_id not in self._agents:
+                break
+
+            current_agent = self._agents[current_id]
+            current_id = current_agent.get_parent_id()
+
+            if current_id == child_id:
+                return True
+
+        return False
+
+    def get_root_agents(self) -> list[Agent]:
+        """Get all root agents (agents without parents).
+
+        Returns:
+            List of root agent instances.
+
+        """
+        return [agent for agent_id, agent in self._agents.items() if agent.get_parent_id() is None]
+
+    def get_leaf_agents(self) -> list[Agent]:
+        """Get all leaf agents (agents without children).
+
+        Returns:
+            List of leaf agent instances.
+
+        """
+        return [agent for agent_id, agent in self._agents.items() if not agent.get_child_ids()]
+
+    def get_ancestors(self, agent_id: str) -> list[Agent]:
+        """Get all ancestors of the specified agent.
+
+        Args:
+            agent_id: Agent ID.
+
+        Returns:
+            List of ancestor agent instances, ordered from parent to root.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        if agent_id not in self._agents:
+            msg = f"Agent not found: {agent_id}"
+            raise AgentNotFoundError(msg)
+
+        ancestors = []
+        current_id = self._agents[agent_id].get_parent_id()
+
+        while current_id and current_id in self._agents:
+            ancestor = self._agents[current_id]
+            ancestors.append(ancestor)
+            current_id = ancestor.get_parent_id()
+
+        return ancestors
+
+    def get_descendants(self, agent_id: str) -> list[Agent]:
+        """Get all descendants of the specified agent.
+
+        Args:
+            agent_id: Agent ID.
+
+        Returns:
+            List of descendant agent instances.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        if agent_id not in self._agents:
+            msg = f"Agent not found: {agent_id}"
+            raise AgentNotFoundError(msg)
+
+        descendants = []
+        hierarchy = self.get_agent_hierarchy(agent_id)
+
+        # Skip the root agent itself
+        if agent_id in hierarchy:
+            self._collect_descendants(agent_id, hierarchy, descendants)
+
+        return descendants
+
+    def _collect_descendants(self, agent_id: str, hierarchy: dict[str, list[str]], descendants: list[Agent]) -> None:
+        """Recursively collect descendants from hierarchy.
+
+        Args:
+            agent_id: Current agent ID.
+            hierarchy: Agent hierarchy dictionary.
+            descendants: List to populate with descendant agents.
+
+        """
+        if agent_id not in hierarchy:
+            return
+
+        for child_id in hierarchy[agent_id]:
+            if child_id in self._agents:
+                descendants.append(self._agents[child_id])
+                self._collect_descendants(child_id, hierarchy, descendants)
+
+    def validate_hierarchy(self) -> list[str]:
+        """Validate the entire agent hierarchy for consistency.
+
+        Returns:
+            List of inconsistency messages, empty if hierarchy is valid.
+
+        """
+        inconsistencies = []
+
+        # Check parent-child relationship consistency
+        for agent_id, agent in self._agents.items():
+            # Check child references
+            for child_id in agent.get_child_ids():
+                if child_id not in self._agents:
+                    inconsistencies.append(f"Agent {agent_id} references non-existent child {child_id}")
+                    continue
+
+                child = self._agents[child_id]
+                if child.get_parent_id() != agent_id:
+                    inconsistencies.append(
+                        f"Inconsistent parent-child relationship: {agent_id} lists {child_id} as child, "
+                        f"but {child_id} has parent {child.get_parent_id()}",
+                    )
+
+            # Check parent references
+            parent_id = agent.get_parent_id()
+            if parent_id:
+                if parent_id not in self._agents:
+                    inconsistencies.append(f"Agent {agent_id} references non-existent parent {parent_id}")
+                    continue
+
+                parent = self._agents[parent_id]
+                if agent_id not in parent.get_child_ids():
+                    inconsistencies.append(
+                        f"Inconsistent parent-child relationship: {agent_id} has parent {parent_id}, "
+                        f"but {parent_id} doesn't list {agent_id} as child",
+                    )
+
+        # Check for cycles
+        cycle_messages = [
+            f"Cycle detected in hierarchy starting from {agent_id}"
+            for agent_id in self._agents
+            if self._has_cycle(agent_id)
+        ]
+        inconsistencies.extend(cycle_messages)
+
+        return inconsistencies
+
+    def _has_cycle(self, start_agent_id: str) -> bool:
+        """Check if there's a cycle in the hierarchy starting from the given agent.
+
+        Args:
+            start_agent_id: Starting agent ID.
+
+        Returns:
+            True if a cycle is detected, False otherwise.
+
+        """
+        visited = set()
+        current_id = start_agent_id
+
+        while current_id and current_id in self._agents:
+            if current_id in visited:
+                return True
+
+            visited.add(current_id)
+            current_id = self._agents[current_id].get_parent_id()
+
+        return False
+
+    def repair_hierarchy(self) -> int:
+        """Repair inconsistencies in the agent hierarchy.
+
+        Returns:
+            Number of inconsistencies repaired.
+
+        """
+        repairs_count = 0
+
+        repairs_count += self._repair_missing_child_references()
+        repairs_count += self._repair_missing_parent_references()
+        repairs_count += self._repair_invalid_references()
+        repairs_count += self._repair_agent_info()
+
+        # Invalidate hierarchy cache after repairs
+        if repairs_count > 0:
+            self._hierarchy_cache.clear()
+
+        return repairs_count
+
+    def _repair_missing_child_references(self) -> int:
+        """Fix missing child references in the hierarchy.
+
+        Returns:
+            Number of repairs made.
+
+        """
+        repairs_count = 0
+
+        # Fix missing child references
+        for agent_id, agent in self._agents.items():
+            parent_id = agent.get_parent_id()
+            if parent_id and parent_id in self._agents:
+                parent = self._agents[parent_id]
+                if agent_id not in parent.get_child_ids():
+                    parent.add_child(agent_id)
+                    repairs_count += 1
+
+        return repairs_count
+
+    def _repair_missing_parent_references(self) -> int:
+        """Fix missing parent references in the hierarchy.
+
+        Returns:
+            Number of repairs made.
+
+        """
+        repairs_count = 0
+
+        # Fix missing parent references
+        for agent_id, agent in self._agents.items():
+            for child_id in agent.get_child_ids():
+                if child_id in self._agents:
+                    child = self._agents[child_id]
+                    if child.get_parent_id() != agent_id:
+                        child.set_parent(agent_id)
+                        repairs_count += 1
+
+        return repairs_count
+
+    def _repair_invalid_references(self) -> int:
+        """Remove references to non-existent agents.
+
+        Returns:
+            Number of repairs made.
+
+        """
+        repairs_count = 0
+
+        # Remove references to non-existent agents
+        for agent in self._agents.values():
+            # Clean up child references
+            invalid_children = [child_id for child_id in agent.get_child_ids() if child_id not in self._agents]
+
+            for invalid_child in invalid_children:
+                agent.remove_child(invalid_child)
+                repairs_count += 1
+
+            # Clean up parent reference
+            parent_id = agent.get_parent_id()
+            if parent_id and parent_id not in self._agents:
+                agent.clear_parent()
+                repairs_count += 1
+
+        return repairs_count
+
+    def _repair_agent_info(self) -> int:
+        """Update agent info to match agent state.
+
+        Returns:
+            Number of repairs made.
+
+        """
+        repairs_count = 0
+
+        # Update agent info to match agent state
+        for agent_id, agent in self._agents.items():
+            if agent_id in self._agent_info:
+                info = self._agent_info[agent_id]
+                if info.parent_id != agent.get_parent_id():
+                    info.parent_id = agent.get_parent_id()
+                    repairs_count += 1
+
+                if set(info.child_ids) != set(agent.get_child_ids()):
+                    info.child_ids = agent.get_child_ids()
+                    repairs_count += 1
+
+        return repairs_count
+
 
 class AgentCoordinator:
     """Agent coordinator for delegating tasks to agents."""
@@ -381,6 +703,17 @@ class AgentCoordinator:
         self._registry = registry
         self._factories: dict[str, Callable[..., Agent]] = {}
         self._logger = get_logger("agent.coordinator")
+        # Resource management configuration
+        self._resource_limits = {
+            "max_agents": 50,  # Maximum number of agents allowed
+            "max_agents_per_role": {  # Maximum number of agents per role
+                AgentRole.ARCHITECT.value: 5,
+                AgentRole.PLANNER.value: 15,
+                AgentRole.EXECUTOR.value: 30,
+            },
+            "max_children_per_agent": 10,  # Maximum number of child agents per parent
+            "max_hierarchy_depth": 5,  # Maximum depth of agent hierarchy
+        }
 
     def register_agent_factory(self, agent_type: str, factory: Callable[..., Agent]) -> None:
         """Register agent factory.
@@ -444,6 +777,69 @@ class AgentCoordinator:
                 return agent_id
         return None
 
+    def _check_resource_limits(self, agent_type: str, parent_id: str | None = None) -> tuple[bool, str]:
+        """Check if creating a new agent would exceed resource limits.
+
+        Args:
+            agent_type: Type of agent to create.
+            parent_id: Optional parent agent ID.
+
+        Returns:
+            Tuple of (is_allowed, reason). If is_allowed is False, reason contains
+            the explanation for why the agent creation is not allowed.
+
+        """
+        # Check total agent count
+        total_agents = len(self._registry.get_agents())
+        if total_agents >= self._resource_limits["max_agents"]:
+            return False, f"Maximum number of agents ({self._resource_limits['max_agents']}) reached"
+
+        # Check role-specific limits if agent_type is a role
+        try:
+            role = AgentRole(agent_type.lower())
+            role_value = role.value
+            role_agents = len(self._registry.find_agents_by_role(role_value))
+            if role_value in self._resource_limits["max_agents_per_role"]:
+                max_for_role = self._resource_limits["max_agents_per_role"][role_value]
+                if role_agents >= max_for_role:
+                    return False, f"Maximum number of {role_value} agents ({max_for_role}) reached"
+        except ValueError:
+            # Not a role, continue with other checks
+            pass
+
+        # Check parent's child count limit
+        if parent_id:
+            try:
+                parent_agent = self._registry.get_agent(parent_id)
+                child_count = len(parent_agent.get_child_ids())
+                if child_count >= self._resource_limits["max_children_per_agent"]:
+                    return (
+                        False,
+                        f"Maximum number of children "
+                        f"({self._resource_limits['max_children_per_agent']}) "
+                        f"for parent {parent_id} reached",
+                    )
+
+                # Check hierarchy depth limit
+                if self._resource_limits["max_hierarchy_depth"] > 0:
+                    # Calculate current depth of parent
+                    ancestors = self._registry.get_ancestors(parent_id)
+                    current_depth = len(ancestors) + 1  # +1 for the parent itself
+
+                    # New agent would be at current_depth + 1
+                    if current_depth + 1 > self._resource_limits["max_hierarchy_depth"]:
+                        return (
+                            False,
+                            f"Maximum hierarchy depth "
+                            f"({self._resource_limits['max_hierarchy_depth']}) "
+                            f"would be exceeded",
+                        )
+            except AgentNotFoundError:
+                # Parent not found, can't check child count
+                pass
+
+        return True, ""
+
     def create_agent(self, agent_type: str, config: dict, **kwargs: dict[str, Any]) -> Agent:
         """Create agent.
 
@@ -456,7 +852,7 @@ class AgentCoordinator:
             Created agent.
 
         Raises:
-            ValueError: If agent type not registered.
+            ValueError: If agent type not registered or resource limits would be exceeded.
 
         """
         # Check if agent_type is a role name
@@ -469,6 +865,25 @@ class AgentCoordinator:
 
         if agent_type not in self._factories:
             msg = f"Invalid agent type: {agent_type}"
+            raise ValueError(msg)
+
+        # Extract parent_id from kwargs or config
+        parent_id = kwargs.get("parent_id")
+        if parent_id is None and "parent_id" in config:
+            parent_id = config["parent_id"]
+
+        # Check resource limits
+        is_allowed, reason = self._check_resource_limits(agent_type, parent_id)
+        if not is_allowed:
+            msg = f"Cannot create agent: {reason}"
+            self._logger.warning(
+                "Agent creation denied due to resource limits",
+                extra={
+                    "agent_type": agent_type,
+                    "parent_id": parent_id,
+                    "reason": reason,
+                },
+            )
             raise ValueError(msg)
 
         agent = self._factories[agent_type](config=config, **kwargs)
@@ -491,7 +906,7 @@ class AgentCoordinator:
             Created agent.
 
         Raises:
-            ValueError: If the role is not supported.
+            ValueError: If the role is not supported or resource limits would be exceeded.
 
         """
         from src.agent.agent_types import create_agent as create_agent_by_role
@@ -514,6 +929,20 @@ class AgentCoordinator:
             agent_id = config["agent_id"]
             # Make sure it's set in the agent_config
             agent_config.agent_id = agent_id
+
+        # Check resource limits
+        is_allowed, reason = self._check_resource_limits(role.value, parent_id)
+        if not is_allowed:
+            msg = f"Cannot create agent: {reason}"
+            self._logger.warning(
+                "Agent creation denied due to resource limits",
+                extra={
+                    "role": role.value,
+                    "parent_id": parent_id,
+                    "reason": reason,
+                },
+            )
+            raise ValueError(msg)
 
         # Create the agent using the specialized factory function
         agent = create_agent_by_role(
