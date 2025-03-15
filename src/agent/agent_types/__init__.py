@@ -102,6 +102,15 @@ def create_architect_agent(
             """
             return await self._async_agent.process(message)
 
+        def process_sync(self, message: Message) -> Result[Any]:
+            """Run the process method synchronously.
+
+            This method allows the agent to be used in synchronous contexts.
+            """
+            import asyncio
+
+            return asyncio.run(self.process(message))
+
         def __getattr__(self, name: str) -> object:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
@@ -146,6 +155,15 @@ def create_planner_agent(
             """
             return await self._async_agent.process(message)
 
+        def process_sync(self, message: Message) -> Result[Any]:
+            """Run the process method synchronously.
+
+            This method allows the agent to be used in synchronous contexts.
+            """
+            import asyncio
+
+            return asyncio.run(self.process(message))
+
         def __getattr__(self, name: str) -> object:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
@@ -189,6 +207,15 @@ def create_executor_agent(
             This method is now async to match the expected signature in tests.
             """
             return await self._async_agent.process(message)
+
+        def process_sync(self, message: Message) -> Result[Any]:
+            """Run the process method synchronously.
+
+            This method allows the agent to be used in synchronous contexts.
+            """
+            import asyncio
+
+            return asyncio.run(self.process(message))
 
         def __getattr__(self, name: str) -> object:
             """Delegate all other attribute access to the wrapped agent."""

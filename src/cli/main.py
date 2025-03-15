@@ -153,7 +153,7 @@ def solve(
 
         # Process task - create a human message and process it
         message = create_message(role="human", content=task)
-        result = agent.process(message)
+        result = agent.process_sync(message)
 
         # Extract data from the Result object
         if result.success:
@@ -202,7 +202,7 @@ def process_message(
 
         # Create a human message and process it
         human_message = create_message(role="human", content=message)
-        result = agent.process(human_message)
+        result = agent.process_sync(human_message)
 
         # Extract data from the Result object
         if result.success:
