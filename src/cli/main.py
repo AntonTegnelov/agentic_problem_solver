@@ -1,6 +1,5 @@
 """Command line interface for the problem solver."""
 
-import asyncio
 import logging
 import sys
 from pathlib import Path
@@ -152,10 +151,16 @@ def solve(
                 sys.exit(1)
             raise
 
-        # Process task - create a human message and run it through asyncio
+        # Process task - create a human message and process it
         message = create_message(role="human", content=task)
-        result = asyncio.run(agent.process(message))
-        click.echo(result)
+        result = agent.process(message)
+
+        # Extract data from the Result object
+        if result.success:
+            click.echo(result.data)
+        else:
+            click.echo(f"Error: {result.error}", err=True)
+            sys.exit(1)
 
     except AgentError as e:
         logger.exception("Agent error")
@@ -195,10 +200,16 @@ def process_message(
         # Set up the agent
         agent, _, _ = setup_agent(model_to_use, temperature, max_tokens)
 
-        # Create a human message and run it through asyncio
+        # Create a human message and process it
         human_message = create_message(role="human", content=message)
-        result = asyncio.run(agent.process(human_message))
-        return str(result)
+        result = agent.process(human_message)
+
+        # Extract data from the Result object
+        if result.success:
+            return result.data
+        error_msg = f"Processing failed: {result.error}"
+        raise TaskError(error_msg)
+
     except ValueError as err:
         logger.exception("Configuration error")
         error_msg = f"Configuration error: {err}"

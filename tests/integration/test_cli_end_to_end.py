@@ -13,7 +13,6 @@ import pytest
 
 from src.cli.main import TaskError, cli, main, process_message
 from src.common_types.error_types import AgentError
-from src.common_types.message_types import Message
 
 
 @pytest.fixture
@@ -70,13 +69,14 @@ def test_cli_solve_command_execution(mock_create_architect_agent: MagicMock) -> 
     # Setup mock
     instance = mock_create_architect_agent.return_value
 
-    # Create a mock coroutine for the async process method
-    async def mock_process(message: Message) -> str:
-        # Use the message parameter to avoid linter warning
-        assert message is not None
-        return "Mocked response"
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Mocked response"
+    mock_result.error = None
 
-    instance.process = mock_process
+    # Set up the mock process method to return the mock result
+    instance.process.return_value = mock_result
 
     # Create a CLI runner
     from click.testing import CliRunner
@@ -123,7 +123,15 @@ def test_cli_solve_command_with_options(
 
     # Mock the ArchitectAgent
     instance = mock_create_architect_agent.return_value
-    instance.process = AsyncMock(return_value="Mocked response with options")
+
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Mocked response with options"
+    mock_result.error = None
+
+    # Set up the mock process method to return the mock result
+    instance.process.return_value = mock_result
 
     # Setup the test to intercept AgentConfig creation
     with patch("src.cli.main.AgentConfig") as mock_agent_config:
@@ -224,14 +232,22 @@ def test_process_message_success(mock_create_architect_agent: MagicMock) -> None
     """
     # Setup mock
     instance = mock_create_architect_agent.return_value
-    instance.process = AsyncMock(return_value="Processed message result")
+
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Processed message result"
+    mock_result.error = None
+
+    # Set up the mock process method to return the mock result
+    instance.process.return_value = mock_result
 
     # Call the function with env vars mock
     with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "GEMINI_MODEL": "test-model"}):
         result = process_message("Test message")
 
     # Verify the result
-    assert result == "Processed message result", "Unexpected result from process_message"
+    assert result == "Processed message result"
 
 
 @patch("src.cli.main.load_env_var")
@@ -258,7 +274,7 @@ def test_process_message_agent_error(mock_create_architect_agent: MagicMock) -> 
     # Setup mock to raise an AgentError during process
     error_msg = "Agent process error"
     instance = mock_create_architect_agent.return_value
-    instance.process = AsyncMock(side_effect=AgentError(error_msg))
+    instance.process.side_effect = AgentError(error_msg)
 
     # Mock environment variables
     with (

@@ -15,6 +15,7 @@ from src.agent.state.base import AgentState, StateManager
 from src.common_types import AgentEntry as CommonAgentEntry
 from src.common_types import AgentInfo as CommonAgentInfo
 from src.common_types.enums import AgentRole
+from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 
 T = TypeVar("T")
@@ -82,7 +83,24 @@ def create_architect_agent(
 
     """
     agent = ArchitectAgent(provider=provider, state_manager=state_manager, config=config)
-    return cast(Agent[Any], agent)
+
+    # Create a wrapper class that adapts the async process method to the sync interface
+    class SyncArchitectAgent:
+        def __init__(self, async_agent) -> None:
+            self._async_agent = async_agent
+
+        def process(self, message: Message) -> Result[Any]:
+            """Process a message synchronously by running the async method in an event loop."""
+            import asyncio
+
+            return asyncio.run(self._async_agent.process(message))
+
+        def __getattr__(self, name):
+            """Delegate all other attribute access to the wrapped agent."""
+            return getattr(self._async_agent, name)
+
+    # Return the wrapped agent
+    return cast(Agent[Any], SyncArchitectAgent(agent))
 
 
 def create_planner_agent(
@@ -102,7 +120,24 @@ def create_planner_agent(
 
     """
     agent = PlannerAgent(provider=provider, state_manager=state_manager, config=config)
-    return cast(Agent[Any], agent)
+
+    # Create a wrapper class that adapts the async process method to the sync interface
+    class SyncPlannerAgent:
+        def __init__(self, async_agent) -> None:
+            self._async_agent = async_agent
+
+        def process(self, message: Message) -> Result[Any]:
+            """Process a message synchronously by running the async method in an event loop."""
+            import asyncio
+
+            return asyncio.run(self._async_agent.process(message))
+
+        def __getattr__(self, name):
+            """Delegate all other attribute access to the wrapped agent."""
+            return getattr(self._async_agent, name)
+
+    # Return the wrapped agent
+    return cast(Agent[Any], SyncPlannerAgent(agent))
 
 
 def create_executor_agent(
@@ -122,4 +157,21 @@ def create_executor_agent(
 
     """
     agent = ExecutorAgent(provider=provider, state_manager=state_manager, config=config)
-    return cast(Agent[Any], agent)
+
+    # Create a wrapper class that adapts the async process method to the sync interface
+    class SyncExecutorAgent:
+        def __init__(self, async_agent) -> None:
+            self._async_agent = async_agent
+
+        def process(self, message: Message) -> Result[Any]:
+            """Process a message synchronously by running the async method in an event loop."""
+            import asyncio
+
+            return asyncio.run(self._async_agent.process(message))
+
+        def __getattr__(self, name):
+            """Delegate all other attribute access to the wrapped agent."""
+            return getattr(self._async_agent, name)
+
+    # Return the wrapped agent
+    return cast(Agent[Any], SyncExecutorAgent(agent))

@@ -6,7 +6,6 @@ import pytest
 from click.testing import CliRunner
 
 from src.cli.main import TaskError, cli, main, process_message
-from src.common_types.message_types import Message
 
 
 @pytest.fixture
@@ -43,13 +42,14 @@ def test_solve_command_success(
     # Mock the agent and its process method
     mock_agent_instance = MagicMock()
 
-    # Create a mock coroutine for the async process method
-    async def mock_process(message: Message) -> str:
-        # Use the message parameter to avoid linter warning
-        assert message is not None
-        return "Task solution"
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Task solution"
+    mock_result.error = None
 
-    mock_agent_instance.process = mock_process
+    # Set up the mock process method to return the mock result
+    mock_agent_instance.process.return_value = mock_result
     mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables
@@ -63,7 +63,10 @@ def test_solve_command_success(
     mock_gemini_provider.return_value = mock_provider_instance
 
     # Run the command - don't try to check sys.exit since Click handles it differently
-    cli_runner.invoke(cli, ["solve", "Test task"])
+    result = cli_runner.invoke(cli, ["solve", "Test task"])
+
+    # Check that the output contains the task solution
+    assert "Task solution" in result.output
 
     # Check that the agent was created with the right parameters
     mock_create_architect_agent.assert_called_once()
@@ -100,13 +103,14 @@ def test_process_message_success(
     # Mock the agent and its process method
     mock_agent_instance = MagicMock()
 
-    # Create a mock coroutine for the async process method
-    async def mock_process(message: Message) -> str:
-        # Use the message parameter to avoid linter warning
-        assert message is not None
-        return "Test response"
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Test response"
+    mock_result.error = None
 
-    mock_agent_instance.process = mock_process
+    # Set up the mock process method to return the mock result
+    mock_agent_instance.process.return_value = mock_result
     mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables

@@ -610,7 +610,16 @@ class TaskBreakdownStep:
             message = HumanMessage(content=prompt)
             logger.debug("Created HumanMessage with content length: %d", len(message.content))
 
-            result = await agent.process(message)
+            # Check if the process method is a coroutine function (async)
+            import inspect
+
+            if inspect.iscoroutinefunction(agent.process):
+                # If it's async, await it
+                result = await agent.process(message)
+            else:
+                # If it's not async, call it directly
+                result = agent.process(message)
+
             logger.debug(
                 "Process result success: %s, data length: %d",
                 result.success,

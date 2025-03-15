@@ -1,7 +1,7 @@
 """Executor agent module.
 
 This module contains the implementation of the ExecutorAgent, which is responsible
-for low-level task execution in the hierarchical agent system.
+for executing specific tasks in the hierarchical agent system.
 """
 
 from __future__ import annotations
@@ -152,7 +152,15 @@ class ExecutorAgent:
         try:
             self._validate_provider()
             messages = self._prepare_messages([message])
-            response = await self._provider.generate(messages)
+
+            # Check if the provider's generate method is a coroutine function (async)
+            if inspect.iscoroutinefunction(self._provider.generate):
+                # If it's async, await it
+                response = await self._provider.generate(messages)
+            else:
+                # If it's not async, call it directly
+                response = self._provider.generate(messages)
+
             response_str = str(response)  # Convert response to string regardless of type
             return Result(success=True, data=response_str, error=None)
         except (ConnectionError, TimeoutError) as e:
