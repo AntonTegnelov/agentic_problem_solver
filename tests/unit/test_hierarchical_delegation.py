@@ -186,18 +186,18 @@ class TestHierarchicalDelegation:
         registry.register_agent(planner_agent, planner_info)
         registry.register_agent(executor_agent, executor_info)
 
+        # Create mock tasks
+        task1 = Task(description="Task 1", complexity=TaskComplexity.SIMPLE)
+        task2 = Task(description="Task 2", complexity=TaskComplexity.MODERATE)
+
         # Mock the TaskBreakdownStep
         with patch("src.agent.steps.TaskBreakdownStep") as mock_task_breakdown:
-            # Configure the mock
-            mock_breakdown_instance = AsyncMock()
-            mock_task_breakdown.return_value = mock_breakdown_instance
-
-            # Create mock tasks
-            task1 = Task(description="Task 1", complexity=TaskComplexity.SIMPLE)
-            task2 = Task(description="Task 2", complexity=TaskComplexity.MODERATE)
-
-            # Configure the mock to return tasks
-            mock_breakdown_instance.return_value = Result(success=True, data=[task1, task2])
+            # Create an AsyncMock for the instance that will be returned
+            mock_instance = AsyncMock()
+            # Configure the mock to return tasks when called
+            mock_instance.return_value = Result(success=True, data=[task1, task2])
+            # Make the mock_task_breakdown return our AsyncMock instance
+            mock_task_breakdown.return_value = mock_instance
 
             # Mock the delegate_task_flexible method
             with patch.object(
@@ -246,13 +246,15 @@ class TestHierarchicalDelegation:
 
         # Mock the TaskBreakdownStep
         with patch("src.agent.steps.TaskBreakdownStep") as mock_task_breakdown:
-            # Configure the mock to fail
-            mock_breakdown_instance = AsyncMock()
-            mock_task_breakdown.return_value = mock_breakdown_instance
-            mock_breakdown_instance.return_value = Result(
+            # Create an AsyncMock for the instance that will be returned
+            mock_instance = AsyncMock()
+            # Configure the mock to fail when called
+            mock_instance.return_value = Result(
                 success=False,
                 error="Failed to break down task",
             )
+            # Make the mock_task_breakdown return our AsyncMock instance
+            mock_task_breakdown.return_value = mock_instance
 
             # Test hierarchical delegation
             result = await coordinator.delegate_hierarchical_tasks(
@@ -281,17 +283,17 @@ class TestHierarchicalDelegation:
         architect_info.role = "architect"
         registry.register_agent(architect_agent, architect_info)
 
+        # Create mock tasks
+        task1 = Task(description="Task 1", complexity=TaskComplexity.SIMPLE)
+
         # Mock the TaskBreakdownStep
         with patch("src.agent.steps.TaskBreakdownStep") as mock_task_breakdown:
-            # Configure the mock
-            mock_breakdown_instance = AsyncMock()
-            mock_task_breakdown.return_value = mock_breakdown_instance
-
-            # Create mock tasks
-            task1 = Task(description="Task 1", complexity=TaskComplexity.SIMPLE)
-
-            # Configure the mock to return tasks
-            mock_breakdown_instance.return_value = Result(success=True, data=[task1])
+            # Create an AsyncMock for the instance that will be returned
+            mock_instance = AsyncMock()
+            # Configure the mock to return tasks when called
+            mock_instance.return_value = Result(success=True, data=[task1])
+            # Make the mock_task_breakdown return our AsyncMock instance
+            mock_task_breakdown.return_value = mock_instance
 
             # Mock the delegate_task_flexible method to fail
             with patch.object(
