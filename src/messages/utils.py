@@ -178,3 +178,156 @@ def validate_message_content(message: Message, required_fields: list[str] | None
                 raise ConfigError(msg)
 
     return True
+
+
+# Sender/Receiver Hierarchy Information
+
+
+def get_sender_id(message: Message) -> str | None:
+    """Get sender agent ID from message metadata.
+
+    Args:
+        message: Message to get sender ID from.
+
+    Returns:
+        Sender agent ID or None if not set.
+
+    """
+    return get_message_metadata(message, "sender_id")
+
+
+def set_sender_id(message: Message, agent_id: str) -> None:
+    """Set sender agent ID in message metadata.
+
+    Args:
+        message: Message to set sender ID on.
+        agent_id: Sender agent ID.
+
+    """
+    set_message_metadata(message, "sender_id", agent_id)
+
+
+def get_receiver_id(message: Message) -> str | None:
+    """Get receiver agent ID from message metadata.
+
+    Args:
+        message: Message to get receiver ID from.
+
+    Returns:
+        Receiver agent ID or None if not set.
+
+    """
+    return get_message_metadata(message, "receiver_id")
+
+
+def set_receiver_id(message: Message, agent_id: str) -> None:
+    """Set receiver agent ID in message metadata.
+
+    Args:
+        message: Message to set receiver ID on.
+        agent_id: Receiver agent ID.
+
+    """
+    set_message_metadata(message, "receiver_id", agent_id)
+
+
+def get_sender_parent_id(message: Message) -> str | None:
+    """Get sender's parent agent ID from message metadata.
+
+    Args:
+        message: Message to get sender's parent ID from.
+
+    Returns:
+        Sender's parent agent ID or None if not set.
+
+    """
+    return get_message_metadata(message, "sender_parent_id")
+
+
+def set_sender_parent_id(message: Message, parent_id: str | None) -> None:
+    """Set sender's parent agent ID in message metadata.
+
+    Args:
+        message: Message to set sender's parent ID on.
+        parent_id: Sender's parent agent ID or None if no parent.
+
+    """
+    set_message_metadata(message, "sender_parent_id", parent_id)
+
+
+def get_receiver_parent_id(message: Message) -> str | None:
+    """Get receiver's parent agent ID from message metadata.
+
+    Args:
+        message: Message to get receiver's parent ID from.
+
+    Returns:
+        Receiver's parent agent ID or None if not set.
+
+    """
+    return get_message_metadata(message, "receiver_parent_id")
+
+
+def set_receiver_parent_id(message: Message, parent_id: str | None) -> None:
+    """Set receiver's parent agent ID in message metadata.
+
+    Args:
+        message: Message to set receiver's parent ID on.
+        parent_id: Receiver's parent agent ID or None if no parent.
+
+    """
+    set_message_metadata(message, "receiver_parent_id", parent_id)
+
+
+def get_hierarchy_path(message: Message) -> list[str] | None:
+    """Get the hierarchical path the message has traveled through.
+
+    The path is a list of agent IDs representing the chain of delegation,
+    from the original sender down to the current receiver.
+
+    Args:
+        message: Message to get hierarchy path from.
+
+    Returns:
+        List of agent IDs representing the hierarchy path or None if not set.
+
+    """
+    return get_message_metadata(message, "hierarchy_path")
+
+
+def set_hierarchy_path(message: Message, path: list[str]) -> None:
+    """Set the hierarchical path the message has traveled through.
+
+    Args:
+        message: Message to set hierarchy path on.
+        path: List of agent IDs representing the hierarchy path.
+
+    """
+    set_message_metadata(message, "hierarchy_path", path.copy())
+
+
+def add_to_hierarchy_path(message: Message, agent_id: str) -> None:
+    """Add an agent ID to the hierarchy path.
+
+    Args:
+        message: Message to update hierarchy path on.
+        agent_id: Agent ID to add to the path.
+
+    """
+    path = get_hierarchy_path(message) or []
+    if agent_id not in path:
+        path.append(agent_id)
+        set_hierarchy_path(message, path)
+
+
+def is_hierarchical_message(message: Message) -> bool:
+    """Check if message contains hierarchy information.
+
+    Args:
+        message: Message to check.
+
+    Returns:
+        True if message contains sender and receiver IDs.
+
+    """
+    return get_sender_id(message) is not None and get_receiver_id(message) is not None
