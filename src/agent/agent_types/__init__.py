@@ -1,6 +1,6 @@
 """Agent types package."""
 
-from typing import Any, NoReturn, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from src.agent.agent_types.agent_types import (
     Agent,
