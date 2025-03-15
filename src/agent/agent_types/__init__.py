@@ -95,24 +95,12 @@ def create_architect_agent(
                 if not attr.startswith("_") and not hasattr(self, attr):
                     setattr(self, attr, getattr(async_agent, attr))
 
-        def process(self, message: Message) -> Result[Any]:
-            """Process a message synchronously by running the async method in an event loop."""
-            import asyncio
+        async def process(self, message: Message) -> Result[Any]:
+            """Process a message by delegating to the wrapped agent.
 
-            # Get the current event loop or create a new one if none exists
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            # If the loop is already running, create a task and wait for it
-            if loop.is_running():
-                # Create a future to get the result
-                future = asyncio.run_coroutine_threadsafe(self._async_agent.process(message), loop)
-                return future.result()
-            # If no loop is running, we can use loop.run_until_complete
-            return loop.run_until_complete(self._async_agent.process(message))
+            This method is now async to match the expected signature in tests.
+            """
+            return await self._async_agent.process(message)
 
         def __getattr__(self, name):
             """Delegate all other attribute access to the wrapped agent."""
@@ -151,24 +139,12 @@ def create_planner_agent(
                 if not attr.startswith("_") and not hasattr(self, attr):
                     setattr(self, attr, getattr(async_agent, attr))
 
-        def process(self, message: Message) -> Result[Any]:
-            """Process a message synchronously by running the async method in an event loop."""
-            import asyncio
+        async def process(self, message: Message) -> Result[Any]:
+            """Process a message by delegating to the wrapped agent.
 
-            # Get the current event loop or create a new one if none exists
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            # If the loop is already running, create a task and wait for it
-            if loop.is_running():
-                # Create a future to get the result
-                future = asyncio.run_coroutine_threadsafe(self._async_agent.process(message), loop)
-                return future.result()
-            # If no loop is running, we can use loop.run_until_complete
-            return loop.run_until_complete(self._async_agent.process(message))
+            This method is now async to match the expected signature in tests.
+            """
+            return await self._async_agent.process(message)
 
         def __getattr__(self, name):
             """Delegate all other attribute access to the wrapped agent."""
@@ -207,24 +183,12 @@ def create_executor_agent(
                 if not attr.startswith("_") and not hasattr(self, attr):
                     setattr(self, attr, getattr(async_agent, attr))
 
-        def process(self, message: Message) -> Result[Any]:
-            """Process a message synchronously by running the async method in an event loop."""
-            import asyncio
+        async def process(self, message: Message) -> Result[Any]:
+            """Process a message by delegating to the wrapped agent.
 
-            # Get the current event loop or create a new one if none exists
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            # If the loop is already running, create a task and wait for it
-            if loop.is_running():
-                # Create a future to get the result
-                future = asyncio.run_coroutine_threadsafe(self._async_agent.process(message), loop)
-                return future.result()
-            # If no loop is running, we can use loop.run_until_complete
-            return loop.run_until_complete(self._async_agent.process(message))
+            This method is now async to match the expected signature in tests.
+            """
+            return await self._async_agent.process(message)
 
         def __getattr__(self, name):
             """Delegate all other attribute access to the wrapped agent."""
