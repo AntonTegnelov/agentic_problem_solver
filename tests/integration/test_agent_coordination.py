@@ -392,3 +392,87 @@ async def test_agent_coordinator_new() -> None:
     result = await agent1.process(message)
     assert result.success
     assert result.data == "Processed by agent1"
+
+
+@pytest.mark.asyncio
+async def test_agent_coordinator_flexible_delegation() -> None:
+    """Test agent coordinator flexible delegation paths."""
+    registry = InMemoryAgentRegistry()
+    coordinator = AgentCoordinator(registry)
+
+    # Create agents with different roles
+    architect_agent = MockAgent("architect1", ["design", "architecture"])
+    planner_agent = MockAgent("planner1", ["planning", "implementation"])
+    executor_agent = MockAgent("executor1", ["coding", "testing"])
+
+    # Set agent info with roles
+    architect_info = AgentInfo(
+        agent_id="architect1",
+        name="Architect Agent",
+        description="Handles high-level design",
+        capabilities=["design", "architecture"],
+    )
+    # Add role as an attribute
+    architect_info.role = "ARCHITECT"
+
+    planner_info = AgentInfo(
+        agent_id="planner1",
+        name="Planner Agent",
+        description="Handles implementation planning",
+        capabilities=["planning", "implementation"],
+    )
+    # Add role as an attribute
+    planner_info.role = "PLANNER"
+
+    executor_info = AgentInfo(
+        agent_id="executor1",
+        name="Executor Agent",
+        description="Handles code implementation",
+        capabilities=["coding", "testing"],
+    )
+    # Add role as an attribute
+    executor_info.role = "EXECUTOR"
+
+    # Register agents
+    registry.register_agent(architect_agent, architect_info)
+    registry.register_agent(planner_agent, planner_info)
+    registry.register_agent(executor_agent, executor_info)
+
+    # Test direct delegation from Architect to Executor for simple tasks
+    result = await coordinator.delegate_task_flexible(
+        source_agent_id="architect1",
+        task="Implement a simple function",
+        complexity="SIMPLE",
+    )
+    assert result.success
+    assert result.data == "Processed by executor1"
+    assert executor_agent.get_parent_id() == "architect1"
+    assert "executor1" in architect_agent.get_child_ids()
+
+    # Test delegation from Architect to Planner for complex tasks
+    result = await coordinator.delegate_task_flexible(
+        source_agent_id="architect1",
+        task="Design a complex system",
+        complexity="COMPLEX",
+    )
+    assert result.success
+    assert result.data == "Processed by planner1"
+    assert planner_agent.get_parent_id() == "architect1"
+    assert "planner1" in architect_agent.get_child_ids()
+
+    # Test delegation by target role
+    result = await coordinator.delegate_task_flexible(
+        source_agent_id="architect1",
+        task="Implement this feature",
+        target_role="EXECUTOR",
+    )
+    assert result.success
+    assert result.data == "Processed by executor1"
+
+    # Test delegation by capability matching
+    result = await coordinator.delegate_task_flexible(
+        source_agent_id="architect1",
+        task="Write tests for the code",
+    )
+    assert result.success
+    assert result.data == "Processed by executor1"  # Executor has "testing" capability

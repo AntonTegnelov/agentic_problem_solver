@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
 from src.common_types import AgentInfo, AgentNotFoundError
 from src.common_types.message_types import Message
+from src.messages.creation import create_human_message
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -480,6 +481,223 @@ class AgentCoordinator:
         """
         agent = self._registry.get_agent(target_agent_id)
         return await agent.process(message)
+
+    async def delegate_task_flexible(
+        self,
+        source_agent_id: str,
+        task: str,
+        target_role: str | None = None,
+        complexity: str | None = None,
+    ) -> Result:
+        """Delegate task using flexible delegation paths.
+
+        This method supports flexible delegation based on task complexity and agent roles:
+        - Direct delegation from Architect to Executor for simple tasks
+        - Standard delegation from Architect to Planner for complex tasks
+        - Recursive delegation from Planner to another Planner for complex sub-components
+        - Standard delegation from Planner to Executor for implementable tasks
+
+        Args:
+            source_agent_id: Source agent ID.
+            task: Task to delegate.
+            target_role: Optional target agent role (ARCHITECT, PLANNER, EXECUTOR).
+            complexity: Optional task complexity (SIMPLE, MODERATE, COMPLEX).
+
+        Returns:
+            Task result.
+
+        Raises:
+            AgentNotFoundError: If source agent not found.
+            ValueError: If no suitable target agent found.
+
+        """
+        source_agent = self._registry.get_agent(source_agent_id)
+        source_info = self._registry.get_agent_info(source_agent_id)
+
+        # Determine target agent based on parameters
+        if target_role:
+            target_agent_id = self._find_agent_by_role(source_agent, target_role)
+        elif complexity:
+            source_role = getattr(source_info, "role", None)
+            target_agent_id = self._find_agent_by_complexity(source_agent_id, source_role, complexity)
+        else:
+            target_agent_id = self._find_agent_by_capability(source_agent, task)
+
+        # Establish parent-child relationship if not already established
+        if target_agent_id not in source_agent.get_child_ids():
+            self._registry.register_parent_child_relationship(source_agent_id, target_agent_id)
+
+        # Delegate the task to the target agent
+        target_agent = self._registry.get_agent(target_agent_id)
+        message = create_human_message(task)
+        return await target_agent.process(message)
+
+    def _find_agent_by_role(self, source_agent: Agent, target_role: str) -> str:
+        """Find an agent by role.
+
+        Args:
+            source_agent: Source agent.
+            target_role: Target agent role.
+
+        Returns:
+            Target agent ID.
+
+        Raises:
+            ValueError: If no suitable agent found.
+
+        """
+        target_agents = self._registry.find_agents_by_role(target_role)
+        if not target_agents:
+            msg = f"No agents found with role: {target_role}"
+            raise ValueError(msg)
+
+        # Prefer child agents of the source agent if available
+        child_ids = source_agent.get_child_ids()
+        for agent_info in target_agents:
+            if agent_info.agent_id in child_ids:
+                return agent_info.agent_id
+
+        # If no child agent with the target role, use the first one found
+        return target_agents[0].agent_id
+
+    def _find_agent_by_complexity(self, source_agent_id: str, source_role: str | None, complexity: str) -> str:
+        """Find an agent based on source role and task complexity.
+
+        Args:
+            source_agent_id: Source agent ID.
+            source_role: Source agent role.
+            complexity: Task complexity.
+
+        Returns:
+            Target agent ID.
+
+        Raises:
+            ValueError: If no suitable agent found or unsupported source role.
+
+        """
+        if source_role == "ARCHITECT":
+            return self._architect_delegation_by_complexity(complexity)
+        if source_role == "PLANNER":
+            return self._planner_delegation_by_complexity(source_agent_id, complexity)
+        msg = f"Unsupported source agent role for flexible delegation: {source_role}"
+        raise ValueError(msg)
+
+    def _architect_delegation_by_complexity(self, complexity: str) -> str:
+        """Determine delegation path for Architect agent based on complexity.
+
+        Args:
+            complexity: Task complexity.
+
+        Returns:
+            Target agent ID.
+
+        Raises:
+            ValueError: If no suitable agent found.
+
+        """
+        if complexity == "SIMPLE":
+            # Direct delegation from Architect to Executor for simple tasks
+            executor_agents = self._registry.find_agents_by_role("EXECUTOR")
+            if not executor_agents:
+                msg = "No executor agents found for direct delegation"
+                raise ValueError(msg)
+            return executor_agents[0].agent_id
+        # Standard delegation from Architect to Planner for complex tasks
+        planner_agents = self._registry.find_agents_by_role("PLANNER")
+        if not planner_agents:
+            msg = "No planner agents found for delegation"
+            raise ValueError(msg)
+        return planner_agents[0].agent_id
+
+    def _planner_delegation_by_complexity(self, source_agent_id: str, complexity: str) -> str:
+        """Determine delegation path for Planner agent based on complexity.
+
+        Args:
+            source_agent_id: Source agent ID.
+            complexity: Task complexity.
+
+        Returns:
+            Target agent ID.
+
+        Raises:
+            ValueError: If no suitable agent found.
+
+        """
+        if complexity == "COMPLEX":
+            # Recursive delegation from Planner to another Planner for complex sub-components
+            return self._find_or_create_planner(source_agent_id)
+        # Standard delegation from Planner to Executor for implementable tasks
+        executor_agents = self._registry.find_agents_by_role("EXECUTOR")
+        if not executor_agents:
+            msg = "No executor agents found for delegation"
+            raise ValueError(msg)
+        return executor_agents[0].agent_id
+
+    def _find_or_create_planner(self, source_agent_id: str) -> str:
+        """Find an existing planner agent or create a new one.
+
+        Args:
+            source_agent_id: Source agent ID.
+
+        Returns:
+            Planner agent ID.
+
+        Raises:
+            ValueError: If no planner agent found and no factory available.
+
+        """
+        planner_agents = self._registry.find_agents_by_role("PLANNER")
+        if not planner_agents:
+            msg = "No planner agents found for recursive delegation"
+            raise ValueError(msg)
+
+        # Find a different planner agent (not the source)
+        for agent_info in planner_agents:
+            if agent_info.agent_id != source_agent_id:
+                return agent_info.agent_id
+
+        # If no other planner available, create a new one
+        if "PLANNER" in self._factories:
+            new_planner = self._factories["PLANNER"](
+                config={"parent_id": source_agent_id},
+            )
+            self._registry.register_agent(new_planner)
+            return new_planner.get_agent_id()
+
+        msg = "No planner factory available for creating new planner"
+        raise ValueError(msg)
+
+    def _find_agent_by_capability(self, source_agent: Agent, task: str) -> str:
+        """Find an agent by capability or use existing child agents.
+
+        Args:
+            source_agent: Source agent.
+            task: Task to delegate.
+
+        Returns:
+            Target agent ID.
+
+        Raises:
+            ValueError: If no suitable agent found.
+
+        """
+        # Check if source agent has child agents
+        child_ids = source_agent.get_child_ids()
+        if child_ids:
+            # Use the first child agent
+            return child_ids[0]
+
+        # Find an agent that can handle the task based on capabilities
+        source_agent_id = source_agent.get_agent_id()
+        for agent_id, agent in self._registry.get_agents().items():
+            if agent_id != source_agent_id:
+                capabilities = agent.get_capabilities()
+                # Simple capability matching
+                if any(capability.lower() in task.lower() for capability in capabilities):
+                    return agent_id
+
+        msg = f"No suitable agent found for task: {task}"
+        raise ValueError(msg)
 
 
 class AgentFactory:
