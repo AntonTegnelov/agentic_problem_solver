@@ -115,7 +115,7 @@ class TestLLMProviderFactory:
             pass
 
         with pytest.raises(InvalidModelError):
-            LLMProviderFactory._validate_provider_class("invalid", InvalidProvider)  # type: ignore
+            LLMProviderFactory._validate_provider_class("invalid", InvalidProvider)  # type: ignore[arg-type]
 
         # Provider already registered
         LLMProviderFactory._providers["mock"] = MockProvider
@@ -148,7 +148,7 @@ class TestLLMProviderFactory:
 
     @pytest.mark.usefixtures("reset_factory")
     @patch("src.llm_providers.factory.ConfigError")
-    def test_validate_provider_health(self, mock_config_error) -> None:
+    def test_validate_provider_health(self, mock_config_error: MagicMock) -> None:
         """Test provider health validation."""
         factory = LLMProviderFactory()
 
