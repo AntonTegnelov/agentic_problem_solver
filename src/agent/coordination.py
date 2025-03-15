@@ -1060,10 +1060,24 @@ class AgentCoordinator:
                 )
                 delegation_reason = f"Complexity-based delegation ({complexity})"
 
-            # Otherwise, find an agent based on task capabilities
+            # Otherwise, evaluate task complexity and find an agent based on that
             else:
-                target_agent_id = self._find_agent_by_capability(source_agent, task)
-                delegation_reason = "Capability-based delegation"
+                # Evaluate task complexity
+                task_complexity = self.evaluate_task_complexity(task, source_agent_id)
+                complexity = task_complexity.value.upper()
+
+                # Find an agent based on the evaluated complexity
+                target_agent_id = self._find_agent_by_complexity(
+                    source_agent_id,
+                    source_role,
+                    complexity,
+                )
+                delegation_reason = f"Evaluated complexity-based delegation ({complexity})"
+
+                # If no agent found based on complexity, fall back to capability-based delegation
+                if not target_agent_id:
+                    target_agent_id = self._find_agent_by_capability(source_agent, task)
+                    delegation_reason = "Capability-based delegation (after complexity evaluation)"
 
             if not target_agent_id:
                 log_delegation_decision(
@@ -1297,7 +1311,16 @@ class AgentCoordinator:
         delegation_results = []
         for subtask in subtasks:
             # Determine the appropriate agent based on task complexity
-            complexity = subtask.complexity.value.upper()
+            # Check if subtask has a complexity attribute, otherwise evaluate it
+            if hasattr(subtask, "complexity") and subtask.complexity:
+                complexity = subtask.complexity.value.upper()
+            else:
+                # Evaluate task complexity if not available
+                task_complexity = self.evaluate_task_complexity(subtask.description, source_agent_id)
+                complexity = task_complexity.value.upper()
+                # Update the subtask with the evaluated complexity if possible
+                if hasattr(subtask, "complexity"):
+                    subtask.complexity = task_complexity
 
             self._logger.info(
                 "Delegating subtask with complexity %s: %s",
@@ -1821,8 +1844,13 @@ class AgentCoordinator:
         # Log the extracted capabilities
         self._logger.debug("Extracted capabilities: %s", task_capabilities)
 
-        # Consider task complexity in routing decision
-        complexity_str = task_complexity.value if task_complexity else "moderate"
+        # Evaluate task complexity if not provided
+        if not task_complexity:
+            task_complexity = self.evaluate_task_complexity(task, source_agent_id)
+            self._logger.debug("Evaluated task complexity: %s", task_complexity.value)
+
+        # Get complexity string for matching
+        complexity_str = task_complexity.value
 
         # Find the most suitable agent based on capabilities and complexity
         target_agent_id = None
@@ -1887,6 +1915,109 @@ class AgentCoordinator:
             return Result(success=True, data=routing_info)
 
         return Result.failure("No suitable agent found for the task based on capabilities")
+
+    def evaluate_task_complexity(self, task: str, source_agent_id: str | None = None) -> TaskComplexity:
+        """Evaluate task complexity to support flexible delegation decisions.
+
+        This method analyzes a task description to determine its complexity level,
+        which helps in making optimal delegation decisions. It tries to use the
+        source agent's complexity evaluation method if available, or falls back
+        to a rule-based approach.
+
+        Args:
+            task: Description of the task to evaluate.
+            source_agent_id: Optional ID of the source agent.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        # Try to use the source agent's complexity evaluation method if available
+        if source_agent_id:
+            try:
+                source_agent = self._registry.get_agent(source_agent_id)
+                agent_info = self._registry.get_agent_info(source_agent_id)
+                agent_role = getattr(agent_info, "role", None)
+
+                # Use the appropriate complexity evaluation method based on agent role
+                if agent_role == "ARCHITECT" and hasattr(source_agent, "analyze_task_complexity"):
+                    return source_agent.analyze_task_complexity(task)
+                if agent_role == "PLANNER" and hasattr(source_agent, "evaluate_subtask_complexity"):
+                    return source_agent.evaluate_subtask_complexity(task)
+            except (AgentNotFoundError, AttributeError):
+                # If we can't get the agent or it doesn't have the right method, continue to fallback
+                pass
+
+        # Fallback to rule-based complexity evaluation
+        return self._evaluate_task_complexity_rule_based(task)
+
+    def _evaluate_task_complexity_rule_based(self, task_description: str) -> TaskComplexity:
+        """Evaluate task complexity using a rule-based approach.
+
+        Args:
+            task_description: Description of the task to evaluate.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        # Constants for complexity evaluation
+        long_description_threshold = 500
+        medium_description_threshold = 200
+        moderate_complexity_threshold = 3
+        complex_complexity_threshold = 6
+
+        # Convert to lowercase for case-insensitive matching
+        description = task_description.lower()
+
+        # Initialize complexity score
+        complexity_score = 0
+
+        # Check for complexity indicators
+        indicators = {
+            # Simple task indicators (decrease score)
+            "simple": -2,
+            "easy": -2,
+            "straightforward": -2,
+            "basic": -2,
+            "trivial": -2,
+            # Moderate task indicators (small increase)
+            "moderate": 1,
+            "multiple files": 1,
+            "component": 1,
+            "module": 1,
+            # Complex task indicators (medium increase)
+            "complex": 2,
+            "complicated": 2,
+            "system": 2,
+            "integration": 2,
+            "architecture": 2,
+            # Very complex task indicators (large increase)
+            "very complex": 3,
+            "highly complex": 3,
+            "enterprise": 3,
+            "distributed": 3,
+        }
+
+        # Apply indicators to score
+        for indicator, score_change in indicators.items():
+            if indicator in description:
+                complexity_score += score_change
+
+        # Consider task description length (longer descriptions often indicate more complex tasks)
+        if len(description) > long_description_threshold:
+            complexity_score += 2
+        elif len(description) > medium_description_threshold:
+            complexity_score += 1
+
+        # Determine complexity level based on score
+        if complexity_score <= 0:
+            return TaskComplexity.SIMPLE
+        if complexity_score <= moderate_complexity_threshold:
+            return TaskComplexity.MODERATE
+        if complexity_score <= complex_complexity_threshold:
+            return TaskComplexity.COMPLEX
+        return TaskComplexity.VERY_COMPLEX
 
 
 class AgentFactory:
