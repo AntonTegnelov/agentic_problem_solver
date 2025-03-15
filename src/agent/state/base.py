@@ -736,6 +736,191 @@ class AgentState:
                     dependent_task_id = uuid.UUID(task_dict["task_id"])
                     self.update_task_status_based_on_dependencies(dependent_task_id)
 
+    def track_delegated_task_progress(
+        self, task_id: uuid.UUID, progress: float, status_message: str | None = None,
+    ) -> None:
+        """Track progress of a delegated task.
+
+        Args:
+            task_id: Task ID.
+            progress: Progress percentage (0.0 to 1.0).
+            status_message: Optional status message.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return
+
+        # Update task metadata with progress information
+        if "progress_tracking" not in task.metadata:
+            task.metadata["progress_tracking"] = {}
+
+        progress_tracking = task.metadata["progress_tracking"]
+        progress_tracking["progress_percentage"] = max(0.0, min(1.0, progress))  # Clamp between 0 and 1
+        progress_tracking["last_updated"] = datetime.now(UTC).isoformat()
+
+        if status_message:
+            progress_tracking["status_message"] = status_message
+
+        # Add progress history if it doesn't exist
+        if "progress_history" not in progress_tracking:
+            progress_tracking["progress_history"] = []
+
+        # Add current progress to history
+        progress_tracking["progress_history"].append(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "progress": progress_tracking["progress_percentage"],
+                "status_message": status_message if status_message else "Progress update",
+            },
+        )
+
+        # Update task status based on progress
+        if progress >= 1.0:
+            task.status = TaskStatus.COMPLETED
+            task.completed_at = datetime.now(UTC).timestamp()
+        elif progress > 0.0:
+            task.status = TaskStatus.IN_PROGRESS
+
+        # Update the task
+        self.update_task(task)
+
+        # If this is a parent task, update its progress based on subtasks
+        if task.parent_task_id:
+            self.update_parent_task_progress(task.parent_task_id)
+
+    def update_parent_task_progress(self, parent_task_id: uuid.UUID) -> None:
+        """Update progress of a parent task based on its subtasks.
+
+        Args:
+            parent_task_id: Parent task ID.
+
+        """
+        parent_task = self.get_task_by_id(parent_task_id)
+        if not parent_task or not parent_task.subtasks:
+            return
+
+        # Calculate progress based on subtask progress
+        total_subtasks = len(parent_task.subtasks)
+        if total_subtasks == 0:
+            return
+
+        completed_subtasks = 0
+        total_progress = 0.0
+
+        for subtask_id in parent_task.subtasks:
+            subtask = self.get_task_by_id(subtask_id)
+            if not subtask:
+                continue
+
+            if subtask.status == TaskStatus.COMPLETED:
+                completed_subtasks += 1
+                total_progress += 1.0
+            elif "progress_tracking" in subtask.metadata:
+                progress = subtask.metadata["progress_tracking"].get("progress_percentage", 0.0)
+                total_progress += progress
+
+        # Calculate average progress
+        average_progress = total_progress / total_subtasks
+
+        # Update parent task progress
+        self.track_delegated_task_progress(
+            parent_task_id,
+            average_progress,
+            f"Progress based on {completed_subtasks}/{total_subtasks} completed subtasks",
+        )
+
+        # If parent task has a parent, update that as well
+        if parent_task.parent_task_id:
+            self.update_parent_task_progress(parent_task.parent_task_id)
+
+    def get_task_progress(self, task_id: uuid.UUID) -> dict[str, Any]:
+        """Get progress information for a task.
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            Dictionary with progress information.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return {"error": "Task not found", "progress": 0.0}
+
+        # Get progress tracking information
+        progress_tracking = task.metadata.get("progress_tracking", {})
+        progress = progress_tracking.get("progress_percentage", 0.0)
+
+        # If task is completed, progress is 100%
+        if task.status == TaskStatus.COMPLETED:
+            progress = 1.0
+
+        # Build progress information
+        progress_info = {
+            "task_id": str(task_id),
+            "description": task.description,
+            "status": task.status.value if hasattr(task.status, "value") else task.status,
+            "progress": progress,
+            "last_updated": progress_tracking.get("last_updated", task.updated_at),
+            "status_message": progress_tracking.get("status_message", ""),
+            "subtasks_progress": [],
+        }
+
+        # Add subtask progress if available
+        for subtask_id in task.subtasks:
+            subtask_progress = self.get_task_progress(subtask_id)
+            progress_info["subtasks_progress"].append(subtask_progress)
+
+        return progress_info
+
+    def get_overall_progress(self) -> dict[str, Any]:
+        """Get overall progress information for all tasks.
+
+        Returns:
+            Dictionary with overall progress information.
+
+        """
+        tasks = self.get_tasks()
+
+        # Find root tasks (tasks without parents)
+        root_tasks = []
+        for task_dict in tasks:
+            if not task_dict.get("parent_task_id"):
+                task = self._convert_dict_to_task(task_dict)
+                root_tasks.append(task)
+
+        # Get progress for each root task
+        root_task_progress = []
+        for task in root_tasks:
+            progress_info = self.get_task_progress(task.task_id)
+            root_task_progress.append(progress_info)
+
+        # Calculate overall statistics
+        total_tasks = len(tasks)
+        completed_tasks = sum(1 for task_dict in tasks if task_dict.get("status") == TaskStatus.COMPLETED.value)
+        in_progress_tasks = sum(1 for task_dict in tasks if task_dict.get("status") == TaskStatus.IN_PROGRESS.value)
+        blocked_tasks = sum(1 for task_dict in tasks if task_dict.get("status") == TaskStatus.BLOCKED.value)
+        pending_tasks = sum(1 for task_dict in tasks if task_dict.get("status") == TaskStatus.PENDING.value)
+        failed_tasks = sum(1 for task_dict in tasks if task_dict.get("status") == TaskStatus.FAILED.value)
+
+        # Calculate overall progress percentage
+        if total_tasks > 0:
+            overall_progress = (completed_tasks / total_tasks) + (in_progress_tasks / total_tasks / 2)
+        else:
+            overall_progress = 0.0
+
+        return {
+            "overall_progress": overall_progress,
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "in_progress_tasks": in_progress_tasks,
+            "blocked_tasks": blocked_tasks,
+            "pending_tasks": pending_tasks,
+            "failed_tasks": failed_tasks,
+            "root_tasks": root_task_progress,
+        }
+
     def _convert_dict_to_task(self, task_dict: dict) -> Task:
         """Convert task dictionary to Task object.
 
