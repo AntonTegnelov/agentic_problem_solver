@@ -208,7 +208,7 @@ def process_message(
         if result.success:
             return result.data
         error_msg = f"Processing failed: {result.error}"
-        raise TaskError(error_msg)
+        raise TaskError(error_msg)  # noqa: TRY301
 
     except ValueError as err:
         logger.exception("Configuration error")
