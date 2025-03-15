@@ -151,3 +151,39 @@ class MessagePriority(Enum):
         if not isinstance(other, MessagePriority):
             return NotImplemented
         return self.value >= other.value
+
+
+class ExecutionStage(str, Enum):
+    """Execution stages for task implementation.
+
+    These stages represent the progression of a task through execution:
+    - PLANNING: Initial planning and preparation for implementation
+    - IMPLEMENTING: Actively implementing the solution
+    - TESTING: Testing the implemented solution
+    - REFINING: Making improvements based on test results
+    - FINALIZING: Completing final adjustments and documentation
+    """
+
+    PLANNING = "planning"
+    IMPLEMENTING = "implementing"
+    TESTING = "testing"
+    REFINING = "refining"
+    FINALIZING = "finalizing"
+
+
+class VerificationStatus(str, Enum):
+    """Verification status for task validation.
+
+    These statuses represent the result of verification checks:
+    - PENDING: Verification has not yet been performed
+    - PASSED: All verification checks have passed
+    - FAILED: One or more verification checks have failed
+    - PARTIAL: Some verification checks passed, others failed
+    - SKIPPED: Verification was skipped for this task
+    """
+
+    PENDING = "pending"
+    PASSED = "passed"
+    FAILED = "failed"
+    PARTIAL = "partial"
+    SKIPPED = "skipped"
