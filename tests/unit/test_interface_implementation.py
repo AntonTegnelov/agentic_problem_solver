@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from src.llm_providers.type_defs import GenerationConfig
 from src.messages.creation import create_human_message
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 class TestLLMProviderImplementation:
@@ -24,7 +27,7 @@ class TestLLMProviderImplementation:
                 messages: list[Any],
                 *,
                 config: GenerationConfig | None = None,
-            ):
+            ) -> AsyncGenerator[str, None]:
                 # This will use the default implementation from the Protocol
                 if not messages:
                     return
