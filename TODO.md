@@ -108,7 +108,7 @@
     - [x] Extend task schema in `src/common_types/task_types.py` with execution tracking fields
   - [ ] Enhance `ExecutorAgent` in `src/agent/agent_types/executor.py` with self-prompting capabilities
     - [x] Add task iteration mechanism
-    - [ ] Implement progress tracking
+    - [x] Implement progress tracking
     - [ ] Add completion criteria evaluation
   - [ ] Create specialized steps in `src/agent/steps.py` for task execution
     - [ ] Add `TaskExecutionStep` for implementing tasks
