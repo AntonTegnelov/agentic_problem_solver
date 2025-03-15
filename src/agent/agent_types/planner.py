@@ -131,6 +131,153 @@ class PlannerAgent:
             or "organize" in task_lower
         )
 
+    def evaluate_subtask_complexity(self, subtask_description: str) -> TaskComplexity:
+        """Evaluate the complexity of a subtask.
+
+        This method analyzes a subtask description to determine its complexity level,
+        which helps in making delegation decisions (whether to delegate to another
+        PlannerAgent for further refinement or directly to an ExecutorAgent).
+
+        Args:
+            subtask_description: Description of the subtask to evaluate.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        # If provider is available, use rule-based approach for now
+        # We can implement LLM-based evaluation in the future if needed
+        return self._evaluate_subtask_complexity_rule_based(subtask_description)
+
+    def _evaluate_subtask_complexity_rule_based(self, subtask_description: str) -> TaskComplexity:
+        """Evaluate subtask complexity using rule-based approach.
+
+        This method uses regex patterns and scoring to determine subtask complexity.
+
+        Args:
+            subtask_description: Description of the subtask to evaluate.
+
+        Returns:
+            TaskComplexity enum value representing the estimated complexity.
+
+        """
+        import re
+
+        # Complexity score thresholds
+        simple_threshold = 3
+        moderate_threshold = 6
+        complex_threshold = 10
+
+        # Indicators of simple tasks
+        simple_indicators = [
+            r"\bsimple\b",
+            r"\beasy\b",
+            r"\bstraightforward\b",
+            r"\bbasic\b",
+            r"\bminimal\b",
+            r"\bsingle\b",
+            r"\bone\b file",
+            r"\bone\b function",
+            r"\bsmall\b",
+            r"\bimplementation\b",
+            r"\bexecute\b",
+        ]
+
+        # Indicators of moderate complexity
+        moderate_indicators = [
+            r"\bmoderate\b",
+            r"\bmultiple\b files",
+            r"\bfew\b files",
+            r"\bseveral\b",
+            r"\binterface\b",
+            r"\bcomponent\b",
+            r"\bmodule\b",
+            r"\bclass\b",
+            r"\bfeature\b",
+            r"\bfunctionality\b",
+        ]
+
+        # Indicators of complex tasks
+        complex_indicators = [
+            r"\bcomplex\b",
+            r"\bcomplicated\b",
+            r"\bdifficult\b",
+            r"\badvanced\b",
+            r"\bsystem\b",
+            r"\bsubsystem\b",
+            r"\bintegration\b",
+            r"\bmultiple components\b",
+            r"\bcoordination\b",
+            r"\bplanning\b",
+        ]
+
+        # Indicators of very complex tasks
+        very_complex_indicators = [
+            r"\bvery complex\b",
+            r"\bhighly complex\b",
+            r"\bextremely\b",
+            r"\bsubsystem\b",
+            r"\barchitecture\b",
+            r"\bdesign pattern\b",
+            r"\bscalable\b",
+            r"\bextensive\b",
+            r"\bcomprehensive\b",
+        ]
+
+        # Count matches for each complexity level
+        simple_count = sum(1 for pattern in simple_indicators if re.search(pattern, subtask_description, re.IGNORECASE))
+        moderate_count = sum(
+            1 for pattern in moderate_indicators if re.search(pattern, subtask_description, re.IGNORECASE)
+        )
+        complex_count = sum(
+            1 for pattern in complex_indicators if re.search(pattern, subtask_description, re.IGNORECASE)
+        )
+        very_complex_count = sum(
+            1 for pattern in very_complex_indicators if re.search(pattern, subtask_description, re.IGNORECASE)
+        )
+
+        # Additional complexity factors
+        length_factor = len(subtask_description) / 400  # Longer descriptions often indicate more complex tasks
+
+        # Check for multiple requirements or steps
+        requirement_indicators = ["must", "should", "needs to", "required", "necessary"]
+        requirement_count = sum(1 for indicator in requirement_indicators if indicator in subtask_description.lower())
+
+        # Check for technical complexity
+        technical_indicators = [
+            "algorithm",
+            "optimization",
+            "performance",
+            "security",
+            "concurrency",
+            "async",
+            "parallel",
+            "database",
+            "authentication",
+            "authorization",
+        ]
+        technical_count = sum(1 for indicator in technical_indicators if indicator in subtask_description.lower())
+
+        # Calculate weighted complexity score
+        complexity_score = (
+            simple_count * 1
+            + moderate_count * 2
+            + complex_count * 3
+            + very_complex_count * 4
+            + min(length_factor, 3)  # Cap the length factor at 3
+            + min(requirement_count / 2, 2)  # Cap the requirement factor at 2
+            + min(technical_count / 2, 2)  # Cap the technical factor at 2
+        )
+
+        # Determine complexity level based on score
+        if complexity_score <= simple_threshold:
+            return TaskComplexity.SIMPLE
+        if complexity_score <= moderate_threshold:
+            return TaskComplexity.MODERATE
+        if complexity_score <= complex_threshold:
+            return TaskComplexity.COMPLEX
+        return TaskComplexity.VERY_COMPLEX
+
     def _validate_provider(self) -> None:
         """Validate that provider is initialized.
 
