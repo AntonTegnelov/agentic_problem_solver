@@ -90,7 +90,7 @@
   - [x] Create an agent capability discovery mechanism in `src/agent/coordination.py`
   - [x] Add unit tests in `tests/unit/test_agent_creation.py` to verify agent creation workflow
   - [x] Create integration tests in `tests/integration/test_dynamic_agents.py` to verify agent creation workflow
-  - [ ] Update documentation in `docs/howto/agent_creation.md` with usage examples
+  - [x] Update documentation in `docs/howto/agent_creation.md` with usage examples
   - [ ] Ensure CI/CD pipeline validates the new functionality
 
 - combine the two approaches and make the top agent break down the problem into TODO lists and delegate them to new agents
@@ -151,4 +151,134 @@
   - [ ] Implement MCP primitives in `src/agent/tools/primitives/`
     - [ ] Create `tools.py` for model-controlled functions that LLMs can invoke
     - [ ] Create `resources.py` for application-controlled contextual data access
-    - [ ] Create `prompts.py`
+    - [ ] Create `prompts.py` for user-controlled interactive templates
+  - [ ] Extend agent protocol in `src/agent/agent_types/agent_types.py` with MCP capabilities
+    - [ ] Add MCP client access methods to the `Agent` protocol
+    - [ ] Create MCP context management for agent interactions
+    - [ ] Update agent implementations to leverage MCP primitives
+  - [ ] Create MCP tool implementations in `src/agent/tools/implementations/`
+    - [ ] Implement `CodeTools` in `code_tools.py` for code generation and modification
+  - [ ] Add MCP configuration in `src/config/mcp.py`
+    - [ ] Configure server parameters and capabilities
+    - [ ] Add tool access control by agent role
+    - [ ] Configure client connection settings
+    - [ ] Add resource access policies
+  - [ ] Implement integration with agent system in `src/agent/tools/primitives/resources.py`
+    - [ ] Create RAG resource provider for MCP
+      - [ ] Implement `CodebaseResourceProvider` class implementing the MCP resource interface
+        - [ ] Create class structure with proper interface implementation
+        - [ ] Add initialization with vector DB connection and configuration
+        - [ ] Implement resource request lifecycle methods
+        - [ ] Add resource metadata tracking and management
+      - [ ] Create vector DB query mechanism for resource requests
+        - [ ] Design query builder for code search requests
+        - [ ] Implement parameter validation and sanitization
+        - [ ] Create query translation to vector DB format
+        - [ ] Add query logging for debugging and optimization
+      - [ ] Implement semantic search with relevance filtering for code retrieval
+        - [ ] Create similarity scoring system using vector embeddings
+        - [ ] Implement contextual ranking based on query intent
+        - [ ] Add filtering by file types, directories, and metadata
+        - [ ] Implement hybrid search combining vector and keyword approaches
+      - [ ] Add code chunk formatting for LLM consumption
+        - [ ] Create consistent code snippet formatting with line numbers
+        - [ ] Add syntax highlighting hints for improved readability
+        - [ ] Implement context window management to maximize relevant content
+        - [ ] Create summary generation for large code sections
+      - [ ] Create metadata enrichment for improved context
+        - [ ] Extract and include function/class relationships
+        - [ ] Add import dependency information
+        - [ ] Include file modification history where relevant
+        - [ ] Add usage statistics from codebase analysis
+      - [ ] Implement resource caching for frequently accessed code sections
+        - [ ] Create LRU cache for frequently accessed resources
+        - [ ] Implement cache size management with configurable limits
+        - [ ] Add time-based cache expiration policies
+        - [ ] Create cache preloading for predicted resource needs
+      - [ ] Add resource invalidation on code changes
+        - [ ] Implement file change detection mechanism
+        - [ ] Create selective cache invalidation strategies
+        - [ ] Add background reindexing for changed resources
+        - [ ] Implement version tracking for cache consistency
+      - [ ] Integrate repomap with RAG resource provider
+        - [ ] Add hybrid retrieval combining vector search and repomap context
+        - [ ] Implement dynamic context enrichment based on token budget
+        - [ ] Create automated map updates on code changes
+        - [ ] Add partial map generation for specific queries or directories
+      - [ ] Add context injection into agent prompts
+      - [ ] Implement result formatting for agent consumption
+    - [ ] Add database management utilities in `src/cli/commands/db.py`
+      - [ ] Add database initialization command
+      - [ ] Add reindexing command
+      - [ ] Add database status command
+      - [ ] Add query testing command
+    - [ ] Create caching layer in `src/vector_db/cache.py`
+      - [ ] Implement in-memory query cache
+      - [ ] Add cache invalidation on codebase changes
+      - [ ] Add cache persistence
+    - [ ] Implement automated indexing in `src/vector_db/watcher.py`
+      - [ ] Add filesystem watching for code changes
+      - [ ] Create incremental update logic
+      - [ ] Add throttling to prevent excessive updates
+    - [ ] Add backup functionality in `src/vector_db/backup.py`
+      - [ ] Implement backup creation
+      - [ ] Add scheduled backup capability
+      - [ ] Create restore functionality
+    - [ ] Create unit tests in `tests/unit/test_vector_db.py`
+      - [ ] Test database operations
+      - [ ] Test indexing functionality
+      - [ ] Test retrieval accuracy
+    - [ ] Create integration tests in `tests/integration/test_rag.py`
+      - [ ] Test end-to-end RAG workflow
+      - [ ] Test agent usage of RAG capabilities
+      - [ ] Verify query performance
+    - [ ] Update documentation in `docs/howto/vector_database.md`
+      - [ ] Document setup instructions
+      - [ ] Explain indexing process
+      - [ ] Include query examples
+      - [ ] Document maintenance procedures
+
+- implement tree-sitter based codebase map generation for efficient code context https://aider.chat/2023/10/22/repomap.html
+  - [ ] Create core repomap implementation in `src/repomap/`
+    - [ ] Create `RepoMap` class in `src/repomap/repomap.py` for generating codebase maps
+    - [ ] Add tree-sitter integration in `src/repomap/parser.py` for AST-based code analysis
+    - [ ] Implement symbol extraction in `src/repomap/extractor.py` for functions, classes, methods, and variables
+    - [ ] Create language-specific parsers in `src/repomap/languages/` using tree-sitter-languages
+    - [ ] Add support for multiple programming languages with detection in `src/repomap/languages/detection.py`
+    - [ ] Implement configurable formatting in `src/repomap/formatter.py` for different output formats
+  - [ ] Implement codebase map optimization algorithms in `src/repomap/optimization.py`
+    - [ ] Create graph-based ranking algorithm for symbol importance
+    - [ ] Implement token budget management for context optimization
+    - [ ] Add dependency analysis to identify important code elements
+    - [ ] Create configurable importance scoring based on usage frequency
+    - [ ] Implement pruning strategies for large codebases
+  - [ ] Create CLI tools for repomap management in `src/cli/commands/repomap.py`
+    - [ ] Add repomap generation command
+    - [ ] Implement repomap visualization options
+    - [ ] Add repomap export/import functionality
+    - [ ] Create repomap statistics and analysis tools
+    - [ ] Add incremental update capability to refresh specific parts
+  - [ ] Create integration with agent system in `src/agent/tools/primitives/repomap.py`
+    - [ ] Implement `RepoMapResourceProvider` class implementing the MCP resource interface
+    - [ ] Add repomap-based code context retrieval
+    - [ ] Create configurable context windowing for token management
+    - [ ] Implement dynamic repomap generation based on agent queries
+  - [ ] Add configuration options in `src/config/repomap.py`
+    - [ ] Configure language support and token budgets
+    - [ ] Add customizable importance scoring parameters
+    - [ ] Implement exclusion patterns for irrelevant code
+    - [ ] Add persistence options for repomap cache
+  - [ ] Create unit tests in `tests/unit/test_repomap.py`
+    - [ ] Test repomap generation for different languages
+    - [ ] Test optimization algorithms
+    - [ ] Verify symbol extraction accuracy
+    - [ ] Test token budget management
+  - [ ] Create integration tests in `tests/integration/test_repomap_agent.py`
+    - [ ] Test agent usage of repomap resources
+    - [ ] Verify context optimization effectiveness
+    - [ ] Test dynamic repomap updates during agent operations
+  - [ ] Update documentation in `docs/howto/repomap.md`
+    - [ ] Document repomap generation and usage
+    - [ ] Include configuration examples
+    - [ ] Explain optimization strategies
+    - [ ] Document language support
