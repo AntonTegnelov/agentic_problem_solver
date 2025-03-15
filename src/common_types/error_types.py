@@ -90,3 +90,7 @@ class ValidationError(Exception):
 
 class ProcessingError(Exception):
     """Raised when message processing fails."""
+
+
+class RoutingError(Exception):
+    """Raised when message routing fails."""
