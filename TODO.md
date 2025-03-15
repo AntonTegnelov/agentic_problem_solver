@@ -111,8 +111,8 @@
     - [x] Implement progress tracking
     - [x] Add completion criteria evaluation
   - [ ] Create specialized steps in `src/agent/steps.py` for task execution
-    - [ ] Add `TaskExecutionStep` for implementing tasks
-    - [ ] Create `TaskVerificationStep` for validation
+    - [x] Add `TaskExecutionStep` for implementing tasks
+    - [x] Create `TaskVerificationStep` for validation
   - [ ] Add progress monitoring in `src/agent/state/memory.py`
     - [ ] Track task completion status
     - [ ] Add blockers and dependencies tracking

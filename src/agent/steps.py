@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 from langchain_core.messages import HumanMessage
 
 from src.common_types import AgentNotFoundError, ConfigError
-from src.common_types.enums import AgentRole, AgentStatus, AgentStep
+from src.common_types.enums import AgentRole, AgentStatus, AgentStep, ExecutionStage, VerificationStatus
 from src.common_types.result_types import Result
 from src.common_types.task_types import Task, TaskComplexity, TaskPriority
 from src.prompts import get_retry_prompt, get_step_prompt
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
-__all__ = ["Step", "StepFunction", "TaskBreakdownStep"]
+__all__ = ["Step", "StepFunction", "TaskBreakdownStep", "TaskExecutionStep"]
 
 # Minimum lengths for step results
 MIN_UNDERSTANDING_LENGTH = 100
@@ -747,3 +747,662 @@ class TaskBreakdownStep:
             error_msg = str(e)
             logger.exception("Error parsing tasks: %s", error_msg)
             return Result(success=False, error=error_msg)
+
+
+class TaskExecutionStep:
+    """Task execution step.
+
+    This step is responsible for executing a task based on its current execution stage.
+    It handles the progression through the different stages of task execution:
+    - PLANNING: Initial planning and preparation for implementation
+    - IMPLEMENTING: Actively implementing the solution
+    - TESTING: Testing the implemented solution
+    - REFINING: Making improvements based on test results
+    - FINALIZING: Completing final adjustments and documentation
+    """
+
+    name = "task_execution"
+
+    def __init__(self, agent_role: AgentRole) -> None:
+        """Initialize the step.
+
+        Args:
+            agent_role: Role of the agent using this step.
+
+        """
+        self.agent_role = agent_role
+        self.agent = None  # Store a reference to the creating agent
+        self.logger = self._setup_logging()
+
+    def set_agent(self, agent: Agent) -> None:
+        """Set the agent instance to use for this step.
+
+        Args:
+            agent: Agent instance.
+
+        """
+        self.agent = agent
+
+    def _validate_inputs(self, **kwargs: dict[str, object]) -> None:
+        """Validate step inputs.
+
+        Args:
+            **kwargs: Additional arguments.
+
+        Raises:
+            ValueError: If required keys are missing.
+
+        """
+        required_keys = {"task"}
+        missing_keys = [key for key in required_keys if key not in kwargs]
+        if missing_keys:
+            error_msg = f"Missing required keys: {', '.join(missing_keys)}"
+            raise ValueError(error_msg)
+
+    def _create_execution_prompt(self, task: Task) -> str:
+        """Create execution prompt based on the task's current execution stage.
+
+        Args:
+            task: The task to execute.
+
+        Returns:
+            Execution prompt.
+
+        """
+        # Get the base prompt for the current execution stage
+        if task.execution_stage is None:
+            task.execution_stage = ExecutionStage.PLANNING
+
+        stage_prompt = self._get_stage_specific_prompt(task)
+
+        # Create the full prompt with task details
+        prompt = f"""
+# Task Execution: {task.execution_stage.value.upper()}
+
+## Task Description
+{task.description}
+
+## Current Stage
+You are currently in the {task.execution_stage.value.upper()} stage.
+
+{stage_prompt}
+
+## Previous Results
+"""
+
+        # Add relevant previous results based on the current stage
+        if task.execution_stage == ExecutionStage.IMPLEMENTING:
+            if "planning_result" in task.execution_metadata:
+                prompt += f"\n### Planning Result\n{task.execution_metadata['planning_result']}\n"
+        elif task.execution_stage == ExecutionStage.TESTING:
+            prompt += f"\n### Implementation\n{task.execution_metadata.get('implementation', '')}\n"
+            if "testing_result" in task.execution_metadata:
+                prompt += f"\n### Testing Result\n{task.execution_metadata['testing_result']}\n"
+        elif task.execution_stage == ExecutionStage.REFINING and "refined_implementation" in task.execution_metadata:
+            prompt += f"\n### Refined Implementation\n{task.execution_metadata['refined_implementation']}\n"
+        elif task.execution_stage == ExecutionStage.FINALIZING and "final_result" in task.execution_metadata:
+            prompt += f"\n### Final Result\n{task.execution_metadata['final_result']}\n"
+
+        return prompt
+
+    def _get_stage_specific_prompt(self, task: Task) -> str:
+        """Get stage-specific prompt instructions.
+
+        Args:
+            task: The task being executed.
+
+        Returns:
+            Stage-specific prompt instructions.
+
+        """
+        if task.execution_stage == ExecutionStage.PLANNING:
+            return """
+## Planning Instructions
+Create a detailed plan for implementing this task. Your plan should include:
+1. A clear breakdown of the implementation steps
+2. Any key algorithms or data structures needed
+3. Potential challenges and how to address them
+4. Success criteria for the implementation
+
+Focus on creating a comprehensive plan that will guide the implementation stage.
+"""
+        if task.execution_stage == ExecutionStage.IMPLEMENTING:
+            return """
+## Implementation Instructions
+Implement the solution based on the planning result. Your implementation should:
+1. Follow the plan created in the planning stage
+2. Include all necessary code, configurations, or other artifacts
+3. Be well-structured and maintainable
+4. Include appropriate error handling and edge cases
+
+Focus on creating a complete and correct implementation.
+"""
+        if task.execution_stage == ExecutionStage.TESTING:
+            return """
+## Testing Instructions
+Test the implementation thoroughly. Your testing should:
+1. Verify that the implementation meets all requirements
+2. Include test cases for normal operation and edge cases
+3. Identify any bugs or issues in the implementation
+4. Suggest improvements based on test results
+
+Focus on ensuring the implementation is correct and robust.
+"""
+        if task.execution_stage == ExecutionStage.REFINING:
+            return """
+## Refinement Instructions
+Refine the implementation based on the testing results. Your refinements should:
+1. Address any bugs or issues identified during testing
+2. Implement suggested improvements
+3. Optimize the solution if needed
+4. Ensure the solution meets all requirements
+
+Focus on improving the quality of the implementation.
+"""
+        if task.execution_stage == ExecutionStage.FINALIZING:
+            return """
+## Finalization Instructions
+Finalize the implementation. Your finalization should:
+1. Ensure the solution is complete and meets all requirements
+2. Add any necessary documentation
+3. Clean up the code or other artifacts
+4. Prepare the solution for delivery
+
+Focus on delivering a polished final result.
+"""
+        return "No specific instructions for the current stage."
+
+    def _setup_logging(self) -> logging.Logger:
+        """Set up logging for the step.
+
+        Returns:
+            Logger instance.
+
+        """
+        return logging.getLogger(f"{__name__}.{self.name}")
+
+    @dataclass
+    class TaskExecutionContext:
+        """Context for task execution."""
+
+        logger: logging.Logger
+        agent: Agent[Any]
+        state: AgentState
+        task: Task
+
+    async def __call__(
+        self,
+        state: AgentState,
+        task: Task,
+    ) -> Result:
+        """Execute the task based on its current execution stage.
+
+        Args:
+            state: Current agent state.
+            task: The task to execute.
+
+        Returns:
+            Result of the task execution.
+
+        """
+        try:
+            self._validate_inputs(task=task)
+
+            if self.agent is None:
+                return Result(
+                    success=False,
+                    data=None,
+                    error="Agent not set for TaskExecutionStep",
+                )
+
+            # Create execution context
+            context = self.TaskExecutionContext(
+                logger=self.logger,
+                agent=self.agent,
+                state=state,
+                task=task,
+            )
+
+            # Process the task
+            return await self._process_task(context)
+
+        except Exception as e:
+            error_message = f"Error in task execution: {e!s}\n{traceback.format_exc()}"
+            self.logger.exception(error_message)
+            return Result(success=False, data=None, error=error_message)
+
+    async def _process_task(self, context: TaskExecutionContext) -> Result:
+        """Process the task based on its current execution stage.
+
+        Args:
+            context: Task execution context.
+
+        Returns:
+            Result of the task execution.
+
+        """
+        task = context.task
+        agent = context.agent
+        logger = context.logger
+
+        # Create execution prompt
+        prompt = self._create_execution_prompt(task)
+
+        # Create message
+        message = HumanMessage(content=prompt)
+
+        # Process the message
+        result = await self._process_message(agent, message)
+
+        if result.success:
+            # Update task with result based on current stage
+            self._update_task_with_result(task, result.data)
+
+            # Return success result
+            return Result(
+                success=True,
+                data=task,
+                error=None,
+            )
+        # Log error
+        logger.error("Task execution failed: %s", result.error)
+
+        # Return error result
+        return Result(
+            success=False,
+            data=task,
+            error=f"Task execution failed: {result.error}",
+        )
+
+    async def _process_message(self, agent: Agent[Any], message: HumanMessage) -> Result:
+        """Process a message using the agent.
+
+        Args:
+            agent: Agent to process the message.
+            message: Message to process.
+
+        Returns:
+            Result of message processing.
+
+        """
+        try:
+            return await agent.process(message)
+        except Exception as e:
+            error_message = f"Error processing message: {e!s}"
+            self.logger.exception(error_message)
+            return Result(success=False, data=None, error=error_message)
+
+    def _update_task_with_result(self, task: Task, result: str) -> None:
+        """Update task with execution result based on current stage.
+
+        Args:
+            task: Task to update.
+            result: Execution result.
+
+        """
+        # Store the result in the appropriate metadata field based on the current stage
+        if task.execution_stage == ExecutionStage.PLANNING:
+            task.execution_metadata["planning_result"] = result
+        elif task.execution_stage == ExecutionStage.IMPLEMENTING:
+            task.execution_metadata["implementation_result"] = result
+        elif task.execution_stage == ExecutionStage.TESTING:
+            task.execution_metadata["testing_result"] = result
+        elif task.execution_stage == ExecutionStage.REFINING:
+            task.execution_metadata["refined_implementation"] = result
+        elif task.execution_stage == ExecutionStage.FINALIZING:
+            task.execution_metadata["final_result"] = result
+
+        # Update the task result with the latest result
+        task.result = result
+
+        # Add to execution logs
+        log_entry = f"Completed {task.execution_stage.value} stage"
+        task.execution_logs.append(log_entry)
+        self.logger.info(log_entry)
+
+
+class TaskVerificationStep:
+    """Task verification step.
+
+    This step is responsible for verifying the results of task execution.
+    It evaluates the task's implementation against requirements and success criteria,
+    and updates the task's verification status accordingly.
+    """
+
+    name = "task_verification"
+
+    def __init__(self, agent_role: AgentRole) -> None:
+        """Initialize the step.
+
+        Args:
+            agent_role: Role of the agent using this step.
+
+        """
+        self.agent_role = agent_role
+        self.agent = None  # Store a reference to the creating agent
+        self.logger = self._setup_logging()
+
+    def set_agent(self, agent: Agent) -> None:
+        """Set the agent instance to use for this step.
+
+        Args:
+            agent: Agent instance.
+
+        """
+        self.agent = agent
+
+    def _validate_inputs(self, **kwargs: dict[str, object]) -> None:
+        """Validate step inputs.
+
+        Args:
+            **kwargs: Additional arguments.
+
+        Raises:
+            ValueError: If required keys are missing.
+
+        """
+        required_keys = {"task"}
+        missing_keys = [key for key in required_keys if key not in kwargs]
+        if missing_keys:
+            error_msg = f"Missing required keys: {', '.join(missing_keys)}"
+            raise ValueError(error_msg)
+
+    def _create_verification_prompt(self, task: Task) -> str:
+        """Create verification prompt for the task.
+
+        Args:
+            task: The task to verify.
+
+        Returns:
+            Verification prompt.
+
+        """
+        # Get the task's execution results based on its execution stage
+        execution_results = self._get_execution_results(task)
+
+        # Create the verification prompt
+        return f"""
+# Task Verification
+
+## Task Description
+{task.description}
+
+## Execution Results
+{execution_results}
+
+## Verification Instructions
+Please verify the execution results against the task requirements and success criteria.
+Your verification should:
+
+1. Evaluate if the implementation meets all requirements specified in the task description
+2. Check for any bugs, errors, or edge cases that weren't handled
+3. Assess the quality and maintainability of the implementation
+4. Determine if any additional work is needed
+
+For each verification criterion, provide:
+- A PASS/FAIL status
+- Detailed explanation of why it passed or failed
+- Suggestions for improvement if applicable
+
+## Verification Format
+Please provide your verification in the following format:
+
+```json
+{{
+  "verification_status": "PASSED|FAILED|PARTIAL",
+  "verification_details": [
+    {{
+      "criterion": "Requirement Fulfillment",
+      "status": "PASS|FAIL",
+      "details": "Explanation of the verification result"
+    }},
+    {{
+      "criterion": "Error Handling",
+      "status": "PASS|FAIL",
+      "details": "Explanation of the verification result"
+    }},
+    {{
+      "criterion": "Code Quality",
+      "status": "PASS|FAIL",
+      "details": "Explanation of the verification result"
+    }}
+  ],
+  "overall_assessment": "Overall assessment of the implementation",
+  "improvement_suggestions": [
+    "Suggestion 1",
+    "Suggestion 2"
+  ]
+}}
+```
+
+Please be thorough and objective in your verification.
+"""
+
+    def _get_execution_results(self, task: Task) -> str:
+        """Get execution results for the task based on its execution stage.
+
+        Args:
+            task: The task to get results for.
+
+        Returns:
+            Execution results as a string.
+
+        """
+        results = []
+
+        # Add relevant results based on the execution stage
+        if task.execution_stage == ExecutionStage.PLANNING:
+            results.append(
+                f"### Planning Result\n"
+                f"{task.execution_metadata.get('planning_result', 'No planning result available')}",
+            )
+
+        if task.execution_stage == ExecutionStage.IMPLEMENTING or task.execution_stage in [
+            ExecutionStage.TESTING,
+            ExecutionStage.REFINING,
+            ExecutionStage.FINALIZING,
+        ]:
+            results.append(
+                f"### Implementation\n"
+                f"{task.execution_metadata.get('implementation_result', 'No implementation result available')}",
+            )
+
+        if task.execution_stage == ExecutionStage.TESTING or task.execution_stage in [
+            ExecutionStage.REFINING,
+            ExecutionStage.FINALIZING,
+        ]:
+            results.append(
+                f"### Testing Result\n{task.execution_metadata.get('testing_result', 'No testing result available')}",
+            )
+
+        if task.execution_stage in (ExecutionStage.REFINING, ExecutionStage.FINALIZING):
+            results.append(
+                f"### Refined Implementation\n"
+                f"{task.execution_metadata.get('refined_implementation', 'No refined implementation available')}",
+            )
+
+        if task.execution_stage == ExecutionStage.FINALIZING:
+            results.append(
+                f"### Final Result\n{task.execution_metadata.get('final_result', 'No final result available')}",
+            )
+
+        # Combine all results
+        return "\n\n".join(results)
+
+    def _setup_logging(self) -> logging.Logger:
+        """Set up logging for the step.
+
+        Returns:
+            Logger instance.
+
+        """
+        return logging.getLogger(f"{__name__}.{self.name}")
+
+    @dataclass
+    class TaskVerificationContext:
+        """Context for task verification."""
+
+        logger: logging.Logger
+        agent: Agent[Any]
+        state: AgentState
+        task: Task
+
+    async def __call__(
+        self,
+        state: AgentState,
+        task: Task,
+    ) -> Result:
+        """Verify the task execution results.
+
+        Args:
+            state: Current agent state.
+            task: The task to verify.
+
+        Returns:
+            Result of the task verification.
+
+        """
+        try:
+            self._validate_inputs(task=task)
+
+            if self.agent is None:
+                return Result(
+                    success=False,
+                    data=None,
+                    error="Agent not set for TaskVerificationStep",
+                )
+
+            # Create verification context
+            context = self.TaskVerificationContext(
+                logger=self.logger,
+                agent=self.agent,
+                state=state,
+                task=task,
+            )
+
+            # Process the task verification
+            return await self._process_verification(context)
+
+        except Exception as e:
+            error_message = f"Error in task verification: {e!s}\n{traceback.format_exc()}"
+            self.logger.exception(error_message)
+            return Result(success=False, data=None, error=error_message)
+
+    async def _process_verification(self, context: TaskVerificationContext) -> Result:
+        """Process the task verification.
+
+        Args:
+            context: Task verification context.
+
+        Returns:
+            Result of the task verification.
+
+        """
+        task = context.task
+        agent = context.agent
+        logger = context.logger
+
+        # Create verification prompt
+        prompt = self._create_verification_prompt(task)
+
+        # Create message
+        message = HumanMessage(content=prompt)
+
+        # Process the message
+        result = await self._process_message(agent, message)
+
+        if result.success:
+            # Update task with verification result
+            self._update_task_with_verification(task, result.data)
+
+            # Return success result
+            return Result(
+                success=True,
+                data=task,
+                error=None,
+            )
+
+        # Log error
+        logger.error("Task verification failed: %s", result.error)
+
+        # Return error result
+        return Result(
+            success=False,
+            data=task,
+            error=f"Task verification failed: {result.error}",
+        )
+
+    async def _process_message(self, agent: Agent[Any], message: HumanMessage) -> Result:
+        """Process a message using the agent.
+
+        Args:
+            agent: Agent to process the message.
+            message: Message to process.
+
+        Returns:
+            Result of message processing.
+
+        """
+        try:
+            return await agent.process(message)
+        except Exception as e:
+            error_message = f"Error processing message: {e!s}"
+            self.logger.exception(error_message)
+            return Result(success=False, data=None, error=error_message)
+
+    def _update_task_with_verification(self, task: Task, verification_result: str) -> None:
+        """Update task with verification result.
+
+        Args:
+            task: Task to update.
+            verification_result: Verification result.
+
+        """
+        # Try to parse the verification result as JSON
+        try:
+            # Try to find a JSON object in the verification result
+            match = re.search(r"\{.*\}", verification_result, re.DOTALL)
+            if match:
+                verification_data = json.loads(match.group(0))
+
+                # Update verification status
+                if "verification_status" in verification_data:
+                    status_str = verification_data["verification_status"].upper()
+                    try:
+                        task.verification_status = VerificationStatus(status_str.lower())
+                    except ValueError:
+                        # Default to PARTIAL if the status is not valid
+                        task.verification_status = VerificationStatus.PARTIAL
+
+                # Update verification details
+                if "verification_details" in verification_data:
+                    task.verification_details["criteria"] = verification_data["verification_details"]
+
+                # Update overall assessment
+                if "overall_assessment" in verification_data:
+                    task.verification_details["overall_assessment"] = verification_data["overall_assessment"]
+
+                # Update improvement suggestions
+                if "improvement_suggestions" in verification_data:
+                    task.verification_details["improvement_suggestions"] = verification_data["improvement_suggestions"]
+            else:
+                # If no JSON object is found, store the raw verification result
+                task.verification_details["raw_result"] = verification_result
+                task.verification_status = VerificationStatus.PARTIAL
+
+        except (json.JSONDecodeError, KeyError) as e:
+            # If parsing fails, store the raw verification result
+            task.verification_details["raw_result"] = verification_result
+            task.verification_details["parse_error"] = str(e)
+            task.verification_status = VerificationStatus.PARTIAL
+
+        # Store the raw verification result
+        task.execution_metadata["verification_result"] = verification_result
+
+        # Add to execution logs
+        log_entry = (
+            f"Completed verification with status: "
+            f"{task.verification_status.value if task.verification_status else 'unknown'}"
+        )
+        task.execution_logs.append(log_entry)
+        self.logger.info(log_entry)
