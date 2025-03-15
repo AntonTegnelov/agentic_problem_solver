@@ -88,7 +88,7 @@
   - [x] Update the message system in `src/messages/utils.py` to include sender/receiver hierarchy information
   - [x] Add resource management functionality in `src/agent/coordination.py` to prevent excessive agent creation
   - [x] Create an agent capability discovery mechanism in `src/agent/coordination.py`
-  - [ ] Add unit tests in `tests/unit/test_agent_creation.py` to verify agent creation workflow
+  - [x] Add unit tests in `tests/unit/test_agent_creation.py` to verify agent creation workflow
   - [ ] Create integration tests in `tests/integration/test_dynamic_agents.py` to verify agent creation workflow
   - [ ] Update documentation in `docs/howto/agent_creation.md` with usage examples
   - [ ] Ensure CI/CD pipeline validates the new functionality
