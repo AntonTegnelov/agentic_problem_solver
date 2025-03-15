@@ -31,7 +31,7 @@ class MockLLMProvider:
         self,
         messages: list[HumanMessage],
         *,
-        config: GenerationConfig | None = None,  # noqa: ARG002
+        config: GenerationConfig | None = None,
     ) -> str:
         """Generate response from messages.
 
@@ -43,15 +43,13 @@ class MockLLMProvider:
             Generated response.
 
         """
-        if not messages:
-            return ""
-        return "Test response"
+        return f"Response to: {messages[0].content}" if messages else ""
 
     async def generate_stream(
         self,
         messages: list[HumanMessage],
         *,
-        config: GenerationConfig | None = None,  # noqa: ARG002
+        config: GenerationConfig | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate response stream from messages.
 
@@ -60,12 +58,12 @@ class MockLLMProvider:
             config: Generation configuration.
 
         Yields:
-            Generated response chunks.
+            Chunks of generated response.
 
         """
         if not messages:
             return
-        yield "Test response"
+        yield "Test stream response"
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text.
@@ -127,7 +125,7 @@ def test_generate_method() -> None:
     provider = MockLLMProvider()
     messages = [HumanMessage(content="Hello")]
     response = provider.generate(messages)
-    assert response == "Test response"
+    assert response == "Response to: Hello"
 
     # Test with empty messages
     response = provider.generate([])
@@ -136,7 +134,7 @@ def test_generate_method() -> None:
     # Test with custom config
     config = GenerationConfig(model="test-model", temperature=0.5, max_tokens=100)
     response = provider.generate(messages, config=config)
-    assert response == "Test response"
+    assert response == "Response to: Hello"
 
 
 @pytest.mark.asyncio
@@ -148,7 +146,7 @@ async def test_generate_stream_method() -> None:
     # Collect stream chunks
     chunks = [chunk async for chunk in provider.generate_stream(messages)]
 
-    assert "".join(chunks).strip() == "Test response"
+    assert "".join(chunks).strip() == "Test stream response"
 
     # Test with empty messages
     chunks = []
@@ -163,7 +161,7 @@ async def test_generate_stream_method() -> None:
     async for chunk in provider.generate_stream(messages, config=config):
         chunks.append(chunk)
 
-    assert "".join(chunks).strip() == "Test response"
+    assert "".join(chunks).strip() == "Test stream response"
 
 
 def test_count_tokens_method() -> None:

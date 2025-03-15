@@ -49,21 +49,21 @@ class TestProvider:
 
     def generate(
         self,
-        messages: list[Message],  # noqa: ARG002
+        _messages: list[Message],
         *,
-        config: GenerationConfig | None = None,  # noqa: ARG002
+        config: GenerationConfig | None = None,
     ) -> str:
         """Generate response from messages.
 
         Args:
-            messages: Messages to generate response from.
+            _messages: Messages to generate from.
             config: Generation configuration.
 
         Returns:
             Generated response.
 
         """
-        return "Test response"
+        return "Mock response"
 
     async def generate_stream(
         self,
@@ -146,12 +146,12 @@ class TestLLMProviderInterface:
         provider = TestProvider()
         messages = [MockMessage("Hello")]
         result = provider.generate(messages)
-        assert result == "Test response"
+        assert result == "Mock response"
 
         # Test with config
         config = MockConfig()
         result = provider.generate(messages, config=config)
-        assert result == "Test response"
+        assert result == "Mock response"
 
     @pytest.mark.asyncio
     async def test_generate_stream_method(self) -> None:
