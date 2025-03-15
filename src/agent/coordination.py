@@ -687,17 +687,131 @@ class AgentCoordinator:
             # Use the first child agent
             return child_ids[0]
 
-        # Find an agent that can handle the task based on capabilities
+        # Extract task capabilities from the task description
+        task_capabilities = self._extract_task_capabilities(task)
+
+        # Find agents that can handle the task based on capabilities
         source_agent_id = source_agent.get_agent_id()
+        candidate_agents = {}
+
         for agent_id, agent in self._registry.get_agents().items():
             if agent_id != source_agent_id:
-                capabilities = agent.get_capabilities()
-                # Simple capability matching
-                if any(capability.lower() in task.lower() for capability in capabilities):
-                    return agent_id
+                agent_capabilities = agent.get_capabilities()
+                # Calculate capability match score
+                match_score = self._calculate_capability_match_score(task_capabilities, agent_capabilities)
+                if match_score > 0:
+                    candidate_agents[agent_id] = match_score
+
+        # Sort candidates by match score (highest first)
+        if candidate_agents:
+            sorted_candidates = sorted(candidate_agents.items(), key=lambda x: x[1], reverse=True)
+            return sorted_candidates[0][0]
 
         msg = f"No suitable agent found for task: {task}"
         raise ValueError(msg)
+
+    def _extract_task_capabilities(self, task: str) -> list[str]:
+        """Extract capabilities required for a task from its description.
+
+        This method analyzes the task description to identify key capabilities
+        that would be required to complete it.
+
+        Args:
+            task: Task description.
+
+        Returns:
+            List of extracted capabilities.
+
+        """
+        # List of common capability keywords to look for
+        capability_keywords = [
+            "design",
+            "architecture",
+            "planning",
+            "implementation",
+            "coding",
+            "testing",
+            "debugging",
+            "analysis",
+            "research",
+            "documentation",
+            "review",
+            "optimization",
+            "refactoring",
+            "integration",
+            "deployment",
+            "database",
+            "frontend",
+            "backend",
+            "api",
+            "ui",
+            "ux",
+            "security",
+            "performance",
+            "scalability",
+            "monitoring",
+            "maintenance",
+        ]
+
+        # Extract capabilities based on keyword presence
+        task_lower = task.lower()
+
+        # Use list comprehension instead of for loop
+        extracted_capabilities = [keyword for keyword in capability_keywords if keyword.lower() in task_lower]
+
+        # Add role-based capabilities based on task complexity indicators
+        complexity_indicators = {
+            "architect": ["system design", "high-level", "architecture", "overall structure"],
+            "planner": ["break down", "plan", "organize", "coordinate", "schedule"],
+            "executor": ["implement", "code", "write", "develop", "create", "build"],
+        }
+
+        for role, indicators in complexity_indicators.items():
+            if any(indicator.lower() in task_lower for indicator in indicators):
+                extracted_capabilities.append(role)
+
+        return extracted_capabilities
+
+    def _calculate_capability_match_score(self, task_capabilities: list[str], agent_capabilities: list[str]) -> float:
+        """Calculate a match score between task capabilities and agent capabilities.
+
+        Args:
+            task_capabilities: Capabilities required for the task.
+            agent_capabilities: Capabilities of the agent.
+
+        Returns:
+            Match score between 0.0 and 1.0, where higher is better.
+
+        """
+        if not task_capabilities or not agent_capabilities:
+            return 0.0
+
+        # Convert all capabilities to lowercase for case-insensitive matching
+        task_caps_lower = [cap.lower() for cap in task_capabilities]
+        agent_caps_lower = [cap.lower() for cap in agent_capabilities]
+
+        # Count exact matches
+        exact_matches = sum(1 for cap in task_caps_lower if cap in agent_caps_lower)
+
+        # Count partial matches (substring matching)
+        partial_matches = 0
+        for task_cap in task_caps_lower:
+            for agent_cap in agent_caps_lower:
+                # Skip if already counted as exact match
+                if task_cap == agent_cap:
+                    continue
+                # Check if one is substring of the other
+                if task_cap in agent_cap or agent_cap in task_cap:
+                    partial_matches += 0.5
+                    break
+
+        # Calculate final score
+        total_task_capabilities = len(task_capabilities)
+        match_score = (
+            (exact_matches + partial_matches) / total_task_capabilities if total_task_capabilities > 0 else 0.0
+        )
+
+        return min(1.0, match_score)  # Cap at 1.0
 
 
 class AgentFactory:
