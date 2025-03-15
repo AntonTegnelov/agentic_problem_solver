@@ -82,7 +82,7 @@
 
 - enable the top agent to create other agents by itself, as a tool
 
-  - [ ] Update `AgentCoordinator` in `src/agent/coordination.py` to support role-based agent creation
+  - [x] Update `AgentCoordinator` in `src/agent/coordination.py` to support role-based agent creation
   - [ ] Enhance `InMemoryAgentRegistry` in `src/agent/coordination.py` to support parent-child relationships
   - [ ] Add parent-child agent registration methods to `AgentRegistry` implementations
   - [ ] Update the message system in `src/messages/utils.py` to include sender/receiver hierarchy information

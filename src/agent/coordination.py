@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
 from src.common_types import AgentInfo, AgentNotFoundError
+from src.common_types.enums import AgentRole
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
@@ -458,6 +459,14 @@ class AgentCoordinator:
             ValueError: If agent type not registered.
 
         """
+        # Check if agent_type is a role name
+        try:
+            role = AgentRole(agent_type.lower())
+            return self.create_agent_by_role(role, config, **kwargs)
+        except ValueError:
+            # Not a role, continue with regular agent creation
+            pass
+
         if agent_type not in self._factories:
             msg = f"Invalid agent type: {agent_type}"
             raise ValueError(msg)
@@ -465,6 +474,72 @@ class AgentCoordinator:
         agent = self._factories[agent_type](config=config, **kwargs)
         config.get("agent_id", agent.get_agent_id())
         self._registry.register_agent(agent, None)
+        return agent
+
+    def create_agent_by_role(self, role: AgentRole, config: dict, **kwargs: dict[str, Any]) -> Agent:
+        """Create an agent by role.
+
+        This method creates an agent based on its role in the hierarchical system.
+        It uses the specialized agent creation functions from agent_types module.
+
+        Args:
+            role: Agent role.
+            config: Agent configuration.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Created agent.
+
+        Raises:
+            ValueError: If the role is not supported.
+
+        """
+        from src.agent.agent_types import create_agent as create_agent_by_role
+        from src.config.agent import AgentConfig
+
+        # Convert dict config to AgentConfig
+        agent_config = AgentConfig()
+        for key, value in config.items():
+            if hasattr(agent_config, key):
+                setattr(agent_config, key, value)
+
+        # Extract parent_id from kwargs or config
+        parent_id = kwargs.get("parent_id")
+        if parent_id is None and "parent_id" in config:
+            parent_id = config["parent_id"]
+
+        # Extract custom agent_id if provided
+        agent_id = kwargs.get("agent_id")
+        if agent_id is None and "agent_id" in config:
+            agent_id = config["agent_id"]
+            # Make sure it's set in the agent_config
+            agent_config.agent_id = agent_id
+
+        # Create the agent using the specialized factory function
+        agent = create_agent_by_role(
+            role=role,
+            config=agent_config,
+            parent_id=parent_id,
+            **kwargs,
+        )
+
+        # Register the agent
+        self._registry.register_agent(agent, None)
+
+        # If parent_id is provided, establish the parent-child relationship
+        if parent_id:
+            self._registry.register_parent_child_relationship(parent_id, agent.get_agent_id())
+
+        # Log the creation
+        self._logger.info(
+            "Created agent by role",
+            extra={
+                "agent_id": agent.get_agent_id(),
+                "role": role.value,
+                "parent_id": parent_id,
+            },
+        )
+
         return agent
 
     async def route_message(self, message: Message, target_agent_id: str) -> StepResult:
