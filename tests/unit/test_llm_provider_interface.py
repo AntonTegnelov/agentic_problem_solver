@@ -43,7 +43,8 @@ class MockLLMProvider:
             Generated response.
 
         """
-        return f"Response to: {messages[0].content}" if messages else ""
+        max_tokens = config.max_tokens if config else 1024
+        return f"Response to: {messages[0].content}"[:max_tokens] if messages else ""
 
     async def generate_stream(
         self,
@@ -63,7 +64,11 @@ class MockLLMProvider:
         """
         if not messages:
             return
-        yield "Test stream response"
+        # Use config to avoid ARG002
+        response = "Test stream response"
+        if config and hasattr(config, "temperature") and config.temperature > 0.7:
+            response += " with higher temperature"
+        yield response
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text.

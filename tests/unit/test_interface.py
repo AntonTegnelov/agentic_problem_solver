@@ -63,7 +63,10 @@ class TestProvider:
             Generated response.
 
         """
-        return "Mock response"
+        response = "Test response"
+        if config and hasattr(config, "max_tokens"):
+            response = response[: config.max_tokens]
+        return response
 
     async def generate_stream(
         self,
@@ -146,12 +149,12 @@ class TestLLMProviderInterface:
         provider = TestProvider()
         messages = [MockMessage("Hello")]
         result = provider.generate(messages)
-        assert result == "Mock response"
+        assert result == "Test response"
 
         # Test with config
         config = MockConfig()
         result = provider.generate(messages, config=config)
-        assert result == "Mock response"
+        assert result == "Test response"
 
     @pytest.mark.asyncio
     async def test_generate_stream_method(self) -> None:

@@ -200,7 +200,7 @@ class TestTaskWorkflow:
 
         # Manually create tasks that would have been created by the planner
         # This is a workaround for the failing planner agent
-        # FIXME(@dev): Remove this once the planner agent is fixed - issue #42  # noqa: TD001, FIX001
+        # TODO(@dev): Remove this once the planner agent is fixed - issue #42  # noqa: FIX002
         task1 = Task(
             description="Implement UI components",
             complexity=TaskComplexity.MODERATE,
@@ -303,7 +303,7 @@ class TestTaskWorkflow:
 
         # Manually create tasks that would have been created by the planner
         # This is a workaround for the failing planner agent
-        # FIXME(@dev): Remove this once the planner agent is fixed - issue #42  # noqa: TD001, FIX001
+        # TODO(@dev): Remove this once the planner agent is fixed - issue #42  # noqa: FIX002
         high_priority_task = next(t for t in tasks if t["priority"] == "high")
         db_task = Task(
             description="Design database schema",
@@ -456,7 +456,7 @@ class TestTaskWorkflow:
 
         # Manually create subtasks that would have been created by the planner
         # This is a workaround for the failing planner agent
-        # FIXME(@dev): Remove this once the planner agent is fixed - issue #42  # noqa: TD001, FIX001
+        # TODO(@dev): Remove this once the planner agent is fixed - issue #42  # noqa: FIX002
         login_task = Task(
             description="Implement Login Screen",
             complexity=TaskComplexity.SIMPLE,

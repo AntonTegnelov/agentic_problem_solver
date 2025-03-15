@@ -49,4 +49,5 @@ ignore = ["D203", "D213"]
     "PLR2004", # Magic numbers in tests
     "FBT001",  # Boolean positional arg in function definition
     "FBT002",  # Boolean default value in function definition
+    "SLF001",  # Private member accessed in tests
 ]

@@ -1,7 +1,9 @@
 """Unit tests for agent types."""
 
+from __future__ import annotations
+
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from langchain_core.messages import HumanMessage
@@ -15,6 +17,9 @@ from src.common_types import AgentEntry, AgentInfo
 from src.common_types.enums import AgentStatus
 from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
+
+if TYPE_CHECKING:
+    from src.config.agent import AgentConfig
 
 
 def test_agent_info_initialization() -> None:
@@ -171,11 +176,14 @@ def test_simple_agent_coordinator_register_agent_factory() -> None:
 
     registry = MockRegistry()
     coordinator = SimpleAgentCoordinator(registry)
-    factory = lambda config: MockAgent(config)  # noqa: E731
+
+    def factory(config: AgentConfig) -> MockAgent:
+        return MockAgent(config)
+
     coordinator.register_agent_factory("test_type", factory)
     # Access to private member is acceptable in tests
-    assert "test_type" in coordinator._agent_factories  # noqa: SLF001
-    assert coordinator._agent_factories["test_type"] == factory  # noqa: SLF001
+    assert "test_type" in coordinator._agent_factories
+    assert coordinator._agent_factories["test_type"] == factory
 
 
 def test_simple_agent_coordinator_create_agent() -> None:

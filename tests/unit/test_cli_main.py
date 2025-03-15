@@ -49,7 +49,7 @@ def test_solve_command_success(
     mock_result.error = None
 
     # Set up the mock process method to return the mock result
-    mock_agent_instance.process.return_value = mock_result
+    mock_agent_instance.process_sync.return_value = mock_result
     mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables
@@ -110,7 +110,7 @@ def test_process_message_success(
     mock_result.error = None
 
     # Set up the mock process method to return the mock result
-    mock_agent_instance.process.return_value = mock_result
+    mock_agent_instance.process_sync.return_value = mock_result
     mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables

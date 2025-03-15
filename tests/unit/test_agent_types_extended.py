@@ -218,8 +218,8 @@ class TestSimpleAgentCoordinatorExtended:
         coordinator = SimpleAgentCoordinator(registry)
 
         # Initially, no agents
-        coordinator._update_agents()  # noqa: SLF001
-        assert not hasattr(coordinator, "_agents") or not coordinator._agents  # noqa: SLF001
+        coordinator._update_agents()
+        assert not hasattr(coordinator, "_agents") or not coordinator._agents
 
         # Register an agent
         agent = MockAgent(agent_id="test-agent", capabilities=["test"])
@@ -232,7 +232,7 @@ class TestSimpleAgentCoordinatorExtended:
         registry.register_agent(agent, info)
 
         # Update agents and check
-        coordinator._update_agents()  # noqa: SLF001
+        coordinator._update_agents()
         assert hasattr(coordinator, "_agents")
-        assert "test-agent" in coordinator._agents  # noqa: SLF001
-        assert coordinator._agents["test-agent"] == agent  # noqa: SLF001
+        assert "test-agent" in coordinator._agents
+        assert coordinator._agents["test-agent"] == agent

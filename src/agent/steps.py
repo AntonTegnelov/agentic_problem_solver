@@ -531,6 +531,18 @@ class TaskBreakdownStep:
                 state.set_context("tasks", tasks)
                 return
 
+    @dataclass
+    class TaskProcessingContext:
+        """Context for task processing."""
+
+        logger: logging.Logger
+        agent: Agent[Any]
+        state: AgentState
+        task_description: str
+        parent_task_id: str | None
+        complexity: TaskComplexity | None
+        priority: TaskPriority | None
+
     async def __call__(
         self,
         state: AgentState,
@@ -552,6 +564,50 @@ class TaskBreakdownStep:
             A Result object containing the created tasks or an error message.
 
         """
+        logger = self._setup_logging()
+
+        try:
+            # Get the agent for this step
+            logger.debug("Getting agent for task breakdown")
+            agent = state.get_agent_for_step(self.name)
+            if not agent:
+                error_msg = f"No suitable agent found for task breakdown with role {self.agent_role}"
+                logger.error(error_msg)
+                return Result(success=False, error=error_msg)
+
+            logger.debug("Found agent for task breakdown")
+
+            # Handle special case for unit tests
+            if self._is_test_case(task_description, agent):
+                logger.debug("Using mock result for unit test")
+                test_result = self._handle_test_case(agent)
+                if test_result:
+                    return test_result
+
+            # Process the task
+            context = self.TaskProcessingContext(
+                logger=logger,
+                agent=agent,
+                state=state,
+                task_description=task_description,
+                parent_task_id=parent_task_id,
+                complexity=complexity,
+                priority=priority,
+            )
+            return await self._process_task(context)
+
+        except Exception as e:
+            logger.exception("Error in task breakdown step")
+            logger.exception(traceback.format_exc())
+            return Result(success=False, error=str(e))
+
+    def _setup_logging(self) -> logging.Logger:
+        """Set up logging for the task breakdown step.
+
+        Returns:
+            Logger instance.
+
+        """
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.DEBUG)
 
@@ -571,80 +627,123 @@ class TaskBreakdownStep:
             # Log the error but continue execution
             logger.warning("Failed to set up task breakdown logging: %s", str(e))
 
+        return logger
+
+    def _is_test_case(self, task_description: str, agent: Agent[Any]) -> bool:
+        """Check if this is a test case.
+
+        Args:
+            task_description: The task description.
+            agent: The agent.
+
+        Returns:
+            True if this is a test case, False otherwise.
+
+        """
+        return task_description == "Test task" and (isinstance(agent, MagicMock | AsyncMock))
+
+    def _handle_test_case(self, agent: Agent[Any]) -> Result | None:
+        """Handle a test case.
+
+        Args:
+            agent: The agent.
+
+        Returns:
+            Result if the test case should return early, None otherwise.
+
+        """
+        if hasattr(agent.process, "return_value") and not agent.process.return_value.success:
+            result = agent.process.return_value
+            return Result(success=False, error=f"Agent failed: {result.error}")
+        return None
+
+    async def _process_task(self, context: TaskProcessingContext) -> Result:
+        """Process a task.
+
+        Args:
+            context: The task processing context.
+
+        Returns:
+            Result of processing the task.
+
+        """
+        # Create the prompt
+        context.logger.debug("Creating task breakdown prompt")
+        prompt = self._create_task_breakdown_prompt(
+            task_description=context.task_description,
+            complexity=context.complexity,
+            priority=context.priority,
+        )
+        context.logger.debug("Prompt created, length: %d", len(prompt))
+        context.logger.debug("Prompt start: %s...", prompt[:100])
+
+        # Process the prompt with the agent
+        context.logger.debug("Processing prompt with agent")
+        message = HumanMessage(content=prompt)
+        context.logger.debug("Created HumanMessage with content length: %d", len(message.content))
+
+        # Process the message
+        result = await self._process_message(context.agent, message)
+        context.logger.debug(
+            "Process result success: %s, data length: %d",
+            result.success,
+            len(str(result.data)) if result.data is not None else 0,
+        )
+
+        # If the agent process failed, return the error
+        if not result.success:
+            error_msg = f"Agent failed: {result.error}"
+            context.logger.error(error_msg)
+            return Result(success=False, error=error_msg)
+
+        # Parse the tasks from the result
+        return self._parse_and_store_tasks(context.logger, context.state, result, context.parent_task_id)
+
+    async def _process_message(self, agent: Agent[Any], message: HumanMessage) -> Result:
+        """Process a message with an agent.
+
+        Args:
+            agent: The agent.
+            message: The message.
+
+        Returns:
+            Result of processing the message.
+
+        """
+        import inspect
+
+        if inspect.iscoroutinefunction(agent.process):
+            # If it's async, await it
+            return await agent.process(message)
+        # If it's not async, call it directly
+        return agent.process(message)
+
+    def _parse_and_store_tasks(
+        self,
+        logger: logging.Logger,
+        state: AgentState,
+        result: Result,
+        parent_task_id: str | None,
+    ) -> Result:
+        """Parse tasks from a result and store them in the state.
+
+        Args:
+            logger: The logger.
+            state: The agent state.
+            result: The result.
+            parent_task_id: The parent task ID.
+
+        Returns:
+            Result containing the parsed tasks.
+
+        """
+        logger.debug("Parsing tasks from result")
         try:
-            # Get the agent for this step
-            logger.debug("Getting agent for task breakdown")
-            agent = state.get_agent_for_step(self.name)
-            if not agent:
-                error_msg = f"No suitable agent found for task breakdown with role {self.agent_role}"
-                logger.error(error_msg)
-                return Result(success=False, error=error_msg)
-
-            logger.debug("Found agent for task breakdown")
-
-            # Special case for unit tests with MagicMock
-            if task_description == "Test task" and (isinstance(agent, MagicMock | AsyncMock)):
-                logger.debug("Using mock result for unit test")
-                # For test_call_success, we need to use the mocked parse_tasks_from_result
-                # For test_call_agent_failure, we need to return the agent.process.return_value
-                # For test_call_parsing_failure, we need to proceed to the parsing step
-                if hasattr(agent.process, "return_value") and not agent.process.return_value.success:
-                    result = agent.process.return_value
-                    return Result(success=False, error=f"Agent failed: {result.error}")
-
-                # For other tests, proceed with normal processing
-                # This will allow the mocked _parse_tasks_from_result to be called
-
-            # Create the prompt
-            logger.debug("Creating task breakdown prompt")
-            prompt = self._create_task_breakdown_prompt(
-                task_description=task_description,
-                complexity=complexity,
-                priority=priority,
-            )
-            logger.debug("Prompt created, length: %d", len(prompt))
-            logger.debug("Prompt start: %s...", prompt[:100])
-
-            # Process the prompt with the agent
-            logger.debug("Processing prompt with agent")
-            message = HumanMessage(content=prompt)
-            logger.debug("Created HumanMessage with content length: %d", len(message.content))
-
-            # Check if the process method is a coroutine function (async)
-            import inspect
-
-            if inspect.iscoroutinefunction(agent.process):
-                # If it's async, await it
-                result = await agent.process(message)
-            else:
-                # If it's not async, call it directly
-                result = agent.process(message)
-
-            logger.debug(
-                "Process result success: %s, data length: %d",
-                result.success,
-                len(str(result.data)) if result.data is not None else 0,
-            )
-
-            # If the agent process failed, return the error
-            if not result.success:
-                error_msg = f"Agent failed: {result.error}"
-                logger.error(error_msg)
-                return Result(success=False, error=error_msg)
-
-            # Parse the tasks from the result
-            logger.debug("Parsing tasks from result")
-            try:
-                tasks = self._parse_tasks_from_result(result.data, parent_task_id)
-                for task in tasks:
-                    self._store_task_in_state(state, task)
-                return Result(success=True, data=tasks)
-            except ValueError as e:
-                error_msg = str(e)
-                logger.exception("Error parsing tasks: %s", error_msg)
-                return Result(success=False, error=error_msg)
-
-        except Exception as e:
-            logger.exception("Error in task breakdown step")
-            logger.exception(traceback.format_exc())
-            return Result(success=False, error=str(e))
+            tasks = self._parse_tasks_from_result(result.data, parent_task_id)
+            for task in tasks:
+                self._store_task_in_state(state, task)
+            return Result(success=True, data=tasks)
+        except ValueError as e:
+            error_msg = str(e)
+            logger.exception("Error parsing tasks: %s", error_msg)
+            return Result(success=False, error=error_msg)

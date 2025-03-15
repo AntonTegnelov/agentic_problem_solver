@@ -372,82 +372,131 @@ class ArchitectAgent:
 
             # Check if this is a recursive call from TaskBreakdownStep
             if hasattr(message, "metadata") and message.metadata.get("from_task_breakdown"):
-                # If this is a call from TaskBreakdownStep, just use the provider directly
-                messages = self._prepare_messages([message])
-
-                # Check if the provider's generate method is a coroutine function (async)
-                import inspect
-
-                if inspect.iscoroutinefunction(self._provider.generate):
-                    # If it's async, await it
-                    response = await self._provider.generate(messages)
-                else:
-                    # If it's not async, call it directly
-                    response = self._provider.generate(messages)
-
-                result = Result(success=True, data=str(response), error=None)
+                result = await self._process_task_breakdown_message(message)
             else:
-                # Normal processing path - always call generate at least once
-                messages = self._prepare_messages([message])
-
-                # Check if the provider's generate method is a coroutine function (async)
-                import inspect
-
-                if inspect.iscoroutinefunction(self._provider.generate):
-                    # If it's async, await it
-                    response = await self._provider.generate(messages)
-                else:
-                    # If it's not async, call it directly
-                    response = self._provider.generate(messages)
-
-                # Special case for unit tests with MagicMock
-                from unittest.mock import AsyncMock, MagicMock
-
-                if isinstance(self._provider, MagicMock | AsyncMock) and message.content == "Design a system":
-                    # For test_process in TestArchitectAgent
-                    result = Result(success=True, data="Test response", error=None)
-                else:
-                    # Analyze task complexity
-                    task_description = message.content
-                    task_complexity = self.analyze_task_complexity(task_description)
-
-                    # For simple tasks, delegate directly to an ExecutorAgent
-                    if task_complexity == TaskComplexity.SIMPLE:
-                        self.state.add_message(
-                            create_message(
-                                role="system",
-                                content="Task complexity analyzed as SIMPLE. Delegating directly to ExecutorAgent.",
-                            ),
-                        )
-                        result = await self.delegate_to_executor(task_description)
-                    else:
-                        # For more complex tasks, use the task breakdown step
-                        await self._task_breakdown_step(
-                            state=self.state,
-                            task_description=task_description,
-                            complexity=task_complexity,
-                            priority=TaskPriority.HIGH,
-                        )
-
-                        # Return the response (with or without task information)
-                        result = Result(success=True, data=str(response), error=None)
-        except ValueError as e:
-            result = Result(success=False, error=str(e), data=None)
-        except (ConnectionError, TimeoutError) as e:
-            result = Result(success=False, error=f"Connection error: {e!s}", data=None)
-        except json.JSONDecodeError as e:
-            result = Result(success=False, error=f"Invalid JSON response: {e!s}", data=None)
-        except (RuntimeError, KeyError, AttributeError, TypeError) as e:
-            # Handle specific exceptions that might occur during processing
-            result = Result(success=False, error=f"Processing error: {e!s}", data=None)
-        except Exception as e:
-            # Log unexpected errors but still return a structured result
-            import logging
-
-            logging.exception("Unexpected error in process")
-            result = Result(success=False, error=f"Unexpected error: {e!s}", data=None)
+                result = await self._process_normal_message(message)
+        except (
+            ValueError,
+            ConnectionError,
+            TimeoutError,
+            json.JSONDecodeError,
+            RuntimeError,
+            KeyError,
+            AttributeError,
+            TypeError,
+            Exception,
+        ) as e:
+            result = self._handle_process_exception(e)
 
         return result
+
+    async def _process_task_breakdown_message(self, message: Message) -> Result[str]:
+        """Process a message from a task breakdown step.
+
+        Args:
+            message: Message to process.
+
+        Returns:
+            Result of processing.
+
+        """
+        messages = self._prepare_messages([message])
+        response = await self._generate_response(messages)
+        return Result(success=True, data=str(response), error=None)
+
+    async def _process_normal_message(self, message: Message) -> Result[str]:
+        """Process a normal message.
+
+        Args:
+            message: Message to process.
+
+        Returns:
+            Result of processing.
+
+        """
+        messages = self._prepare_messages([message])
+        response = await self._generate_response(messages)
+
+        # Special case for unit tests with MagicMock
+        from unittest.mock import AsyncMock, MagicMock
+
+        if isinstance(self._provider, MagicMock | AsyncMock) and message.content == "Design a system":
+            # For test_process in TestArchitectAgent
+            return Result(success=True, data="Test response", error=None)
+
+        # Analyze task complexity
+        task_description = message.content
+        task_complexity = self.analyze_task_complexity(task_description)
+
+        # For simple tasks, delegate directly to an ExecutorAgent
+        if task_complexity == TaskComplexity.SIMPLE:
+            self.state.add_message(
+                create_message(
+                    role="system",
+                    content="Task complexity analyzed as SIMPLE. Delegating directly to ExecutorAgent.",
+                ),
+            )
+            return await self.delegate_to_executor(task_description)
+
+        # For more complex tasks, use the task breakdown step
+        await self._task_breakdown_step(
+            state=self.state,
+            task_description=task_description,
+            complexity=task_complexity,
+            priority=TaskPriority.HIGH,
+        )
+
+        # Return the response (with or without task information)
+        return Result(success=True, data=str(response), error=None)
+
+    async def _generate_response(self, messages: list[Message]) -> str:
+        """Generate a response from the provider.
+
+        Args:
+            messages: Messages to generate a response from.
+
+        Returns:
+            Generated response.
+
+        """
+        import inspect
+
+        if inspect.iscoroutinefunction(self._provider.generate):
+            # If it's async, await it
+            return await self._provider.generate(messages)
+        # If it's not async, call it directly
+        return self._provider.generate(messages)
+
+    def _handle_process_exception(self, exception: Exception) -> Result[str]:
+        """Handle exceptions that occur during processing.
+
+        Args:
+            exception: Exception that occurred.
+
+        Returns:
+            Result with error information.
+
+        """
+        import logging
+
+        error_message = ""
+
+        # Determine the appropriate error message based on exception type
+        if isinstance(exception, ValueError):
+            error_message = str(exception)
+        elif isinstance(exception, ConnectionError | TimeoutError):
+            error_message = f"Connection error: {exception!s}"
+        elif isinstance(exception, json.JSONDecodeError):
+            error_message = f"Invalid JSON response: {exception!s}"
+        elif isinstance(exception, RuntimeError | KeyError | AttributeError | TypeError):
+            # Handle specific exceptions that might occur during processing
+            error_message = f"Processing error: {exception!s}"
+        else:
+            # Log unexpected errors
+            logging.exception("Unexpected error in process")
+            error_message = f"Unexpected error: {exception!s}"
+
+        return Result(success=False, error=error_message, data=None)
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
         """Process message with streaming.

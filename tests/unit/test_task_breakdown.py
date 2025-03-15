@@ -26,21 +26,21 @@ class TestTaskBreakdownStep:
         step = TaskBreakdownStep(agent_role=AgentRole.ARCHITECT)
 
         # Should not raise an exception
-        step._validate_inputs(task_description="Test task")  # noqa: SLF001 - Accessing protected method for testing
+        step._validate_inputs(task_description="Test task")
 
     def test_validate_inputs_missing_required(self) -> None:
         """Test validate_inputs with missing required keys."""
         step = TaskBreakdownStep(agent_role=AgentRole.ARCHITECT)
 
         with pytest.raises(ValueError, match="Missing required keys: task_description"):
-            step._validate_inputs()  # noqa: SLF001 - Accessing protected method for testing
+            step._validate_inputs()
 
     def test_create_task_breakdown_prompt(self) -> None:
         """Test create_task_breakdown_prompt."""
         step = TaskBreakdownStep(agent_role=AgentRole.ARCHITECT)
 
         # Test with all parameters
-        prompt = step._create_task_breakdown_prompt(  # noqa: SLF001 - Accessing protected method for testing
+        prompt = step._create_task_breakdown_prompt(
             task_description="Test task",
             complexity=TaskComplexity.MODERATE,
             priority=TaskPriority.MEDIUM,
@@ -52,7 +52,7 @@ class TestTaskBreakdownStep:
         assert "medium" in prompt
 
         # Test with minimal parameters
-        prompt = step._create_task_breakdown_prompt(  # noqa: SLF001 - Accessing protected method for testing
+        prompt = step._create_task_breakdown_prompt(
             task_description="Test task",
         )
 
@@ -92,7 +92,7 @@ class TestTaskBreakdownStep:
         Some text after the JSON.
         """
 
-        tasks = step._parse_tasks_from_result(json_result, parent_task_id)  # noqa: SLF001 - Accessing protected method for testing
+        tasks = step._parse_tasks_from_result(json_result, parent_task_id)
 
         assert len(tasks) == 2
         assert tasks[0].description == "Task 1"
@@ -134,7 +134,7 @@ class TestTaskBreakdownStep:
             },
         ]
 
-        tasks = step._parse_tasks_from_result(list_result, parent_task_id)  # noqa: SLF001 - Accessing protected method for testing
+        tasks = step._parse_tasks_from_result(list_result, parent_task_id)
 
         assert len(tasks) == 2
         assert tasks[0].description == "Task 1"
@@ -157,12 +157,12 @@ class TestTaskBreakdownStep:
         invalid_json = "This is not JSON"
 
         with pytest.raises(ValueError, match="No JSON array found in result"):
-            step._parse_tasks_from_result(invalid_json, parent_task_id)  # noqa: SLF001 - Accessing protected method for testing
+            step._parse_tasks_from_result(invalid_json, parent_task_id)
 
         invalid_json = "[This is invalid JSON]"
 
         with pytest.raises(ValueError, match="Failed to parse JSON from result"):
-            step._parse_tasks_from_result(invalid_json, parent_task_id)  # noqa: SLF001 - Accessing protected method for testing
+            step._parse_tasks_from_result(invalid_json, parent_task_id)
 
     def test_store_task_in_state(self) -> None:
         """Test store_task_in_state."""
@@ -181,7 +181,7 @@ class TestTaskBreakdownStep:
         )
 
         # Store task in state
-        step._store_task_in_state(mock_state, task)  # noqa: SLF001 - Accessing protected method for testing
+        step._store_task_in_state(mock_state, task)
 
         # Verify state was updated
         mock_state.get_context.assert_called_once_with("tasks", [])
@@ -211,7 +211,7 @@ class TestTaskBreakdownStep:
         ]
 
         # Update parent task
-        step._update_parent_task_with_subtasks(mock_state, parent_task_id, subtasks)  # noqa: SLF001 - Accessing protected method for testing
+        step._update_parent_task_with_subtasks(mock_state, parent_task_id, subtasks)
 
         # Verify state was updated
         mock_state.get_context.assert_called_once_with("tasks", [])

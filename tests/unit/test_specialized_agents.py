@@ -207,9 +207,9 @@ class TestArchitectAgent:
         )
 
         # Test rule-based approach directly
-        simple_complexity = architect_agent._analyze_task_complexity_rule_based(simple_task)  # noqa: SLF001
-        complex_complexity = architect_agent._analyze_task_complexity_rule_based(complex_task)  # noqa: SLF001
-        very_complex_complexity = architect_agent._analyze_task_complexity_rule_based(very_complex_task)  # noqa: SLF001
+        simple_complexity = architect_agent._analyze_task_complexity_rule_based(simple_task)
+        complex_complexity = architect_agent._analyze_task_complexity_rule_based(complex_task)
+        very_complex_complexity = architect_agent._analyze_task_complexity_rule_based(very_complex_task)
 
         # Test that complexity increases with task complexity
         # We don't assert exact values, just the relative ordering
@@ -245,31 +245,31 @@ class TestArchitectAgent:
         # Test simple task
         with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_simple):
             simple_task = "Create a simple function to add two numbers."
-            simple_result = architect_agent._analyze_task_complexity_with_llm(simple_task)  # noqa: SLF001
+            simple_result = architect_agent._analyze_task_complexity_with_llm(simple_task)
             assert simple_result == TaskComplexity.SIMPLE
 
         # Test moderate task
         with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_moderate):
             moderate_task = "Create a module with a few classes."
-            moderate_result = architect_agent._analyze_task_complexity_with_llm(moderate_task)  # noqa: SLF001
+            moderate_result = architect_agent._analyze_task_complexity_with_llm(moderate_task)
             assert moderate_result == TaskComplexity.MODERATE
 
         # Test complex task
         with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_complex):
             complex_task = "Design a system for user authentication."
-            complex_result = architect_agent._analyze_task_complexity_with_llm(complex_task)  # noqa: SLF001
+            complex_result = architect_agent._analyze_task_complexity_with_llm(complex_task)
             assert complex_result == TaskComplexity.COMPLEX
 
         # Test very complex task
         with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_very_complex):
             very_complex_task = "Create a distributed microservices architecture."
-            very_complex_result = architect_agent._analyze_task_complexity_with_llm(very_complex_task)  # noqa: SLF001
+            very_complex_result = architect_agent._analyze_task_complexity_with_llm(very_complex_task)
             assert very_complex_result == TaskComplexity.VERY_COMPLEX
 
         # Test invalid response (should default to MODERATE)
         with patch.object(architect_agent, "_get_llm_response", side_effect=mock_get_llm_response_invalid):
             invalid_task = "This will return an invalid response."
-            invalid_result = architect_agent._analyze_task_complexity_with_llm(invalid_task)  # noqa: SLF001
+            invalid_result = architect_agent._analyze_task_complexity_with_llm(invalid_task)
             assert invalid_result == TaskComplexity.MODERATE
 
     def test_analyze_task_complexity_fallback(self, architect_agent: ArchitectAgent) -> None:
@@ -288,9 +288,9 @@ class TestArchitectAgent:
     def test_validate_provider(self, architect_agent: ArchitectAgent) -> None:
         """Test validate_provider method."""
         # Set provider to None
-        architect_agent._provider = None  # noqa: SLF001
+        architect_agent._provider = None
         with pytest.raises(ValueError, match="Provider not initialized"):
-            architect_agent._validate_provider()  # noqa: SLF001
+            architect_agent._validate_provider()
 
     @pytest.mark.asyncio
     async def test_delegate_to_executor(self, architect_agent: ArchitectAgent) -> None:
@@ -462,7 +462,7 @@ class TestPlannerAgent:
 
         # Should raise ValueError
         with pytest.raises(ValueError, match="Provider not initialized"):
-            agent._validate_provider()  # noqa: SLF001
+            agent._validate_provider()
 
 
 class TestExecutorAgent:
@@ -595,4 +595,4 @@ class TestExecutorAgent:
 
         # Should raise ValueError
         with pytest.raises(ValueError, match="Provider not initialized"):
-            agent._validate_provider()  # noqa: SLF001
+            agent._validate_provider()
