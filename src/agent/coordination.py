@@ -714,6 +714,19 @@ class AgentCoordinator:
             "max_children_per_agent": 10,  # Maximum number of child agents per parent
             "max_hierarchy_depth": 5,  # Maximum depth of agent hierarchy
         }
+        # Capability categories for organization
+        self._capability_categories = {
+            "design": ["architecture", "system design", "design", "modeling"],
+            "planning": ["planning", "organization", "scheduling", "coordination"],
+            "development": ["coding", "implementation", "development", "programming"],
+            "testing": ["testing", "quality assurance", "verification", "validation"],
+            "analysis": ["analysis", "research", "investigation", "evaluation"],
+            "documentation": ["documentation", "writing", "reporting"],
+            "maintenance": ["maintenance", "support", "operations"],
+            "specialized": [],  # Will be populated with capabilities that don't fit other categories
+        }
+        # Constants
+        self._TASK_SUMMARY_MAX_LENGTH = 50  # Maximum length for task summaries in logs
 
     def register_agent_factory(self, agent_type: str, factory: Callable[..., Agent]) -> None:
         """Register agent factory.
@@ -1442,6 +1455,166 @@ class AgentCoordinator:
         )
 
         return min(1.0, match_score)  # Cap at 1.0
+
+    def discover_capabilities(self) -> dict[str, list[str]]:
+        """Discover and categorize agent capabilities in the system.
+
+        This method collects all capabilities from registered agents and
+        organizes them into categories for easier discovery and usage.
+
+        Returns:
+            Dictionary mapping capability categories to lists of specific capabilities.
+
+        """
+        # Collect all unique capabilities from registered agents
+        all_capabilities = set()
+        for agent in self._registry.get_agents().values():
+            all_capabilities.update(agent.get_capabilities())
+
+        # Organize capabilities by category
+        categorized_capabilities: dict[str, list[str]] = {category: [] for category in self._capability_categories}
+
+        # Assign capabilities to categories
+        for capability in all_capabilities:
+            capability_lower = capability.lower()
+            assigned = False
+
+            # Check if capability belongs to a predefined category
+            for category, keywords in self._capability_categories.items():
+                if any(keyword in capability_lower for keyword in keywords):
+                    if capability not in categorized_capabilities[category]:
+                        categorized_capabilities[category].append(capability)
+                    assigned = True
+                    break
+
+            # If not assigned to any category, put in specialized
+            if not assigned and capability not in categorized_capabilities["specialized"]:
+                categorized_capabilities["specialized"].append(capability)
+
+        # Sort capabilities within each category
+        for capabilities in categorized_capabilities.values():
+            capabilities.sort()
+
+        return categorized_capabilities
+
+    def get_agents_with_capability(self, capability: str) -> list[str]:
+        """Get IDs of agents that have a specific capability.
+
+        Args:
+            capability: The capability to search for.
+
+        Returns:
+            List of agent IDs that have the specified capability.
+
+        """
+        agent_ids = []
+        for agent_id, agent in self._registry.get_agents().items():
+            agent_capabilities = agent.get_capabilities()
+            # Check for exact match or substring match
+            if capability in agent_capabilities or any(
+                capability.lower() in cap.lower() or cap.lower() in capability.lower() for cap in agent_capabilities
+            ):
+                agent_ids.append(agent_id)
+
+        return agent_ids
+
+    def get_capabilities_by_category(self, category: str) -> list[str]:
+        """Get all capabilities in a specific category.
+
+        Args:
+            category: The category to get capabilities for.
+
+        Returns:
+            List of capabilities in the specified category.
+
+        Raises:
+            ValueError: If the category doesn't exist.
+
+        """
+        # First refresh the categorized capabilities
+        categorized_capabilities = self.discover_capabilities()
+
+        if category not in categorized_capabilities:
+            valid_categories = list(categorized_capabilities.keys())
+            msg = f"Invalid category: {category}. Valid categories are: {valid_categories}"
+            raise ValueError(msg)
+
+        return categorized_capabilities[category]
+
+    def find_most_capable_agent_for_task(self, task: str, required_capabilities: list[str] | None = None) -> str | None:
+        """Find the most capable agent for a specific task.
+
+        This method analyzes the task and finds the agent with the best capability
+        match for handling it.
+
+        Args:
+            task: The task description.
+            required_capabilities: Optional list of specific capabilities required for the task.
+                If not provided, capabilities will be extracted from the task description.
+
+        Returns:
+            ID of the most capable agent, or None if no suitable agent is found.
+
+        """
+        # Extract capabilities from task if not provided
+        task_capabilities = required_capabilities or self._extract_task_capabilities(task)
+
+        if not task_capabilities:
+            self._logger.warning("No capabilities could be extracted from task: %s", task)
+            return None
+
+        # Find agents with matching capabilities
+        candidate_scores: dict[str, float] = {}
+
+        for agent_id, agent in self._registry.get_agents().items():
+            agent_capabilities = agent.get_capabilities()
+            match_score = self._calculate_capability_match_score(task_capabilities, agent_capabilities)
+
+            if match_score > 0:
+                # Also consider agent's current status and load
+                agent_info = self._registry.get_agent_info(agent_id)
+                status_penalty = 0.0
+
+                # Apply penalties based on agent status
+                if hasattr(agent_info, "status"):
+                    if agent_info.status == "busy":
+                        status_penalty = 0.2
+                    elif agent_info.status == "overloaded":
+                        status_penalty = 0.4
+
+                # Apply penalty based on number of child agents (as a proxy for load)
+                child_count = len(agent.get_child_ids())
+                child_penalty = min(0.1 * child_count, 0.3)  # Cap at 0.3
+
+                # Calculate final score
+                final_score = match_score - status_penalty - child_penalty
+
+                # Create a summary of the task for logging
+                task_summary = task
+                if len(task) > self._TASK_SUMMARY_MAX_LENGTH:
+                    task_summary = task[: self._TASK_SUMMARY_MAX_LENGTH] + "..."
+
+                # Log the decision factors
+                delegation_info = DelegationInfo(
+                    source_id="coordinator",
+                    target_id=agent_id,
+                    task_summary=task_summary,
+                    decision_factors={
+                        "capability_match": match_score,
+                        "status_penalty": status_penalty,
+                        "child_penalty": child_penalty,
+                        "final_score": final_score,
+                    },
+                )
+                log_delegation_decision(self._logger, delegation_info)
+
+                candidate_scores[agent_id] = final_score
+
+        # Find the agent with the highest score
+        if candidate_scores:
+            return max(candidate_scores.items(), key=lambda x: x[1])[0]
+
+        return None
 
 
 class AgentFactory:
