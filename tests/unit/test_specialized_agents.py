@@ -442,21 +442,54 @@ class TestPlannerAgent:
 
     @pytest.mark.asyncio
     async def test_collect_results_from_children(self, planner_agent: PlannerAgent) -> None:
-        """Test collect_results_from_children method."""
-        # Add children
-        planner_agent.add_child("executor1")
-        planner_agent.add_child("executor2")
+        """Test collecting results from children."""
+        # Add some child agents
+        planner_agent.add_child("child1")
+        planner_agent.add_child("child2")
 
         # Collect results
         results = await planner_agent.collect_results_from_children()
+
+        # Verify results
         assert len(results) == 2
-        assert "executor1" in results
-        assert "executor2" in results
-        assert results["executor1"].success is True
-        assert "Result from child agent executor1" in results["executor1"].data
+        assert "child1" in results
+        assert "child2" in results
+        assert results["child1"].success
+        assert results["child2"].success
+        assert "Result from child agent child1" in results["child1"].data
+        assert "Result from child agent child2" in results["child2"].data
+
+    @pytest.mark.asyncio
+    async def test_delegate_to_planner(self, planner_agent: PlannerAgent, mock_provider: MagicMock) -> None:
+        """Test delegating to another planner agent for complex sub-components."""
+        # Mock the create_planner_agent function
+        with patch("src.agent.agent_types.create_planner_agent") as mock_create_planner:
+            # Create a mock planner agent
+            mock_planner = MagicMock()
+            mock_planner.get_agent_id.return_value = "planner_child"
+            mock_planner.process = AsyncMock(
+                return_value=Result(success=True, data="Delegated task processed", error=None)
+            )
+            mock_create_planner.return_value = mock_planner
+
+            # Test delegation
+            result = await planner_agent.delegate_to_planner("Complex sub-component task")
+
+            # Verify the result
+            assert result.success
+            assert "Delegated task processed" in result.data
+
+            # Verify that the child was added
+            assert "planner_child" in planner_agent.get_child_ids()
+
+            # Verify that the parent-child relationship was established
+            mock_planner.set_parent.assert_called_once_with(planner_agent.get_agent_id())
+
+            # Verify that the task was processed
+            mock_planner.process.assert_called_once()
 
     def test_validate_provider(self) -> None:
-        """Test _validate_provider method."""
+        """Test provider validation."""
         # Create a new agent with no provider for testing
         agent = PlannerAgent()
 

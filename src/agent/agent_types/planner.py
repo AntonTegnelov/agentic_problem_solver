@@ -341,12 +341,26 @@ class PlannerAgent:
                 self._debug_log("Detected mock provider, handling integration test case")
                 return await self._handle_mock_provider_case(task_description, response_str)
 
+            # Evaluate task complexity to determine delegation strategy
+            complexity = self.evaluate_subtask_complexity(task_description)
+            self._debug_log(f"Task complexity evaluated as: {complexity}")
+
+            # For very complex tasks, delegate to another PlannerAgent
+            if complexity == TaskComplexity.VERY_COMPLEX:
+                self._debug_log("Task is very complex, delegating to another PlannerAgent")
+                return await self.delegate_to_planner(task_description)
+
+            # For complex tasks, process with task breakdown step
+            priority = TaskPriority.MEDIUM
+            if complexity == TaskComplexity.COMPLEX:
+                priority = TaskPriority.HIGH
+
             # Process with task breakdown step
             task_result = await self._task_breakdown_step(
                 state=self.state,
                 task_description=task_description,
-                complexity=TaskComplexity.MODERATE,
-                priority=TaskPriority.MEDIUM,
+                complexity=complexity,
+                priority=priority,
             )
 
             # If task breakdown fails, propagate the failure
@@ -694,6 +708,44 @@ class PlannerAgent:
         # and wait for a response. For now, we'll just return a success result.
         response = f"Task '{task}' delegated to child agent {child_id}"
         return Result(success=True, data=response, error=None)
+
+    async def delegate_to_planner(self, task: str) -> Result[str]:
+        """Delegate a complex sub-component task to another PlannerAgent.
+
+        This method creates a new PlannerAgent instance for handling complex
+        sub-components that require further specialized planning before execution.
+
+        Args:
+            task: The complex sub-component task to delegate.
+
+        Returns:
+            Result containing the delegation result.
+
+        """
+        from src.agent.agent_types import create_planner_agent
+
+        # Create a new planner agent
+        planner_agent = create_planner_agent(provider=self._provider, config=self._config)
+
+        # Set up parent-child relationship
+        planner_agent.set_parent(self._agent_id)
+        self.add_child(planner_agent.get_agent_id())
+
+        # Create a message for the planner agent
+        from src.messages.creation import create_human_message
+
+        message = create_human_message(content=task)
+
+        # Process the task with the planner agent
+        self._debug_log(f"Delegating complex sub-component to planner: {task[:50]}...")
+        result = await planner_agent.process(message)
+
+        if result.success:
+            self._debug_log(f"Planner delegation successful: {planner_agent.get_agent_id()}")
+        else:
+            self._debug_log(f"Planner delegation failed: {result.error}")
+
+        return result
 
     async def collect_results_from_children(self) -> dict[str, Result[Any]]:
         """Collect results from child agents.

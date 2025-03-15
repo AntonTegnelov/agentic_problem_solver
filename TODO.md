@@ -71,7 +71,7 @@
   - [x] Implement task complexity analysis logic in `src/agent/agent_types/architect.py` for delegation decisions
   - [x] Add direct delegation capability from `ArchitectAgent` to `ExecutorAgent` for simple tasks
   - [x] Implement sub-task complexity evaluation in `src/agent/agent_types/planner.py`
-  - [ ] Add recursive delegation capability from `PlannerAgent` to additional `PlannerAgent` instances for complex sub-components
+  - [x] Add recursive delegation capability from `PlannerAgent` to additional `PlannerAgent` instances for complex sub-components
   - [ ] Enhance `AgentCoordinator` in `src/agent/coordination.py` to support flexible delegation paths
   - [ ] Update agent creation methods to support dynamic parent-child relationships
   - [ ] Implement capability matching in `src/agent/coordination.py` to route tasks to appropriate agent types
