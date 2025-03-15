@@ -1,6 +1,6 @@
 """Agent types package."""
 
-from typing import Any, TypeVar, cast
+from typing import Any, NoReturn, TypeVar, cast
 
 from src.agent.agent_types.agent_types import (
     Agent,
@@ -102,7 +102,7 @@ def create_architect_agent(
             """
             return await self._async_agent.process(message)
 
-        def __getattr__(self, name: str) -> Any:
+        def __getattr__(self, name: str) -> object:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
 
@@ -146,7 +146,7 @@ def create_planner_agent(
             """
             return await self._async_agent.process(message)
 
-        def __getattr__(self, name: str) -> Any:
+        def __getattr__(self, name: str) -> object:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
 
@@ -190,7 +190,7 @@ def create_executor_agent(
             """
             return await self._async_agent.process(message)
 
-        def __getattr__(self, name: str) -> Any:
+        def __getattr__(self, name: str) -> object:
             """Delegate all other attribute access to the wrapped agent."""
             return getattr(self._async_agent, name)
 
