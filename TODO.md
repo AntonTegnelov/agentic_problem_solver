@@ -74,7 +74,7 @@
   - [x] Add recursive delegation capability from `PlannerAgent` to additional `PlannerAgent` instances for complex sub-components
   - [x] Enhance `AgentCoordinator` in `src/agent/coordination.py` to support flexible delegation paths
   - [x] Update agent creation methods to support dynamic parent-child relationships
-  - [ ] Implement capability matching in `src/agent/coordination.py` to route tasks to appropriate agent types
+  - [x] Implement capability matching in `src/agent/coordination.py` to route tasks to appropriate agent types
   - [ ] Create decision logging in each agent type to track delegation choices
   - [ ] Add unit tests in `tests/unit/test_flexible_delegation.py` to verify delegation logic
   - [ ] Create integration tests that verify direct and recursive delegation patterns
