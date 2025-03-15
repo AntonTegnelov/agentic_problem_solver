@@ -212,8 +212,18 @@ class HierarchicalRouter:
         sender_parent_id = self.registry.get_parent_id(sender_id)
         sibling_parent_id = self.registry.get_parent_id(sibling_id)
 
+        # Check if sender has no parent
+        if not sender_parent_id:
+            msg = f"Agent {sender_id} has no parent"
+            raise RoutingError(msg)
+
+        # Check if sibling has no parent
+        if not sibling_parent_id:
+            msg = f"Agent {sibling_id} has no parent"
+            raise RoutingError(msg)
+
         # Verify they have the same parent
-        if not sender_parent_id or not sibling_parent_id or sender_parent_id != sibling_parent_id:
+        if sender_parent_id != sibling_parent_id:
             msg = f"Agents {sender_id} and {sibling_id} are not siblings"
             raise RoutingError(msg)
 
@@ -232,7 +242,7 @@ class HierarchicalRouter:
         try:
             return await self.router.route_message(message, sibling_id, chain)
         except AgentNotFoundError as e:
-            msg = f"Sibling agent {sibling_id} not found"
+            msg = f"Sibling agent {sibling_id} not found for {sender_id}"
             raise RoutingError(msg) from e
 
     async def route_by_path(
@@ -256,7 +266,7 @@ class HierarchicalRouter:
 
         """
         if len(path) < MIN_PATH_LENGTH:
-            msg = "Path must contain at least a source and destination agent"
+            msg = "Path must contain at least one agent ID"
             raise RoutingError(msg)
 
         # Set the hierarchy path in the message

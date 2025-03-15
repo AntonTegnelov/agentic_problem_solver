@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 from langchain_core.messages.base import BaseMessage
@@ -676,10 +677,10 @@ class TestExecutorAgent:
             assert completed_task.completed_at is not None
             assert "final_result" in completed_task.execution_metadata
 
-    def test_evaluate_completion_criteria(self, executor_agent: ExecutorAgent) -> None:
-        """Test the _evaluate_completion_criteria method."""
+    def test_evaluate_completion_criteria_basic_cases(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _evaluate_completion_criteria method for basic cases."""
         from src.common_types.enums import ExecutionStage, VerificationStatus
-        from src.common_types.task_types import Task, TaskStatus
+        from src.common_types.task_types import Task
 
         # Test case 1: Task not in final stage
         task1 = Task(description="Test task")
@@ -706,6 +707,11 @@ class TestExecutorAgent:
             is_complete, message = executor_agent._evaluate_completion_criteria(task3)
             assert is_complete is False
             assert "Task has no result" in message
+
+    def test_evaluate_completion_criteria_output_checks(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _evaluate_completion_criteria method for output-related checks."""
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.task_types import Task
 
         # Test case 4: Task with missing required outputs
         task4 = Task(description="Test task")
@@ -736,6 +742,11 @@ class TestExecutorAgent:
             is_complete, message = executor_agent._evaluate_completion_criteria(task5)
             assert is_complete is False
             assert "Error detected in result" in message
+
+    def test_evaluate_completion_criteria_metadata_checks(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _evaluate_completion_criteria method for metadata-related checks."""
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.task_types import Task
 
         # Test case 6: Task with missing execution metadata
         task6 = Task(description="Test task")
@@ -772,6 +783,11 @@ class TestExecutorAgent:
             assert is_complete is False
             assert "Incomplete subtasks" in message
 
+    def test_evaluate_completion_criteria_execution_checks(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _evaluate_completion_criteria method for execution-related checks."""
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.task_types import Task
+
         # Test case 8: Task with no execution logs
         task8 = Task(description="Test task")
         task8.execution_stage = ExecutionStage.FINALIZING
@@ -807,6 +823,11 @@ class TestExecutorAgent:
             is_complete, message = executor_agent._evaluate_completion_criteria(task9)
             assert is_complete is False
             assert "Task has not been attempted" in message
+
+    def test_evaluate_completion_criteria_status_checks(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _evaluate_completion_criteria method for status-related checks."""
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.task_types import Task, TaskStatus
 
         # Test case 10: Task marked as failed
         task10 = Task(description="Test task")
@@ -986,8 +1007,6 @@ class TestExecutorAgent:
 
     def test_check_subtasks(self, executor_agent: ExecutorAgent) -> None:
         """Test the _check_subtasks method."""
-        from uuid import UUID
-
         from src.common_types.task_types import Task
 
         # Create a task with subtasks
@@ -997,7 +1016,7 @@ class TestExecutorAgent:
         task.subtasks = [subtask_id1, subtask_id2]
 
         # Mock the state manager's get_task_by_id method
-        def mock_get_task_by_id(task_id):
+        def mock_get_task_by_id(task_id: UUID) -> Task | None:
             if task_id == subtask_id1:
                 subtask1 = Task(description="Subtask 1")
                 subtask1.status = "completed"
