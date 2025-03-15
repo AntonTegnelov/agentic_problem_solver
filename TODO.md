@@ -109,7 +109,7 @@
   - [ ] Enhance `ExecutorAgent` in `src/agent/agent_types/executor.py` with self-prompting capabilities
     - [x] Add task iteration mechanism
     - [x] Implement progress tracking
-    - [ ] Add completion criteria evaluation
+    - [x] Add completion criteria evaluation
   - [ ] Create specialized steps in `src/agent/steps.py` for task execution
     - [ ] Add `TaskExecutionStep` for implementing tasks
     - [ ] Create `TaskVerificationStep` for validation

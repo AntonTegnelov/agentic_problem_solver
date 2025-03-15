@@ -606,7 +606,7 @@ class TestExecutorAgent:
             agent._validate_provider()
 
     @pytest.mark.asyncio
-    async def test_iterate_task(self, executor_agent: ExecutorAgent, mock_provider: MagicMock) -> None:
+    async def test_iterate_task(self, executor_agent: ExecutorAgent) -> None:
         """Test the iterate_task method."""
         # Create a task
 
@@ -675,3 +675,509 @@ class TestExecutorAgent:
             assert completed_task.status == TaskStatus.COMPLETED
             assert completed_task.completed_at is not None
             assert "final_result" in completed_task.execution_metadata
+
+    def test_evaluate_completion_criteria(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _evaluate_completion_criteria method."""
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.task_types import Task, TaskStatus
+
+        # Test case 1: Task not in final stage
+        task1 = Task(description="Test task")
+        task1.execution_stage = ExecutionStage.IMPLEMENTING
+        is_complete, message = executor_agent._evaluate_completion_criteria(task1)
+        assert is_complete is False
+        assert "not in final stage" in message
+
+        # Test case 2: Task in final stage but verification not passed
+        task2 = Task(description="Test task")
+        task2.execution_stage = ExecutionStage.FINALIZING
+        task2.verification_status = VerificationStatus.FAILED
+        is_complete, message = executor_agent._evaluate_completion_criteria(task2)
+        assert is_complete is False
+        assert "Verification not passed" in message
+
+        # Test case 3: Task in final stage with verification passed but no result
+        task3 = Task(description="Test task")
+        task3.execution_stage = ExecutionStage.FINALIZING
+        task3.verification_status = VerificationStatus.PASSED
+        # Mock the _extract_required_outputs method to return a non-empty list
+        # This ensures the test doesn't skip the result check due to backward compatibility
+        with patch.object(executor_agent, "_extract_required_outputs", return_value=["required output"]):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task3)
+            assert is_complete is False
+            assert "Task has no result" in message
+
+        # Test case 4: Task with missing required outputs
+        task4 = Task(description="Test task")
+        task4.execution_stage = ExecutionStage.FINALIZING
+        task4.verification_status = VerificationStatus.PASSED
+        task4.result = "This is a result without the required output"
+        task4.execution_logs = ["Log entry"]
+        task4.execution_attempts = 1
+        # Mock the _check_required_outputs method to return a list of missing outputs
+        with patch.object(executor_agent, "_check_required_outputs", return_value=["required output"]):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task4)
+            assert is_complete is False
+            assert "Missing required outputs" in message
+
+        # Test case 5: Task with error in result
+        task5 = Task(description="Test task")
+        task5.execution_stage = ExecutionStage.FINALIZING
+        task5.verification_status = VerificationStatus.PASSED
+        task5.result = "This result has an error in it"
+        task5.execution_logs = ["Log entry"]
+        task5.execution_attempts = 1
+        # Mock the _check_required_outputs method to return an empty list (no missing outputs)
+        # and _check_for_errors to return an error context
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value="error context"),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task5)
+            assert is_complete is False
+            assert "Error detected in result" in message
+
+        # Test case 6: Task with missing execution metadata
+        task6 = Task(description="Test task")
+        task6.execution_stage = ExecutionStage.FINALIZING
+        task6.verification_status = VerificationStatus.PASSED
+        task6.result = "This is a valid result"
+        task6.execution_logs = ["Log entry"]
+        task6.execution_attempts = 1
+        # Mock the check methods to return appropriate values
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=["planning_result"]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task6)
+            assert is_complete is False
+            assert "Missing execution metadata" in message
+
+        # Test case 7: Task with incomplete subtasks
+        task7 = Task(description="Test task")
+        task7.execution_stage = ExecutionStage.FINALIZING
+        task7.verification_status = VerificationStatus.PASSED
+        task7.result = "This is a valid result"
+        task7.execution_logs = ["Log entry"]
+        task7.execution_attempts = 1
+        # Mock the check methods to return appropriate values
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=["subtask-1"]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task7)
+            assert is_complete is False
+            assert "Incomplete subtasks" in message
+
+        # Test case 8: Task with no execution logs
+        task8 = Task(description="Test task")
+        task8.execution_stage = ExecutionStage.FINALIZING
+        task8.verification_status = VerificationStatus.PASSED
+        task8.result = "This is a valid result"
+        task8.execution_logs = []  # Empty execution logs
+        task8.execution_attempts = 1
+        # Mock the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task8)
+            assert is_complete is False
+            assert "No execution logs recorded" in message
+
+        # Test case 9: Task with no execution attempts
+        task9 = Task(description="Test task")
+        task9.execution_stage = ExecutionStage.FINALIZING
+        task9.verification_status = VerificationStatus.PASSED
+        task9.result = "This is a valid result"
+        task9.execution_logs = ["Log entry"]
+        task9.execution_attempts = 0  # No execution attempts
+        # Mock the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task9)
+            assert is_complete is False
+            assert "Task has not been attempted" in message
+
+        # Test case 10: Task marked as failed
+        task10 = Task(description="Test task")
+        task10.execution_stage = ExecutionStage.FINALIZING
+        task10.verification_status = VerificationStatus.PASSED
+        task10.result = "This is a valid result"
+        task10.execution_logs = ["Log entry"]
+        task10.execution_attempts = 1
+        task10.status = TaskStatus.FAILED
+        # Mock the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task10)
+            assert is_complete is False
+            assert "Task is marked as failed" in message
+
+        # Test case 11: Task marked as blocked
+        task11 = Task(description="Test task")
+        task11.execution_stage = ExecutionStage.FINALIZING
+        task11.verification_status = VerificationStatus.PASSED
+        task11.result = "This is a valid result"
+        task11.execution_logs = ["Log entry"]
+        task11.execution_attempts = 1
+        task11.status = TaskStatus.BLOCKED
+        # Mock the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task11)
+            assert is_complete is False
+            assert "Task is blocked" in message
+
+        # Test case 12: Task with result that's too short
+        task12 = Task(description="Test task")
+        task12.execution_stage = ExecutionStage.FINALIZING
+        task12.verification_status = VerificationStatus.PASSED
+        task12.result = "Short"
+        task12.execution_logs = ["Log entry"]
+        task12.execution_attempts = 1
+        task12.status = TaskStatus.IN_PROGRESS
+        # Mock the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task12)
+            assert is_complete is False
+            assert "Task result is too short" in message
+
+        # Test case 13: Task that meets all criteria
+        task13 = Task(description="Test task")
+        task13.execution_stage = ExecutionStage.FINALIZING
+        task13.verification_status = VerificationStatus.PASSED
+        task13.result = "This is a complete and valid result that is long enough"
+        task13.execution_logs = ["Log entry"]
+        task13.execution_attempts = 1
+        task13.status = TaskStatus.IN_PROGRESS
+        # Mock all the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            is_complete, message = executor_agent._evaluate_completion_criteria(task13)
+            assert is_complete is True
+            assert "Task meets all completion criteria" in message
+
+    def test_check_basic_requirements(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _check_basic_requirements method."""
+        from src.common_types.enums import ExecutionStage
+        from src.common_types.task_types import Task
+
+        # Test with task not in FINALIZING stage
+        task = Task(description="Test task")
+        task.execution_stage = ExecutionStage.IMPLEMENTING
+        assert executor_agent._check_basic_requirements(task) is False
+
+        # Test with task in FINALIZING stage
+        task.execution_stage = ExecutionStage.FINALIZING
+        assert executor_agent._check_basic_requirements(task) is True
+
+    def test_check_required_outputs(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _check_required_outputs method."""
+        from src.common_types.task_types import Task
+
+        # Mock _extract_required_outputs to return a list of required outputs
+        with patch.object(executor_agent, "_extract_required_outputs", return_value=["output1", "output2"]):
+            # Test with task result containing all required outputs
+            task = Task(description="Test task")
+            task.result = "This result contains output1 and output2"
+            missing_outputs = executor_agent._check_required_outputs(task)
+            assert missing_outputs == []
+
+            # Test with task result missing one required output
+            task.result = "This result contains only output1"
+            missing_outputs = executor_agent._check_required_outputs(task)
+            assert missing_outputs == ["output2"]
+
+            # Test with task result missing all required outputs
+            task.result = "This result contains no required outputs"
+            missing_outputs = executor_agent._check_required_outputs(task)
+            assert missing_outputs == ["output1", "output2"]
+
+        # Test with no required outputs
+        with patch.object(executor_agent, "_extract_required_outputs", return_value=[]):
+            task = Task(description="Test task")
+            task.result = "Any result"
+            missing_outputs = executor_agent._check_required_outputs(task)
+            assert missing_outputs == []
+
+    def test_check_for_errors(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _check_for_errors method."""
+        from src.common_types.task_types import Task
+
+        # Mock _get_error_context and _is_actual_error
+        with (
+            patch.object(executor_agent, "_get_error_context", return_value="error context"),
+            patch.object(executor_agent, "_is_actual_error", return_value=True),
+        ):
+            # Test with result containing an error indicator
+            task = Task(description="Test task")
+            task.result = "This result contains an error"
+            error_context = executor_agent._check_for_errors(task)
+            assert error_context == "error context"
+
+        # Test with result not containing any error indicator
+        with (
+            patch.object(executor_agent, "_get_error_context", return_value="error context"),
+            patch.object(executor_agent, "_is_actual_error", return_value=False),
+        ):
+            task = Task(description="Test task")
+            task.result = "This result is fine"
+            error_context = executor_agent._check_for_errors(task)
+            assert error_context == ""
+
+    def test_check_execution_metadata(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _check_execution_metadata method."""
+        from src.common_types.task_types import Task
+
+        # Test with no execution metadata
+        task = Task(description="Test task")
+        task.execution_metadata = {}
+        missing_metadata = executor_agent._check_execution_metadata(task)
+        assert missing_metadata == []
+
+        # Test with complete execution metadata
+        task.execution_metadata = {
+            "planning_result": "Planning result",
+            "implementation_result": "Implementation result",
+            "testing_result": "Testing result",
+            "refined_implementation": "Refined implementation",
+            "final_result": "Final result",
+        }
+        missing_metadata = executor_agent._check_execution_metadata(task)
+        assert missing_metadata == []
+
+        # Test with missing execution metadata
+        task.execution_metadata = {
+            "planning_result": "Planning result",
+            "implementation_result": "",  # Empty value
+            "testing_result": "Testing result",
+            # Missing refined_implementation
+            "final_result": "Final result",
+        }
+        missing_metadata = executor_agent._check_execution_metadata(task)
+        assert set(missing_metadata) == {"implementation_result", "refined_implementation"}
+
+    def test_check_subtasks(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _check_subtasks method."""
+        from uuid import UUID
+
+        from src.common_types.task_types import Task
+
+        # Create a task with subtasks
+        task = Task(description="Test task")
+        subtask_id1 = UUID("00000000-0000-0000-0000-000000000001")
+        subtask_id2 = UUID("00000000-0000-0000-0000-000000000002")
+        task.subtasks = [subtask_id1, subtask_id2]
+
+        # Mock the state manager's get_task_by_id method
+        def mock_get_task_by_id(task_id):
+            if task_id == subtask_id1:
+                subtask1 = Task(description="Subtask 1")
+                subtask1.status = "completed"
+                return subtask1
+            if task_id == subtask_id2:
+                subtask2 = Task(description="Subtask 2")
+                subtask2.status = "in_progress"
+                return subtask2
+            return None
+
+        # Apply the mock
+        executor_agent.state_manager.get_task_by_id = mock_get_task_by_id
+
+        # Test the method
+        incomplete_subtasks = executor_agent._check_subtasks(task)
+        assert len(incomplete_subtasks) == 1
+        assert str(subtask_id2) in incomplete_subtasks[0]
+
+    def test_check_result_quality(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _check_result_quality method."""
+        from src.common_types.task_types import Task
+
+        # Test case 1: Task with no result
+        task1 = Task(description="Test task")
+        task1.result = None
+        result1 = executor_agent._check_result_quality(task1)
+        assert "No result to evaluate" in result1
+
+        # Test case 2: Task with placeholder in result
+        task2 = Task(description="Test task")
+        task2.result = "This is a result with a TODO item"
+        result2 = executor_agent._check_result_quality(task2)
+        assert "Result contains placeholder" in result2
+
+        # Test case 3: Task with complete code block
+        task3 = Task(description="Test task")
+        task3.result = (
+            "Here is a function:\n```python\ndef calculate_sum(a, b):\n    # Some code\n    return a + b\n```"
+        )
+        result3 = executor_agent._check_result_quality(task3)
+        assert result3 == ""  # No quality issues
+
+        # Test case 4: Task with incomplete code block (missing end)
+        task4 = Task(description="Test task")
+        task4.result = "Here is a function:\n```python\ndef calculate_sum(a, b):\n    # Some code"
+        result4 = executor_agent._check_result_quality(task4)
+        assert "Result contains incomplete code block" in result4
+
+        # Test case 5: Task with missing key terms
+        task5 = Task(description="Implement a user authentication system with password hashing")
+        task5.result = "Here is a simple login function"
+        result5 = executor_agent._check_result_quality(task5)
+        assert "Result doesn't address key terms" in result5
+
+        # Test case 6: Task with error indicator
+        task6 = Task(description="Test task")
+        task6.result = "Implementation failed: could not connect to database"
+        # Mock the _is_actual_error method to return True
+        with patch.object(executor_agent, "_is_actual_error", return_value=True):
+            result6 = executor_agent._check_result_quality(task6)
+            assert "Result contains error indicator" in result6
+
+        # Test case 7: Task with missing expected output
+        task7 = Task(description="Test task")
+        task7.result = "This is a complete result"
+        task7.execution_metadata = {"expected_outputs": ["user interface", "database schema"]}
+        result7 = executor_agent._check_result_quality(task7)
+        assert "Result missing expected output" in result7
+
+        # Test case 8: Task with good quality result
+        task8 = Task(description="Implement a simple calculator function")
+        task8.result = """
+        def calculator(a, b, operation):
+            if operation == 'add':
+                return a + b
+            elif operation == 'subtract':
+                return a - b
+            elif operation == 'multiply':
+                return a * b
+            elif operation == 'divide':
+                if b == 0:
+                    raise ValueError("Cannot divide by zero")
+                return a / b
+            else:
+                raise ValueError("Unknown operation")
+        """
+        result8 = executor_agent._check_result_quality(task8)
+        assert result8 == ""  # No quality issues
+
+    def test_extract_key_terms(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _extract_key_terms method."""
+        # Test with a simple description
+        terms1 = executor_agent._extract_key_terms("Implement a user authentication system")
+        assert "user" in terms1
+        assert "authentication" in terms1
+        assert "system" in terms1
+
+        # Test with a more complex description
+        terms2 = executor_agent._extract_key_terms(
+            "Create a database schema for storing customer information including name, address, and purchase history",
+        )
+        assert "database" in terms2
+        assert "schema" in terms2
+        assert "customer" in terms2
+        assert "information" in terms2
+        assert "name" in terms2
+        assert "address" in terms2
+        assert "purchase" in terms2
+        assert "history" in terms2
+
+        # Test with common words that should be filtered out
+        terms3 = executor_agent._extract_key_terms(
+            "The function should be implemented with proper error handling",
+        )
+        assert "the" not in terms3
+        assert "should" not in terms3
+        assert "be" not in terms3
+        assert "with" not in terms3
+        assert "proper" in terms3
+        assert "error" in terms3
+        assert "handling" in terms3
+
+    def test_extract_required_outputs(self, executor_agent: ExecutorAgent) -> None:
+        """Test the _extract_required_outputs method."""
+        # Test with no required outputs
+        outputs1 = executor_agent._extract_required_outputs("Implement a function")
+        assert not outputs1  # Should be empty
+
+        # Test with explicit required outputs
+        outputs2 = executor_agent._extract_required_outputs(
+            "Implement a function that returns: 1) A user object, 2) An authentication token",
+        )
+        assert len(outputs2) == 2
+        assert "user object" in outputs2
+        assert "authentication token" in outputs2
+
+        # Test with outputs in different format
+        outputs3 = executor_agent._extract_required_outputs(
+            "Create a module with the following outputs:\n- User interface\n- API endpoints\n- Database schema",
+        )
+        assert len(outputs3) == 3
+        assert "user interface" in outputs3
+        assert "api endpoints" in outputs3
+        assert "database schema" in outputs3
+
+    def test_evaluate_task_completion(self, executor_agent: ExecutorAgent) -> None:
+        """Test the evaluate_task_completion method."""
+        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.task_types import Task, TaskStatus
+
+        # Create a task that meets all completion criteria
+        task = Task(description="Test task")
+        task.execution_stage = ExecutionStage.FINALIZING
+        task.verification_status = VerificationStatus.PASSED
+        task.result = "This is a complete and valid result that is long enough"
+        task.execution_logs = ["Log entry"]
+        task.execution_attempts = 1
+        task.status = TaskStatus.IN_PROGRESS
+
+        # Mock all the check methods to return empty results
+        with (
+            patch.object(executor_agent, "_check_required_outputs", return_value=[]),
+            patch.object(executor_agent, "_check_for_errors", return_value=""),
+            patch.object(executor_agent, "_check_execution_metadata", return_value=[]),
+            patch.object(executor_agent, "_check_subtasks", return_value=[]),
+        ):
+            # Test the public method
+            is_complete, message = executor_agent.evaluate_task_completion(task)
+
+            # Verify the result
+            assert is_complete is True
+            assert "Task meets all completion criteria" in message
+
+        # Create a task that doesn't meet completion criteria
+        incomplete_task = Task(description="Incomplete task")
+        incomplete_task.execution_stage = ExecutionStage.IMPLEMENTING  # Not in FINALIZING stage
+
+        # Test the public method with the incomplete task
+        is_complete, message = executor_agent.evaluate_task_completion(incomplete_task)
+
+        # Verify the result
+        assert is_complete is False
+        assert "not in final stage" in message
