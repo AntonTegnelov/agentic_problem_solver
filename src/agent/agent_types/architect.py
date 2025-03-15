@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import re
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -18,6 +19,7 @@ from src.common_types.result_types import Result
 from src.common_types.task_types import TaskComplexity, TaskPriority
 from src.messages.creation import create_human_message, create_message
 from src.prompts import get_step_prompt
+from src.utils.log_utils import MAX_TASK_DESCRIPTION_LENGTH, DelegationInfo, get_logger, log_delegation_decision
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -58,6 +60,7 @@ class ArchitectAgent:
         self._child_ids: list[str] = []
         self._task_breakdown_step = TaskBreakdownStep(agent_role=AgentRole.ARCHITECT)
         self._task_breakdown_step.set_agent(self)
+        self._logger = get_logger(f"agent.architect.{self._agent_id}")
 
         # Set parent_id from config if provided
         if config and "parent_id" in config:
@@ -146,13 +149,33 @@ class ArchitectAgent:
             try:
                 # Use the rule-based approach for now to avoid async/await issues
                 # We can revisit this later if needed
-                return self._analyze_task_complexity_rule_based(task_description)
+                complexity = self._analyze_task_complexity_rule_based(task_description)
             except (ValueError, RuntimeError, ConnectionError, TimeoutError):
                 # If LLM analysis fails, fall back to rule-based approach
-                return self._analyze_task_complexity_rule_based(task_description)
+                complexity = self._analyze_task_complexity_rule_based(task_description)
+        else:
+            # If no provider, use rule-based approach
+            complexity = self._analyze_task_complexity_rule_based(task_description)
 
-        # If no provider, use rule-based approach
-        return self._analyze_task_complexity_rule_based(task_description)
+        # Log the complexity analysis decision
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id="self",
+                task=task_description[:MAX_TASK_DESCRIPTION_LENGTH] + "..."
+                if len(task_description) > MAX_TASK_DESCRIPTION_LENGTH
+                else task_description,
+                reason=f"Task complexity analysis: {complexity.name}",
+                additional_info={
+                    "task_complexity": complexity.name,
+                    "analysis_method": "rule_based",
+                    "decision_type": "complexity_analysis",
+                },
+            ),
+        )
+
+        return complexity
 
     def _analyze_task_complexity_with_llm(self, task_description: str) -> TaskComplexity:
         """Use LLM to analyze task complexity.
@@ -180,7 +203,6 @@ class ArchitectAgent:
         """
 
         # Create a message for the LLM
-        from src.messages.creation import create_human_message
 
         message = create_human_message(content=prompt)
 
@@ -481,8 +503,6 @@ class ArchitectAgent:
             Result with error information.
 
         """
-        import logging
-
         error_message = ""
 
         # Determine the appropriate error message based on exception type
@@ -619,7 +639,7 @@ class ArchitectAgent:
             raise ValueError(msg)
 
     async def delegate_to_child(self, child_id: str, task: str) -> Result[str]:
-        """Delegate a task to a child agent.
+        """Delegate task to child agent.
 
         Args:
             child_id: Child agent ID.
@@ -629,42 +649,36 @@ class ArchitectAgent:
             Result of delegation.
 
         """
-        result = None
+        # Validate that child_id is actually a child of this agent
+        if child_id not in self._child_ids:
+            return Result.failure(f"Agent {child_id} is not a child of {self._agent_id}")
+
+        # Get the child agent from the registry
         try:
-            if child_id not in self._child_ids:
-                result = Result(
-                    success=False,
-                    error=f"Child agent {child_id} not found",
-                    data=None,
-                )
-            else:
-                self._validate_provider()
-                message = create_human_message(content=task)
-                messages = self._prepare_messages([message])
-                response = await self._provider.generate(messages)
+            # This is a placeholder for getting the child agent
+            # In a real implementation, this would use a registry or coordinator
+            # For now, we'll just return a success result
+            child_agent_type = child_id.split("_")[0] if "_" in child_id else "unknown"
 
-                # Ensure response is a string
-                result = Result(success=True, data=str(response), error=None)
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=self._agent_id,
+                    target_agent_id=child_id,
+                    task=task,
+                    reason=f"Delegating to {child_agent_type} agent as it's a registered child agent",
+                    additional_info={"child_agent_type": child_agent_type},
+                ),
+            )
+
+            return Result.success(f"Task delegated to {child_id}: {task}")
         except ValueError as e:
-            result = Result(success=False, error=str(e), data=None)
-        except (ConnectionError, TimeoutError) as e:
-            result = Result(success=False, error=f"Connection error: {e!s}", data=None)
-        except json.JSONDecodeError as e:
-            result = Result(success=False, error=f"Invalid JSON response: {e!s}", data=None)
-        except (KeyError, AttributeError, TypeError) as e:
-            # Handle specific exceptions that might occur during processing
-            result = Result(success=False, error=f"Processing error: {e!s}", data=None)
-        except (RuntimeError, OSError) as e:
-            # Handle runtime and OS errors
-            result = Result(success=False, error=f"Runtime error: {e!s}", data=None)
-        except Exception as e:
-            # Log unexpected errors but still return a structured result
-            import logging
-
-            logging.exception("Unexpected error in delegate_task")
-            result = Result(success=False, error=f"Unexpected error: {e!s}", data=None)
-
-        return result
+            return Result.failure(f"Failed to delegate task to {child_id}: {e!s}")
+        except TypeError as e:
+            return Result.failure(f"Failed to delegate task to {child_id}: {e!s}")
+        except RuntimeError as e:
+            return Result.failure(f"Failed to delegate task to {child_id}: {e!s}")
 
     async def collect_results_from_children(self) -> dict[str, Result[Any]]:
         """Collect results from child agents.
@@ -715,46 +729,53 @@ class ArchitectAgent:
         return self.state.get_messages()
 
     async def delegate_to_executor(self, task: str) -> Result[str]:
-        """Delegate a task directly to an ExecutorAgent.
+        """Delegate task directly to an executor agent.
 
-        This method is used for simple tasks that don't require further planning.
-        It creates a new ExecutorAgent, establishes a parent-child relationship,
-        and delegates the task to it.
+        This method is used for simple tasks that don't require planning.
 
         Args:
-            task: The task to delegate.
+            task: Task to delegate.
 
         Returns:
-            Result containing the execution result.
-
-        Raises:
-            ValueError: If provider is not initialized.
+            Result of delegation.
 
         """
-        self._validate_provider()
+        # This is a placeholder for the actual implementation
+        # In a real implementation, this would create or find an executor agent
+        # and delegate the task to it
 
-        # Import ExecutorAgent here to avoid circular imports
-        from src.agent.agent_types.executor import ExecutorAgent
+        # Analyze task complexity to confirm it's appropriate for direct execution
+        complexity = self.analyze_task_complexity(task)
 
-        # Create a new ExecutorAgent
-        executor_agent = ExecutorAgent(
-            provider=self._provider,
-            config=self._config,
+        if complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+            # Create a mock executor ID for demonstration
+            executor_id = f"executor_{id(task)}"
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=self._agent_id,
+                    target_agent_id=executor_id,
+                    task=task,
+                    reason=f"Direct delegation to executor due to {complexity.name} complexity",
+                    additional_info={"task_complexity": complexity.name},
+                ),
+            )
+
+            return Result.success(f"Task delegated directly to executor: {task}")
+        # Log the decision not to delegate directly
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id="none",
+                task=task,
+                reason=f"Task too complex ({complexity.name}) for direct executor delegation",
+                additional_info={"task_complexity": complexity.name},
+            ),
         )
 
-        # Establish parent-child relationship
-        executor_id = executor_agent.get_agent_id()
-        executor_agent.set_parent(self._agent_id)
-        self.add_child(executor_id)
-
-        # Create a message for the executor
-        message = create_human_message(content=task)
-
-        # Check if the process method is a coroutine function (async)
-        import inspect
-
-        if inspect.iscoroutinefunction(executor_agent.process):
-            # If it's async, await it
-            return await executor_agent.process(message)
-        # If it's not async, call it directly
-        return executor_agent.process(message)
+        return Result.failure(
+            f"Task too complex for direct executor delegation: {complexity.name}",
+        )

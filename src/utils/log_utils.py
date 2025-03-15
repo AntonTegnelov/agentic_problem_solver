@@ -1,9 +1,16 @@
 """Logging utilities."""
+
 from __future__ import annotations
 
+import json
 import logging
 import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
+
+# Constants
+MAX_TASK_DESCRIPTION_LENGTH = 100
 
 
 def setup_logging(
@@ -62,3 +69,29 @@ def get_logger(name: str) -> logging.Logger:
 
     """
     return logging.getLogger(name)
+
+
+@dataclass
+class DelegationInfo:
+    """Information about a delegation decision."""
+
+    source_agent_id: str
+    target_agent_id: str
+    task: str
+    reason: str
+    additional_info: dict[str, Any] | None = None
+
+
+def log_delegation_decision(
+    logger: logging.Logger,
+    delegation_info: DelegationInfo,
+) -> None:
+    """Log a delegation decision made by an agent.
+
+    Args:
+        logger: Logger instance.
+        delegation_info: Information about the delegation decision.
+
+    """
+    log_data = asdict(delegation_info)
+    logger.info("Delegation decision: %s", json.dumps(log_data))

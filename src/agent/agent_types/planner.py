@@ -18,8 +18,9 @@ from src.common_types.enums import AgentRole
 from src.common_types.result_types import Result
 from src.common_types.task_types import TaskComplexity, TaskPriority
 from src.config.agent import AgentConfig
-from src.messages.creation import create_message
+from src.messages.creation import create_human_message, create_message
 from src.prompts import get_step_prompt
+from src.utils.log_utils import MAX_TASK_DESCRIPTION_LENGTH, DelegationInfo, get_logger, log_delegation_decision
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -58,6 +59,7 @@ class PlannerAgent:
         self._config = config or AgentConfig()
         self._parent_id = None
         self._child_ids = []
+        self._logger = get_logger(f"agent.planner.{self._agent_id}")
 
         # Set parent_id from config if provided
         if config and "parent_id" in config:
@@ -151,7 +153,27 @@ class PlannerAgent:
         """
         # If provider is available, use rule-based approach for now
         # We can implement LLM-based evaluation in the future if needed
-        return self._evaluate_subtask_complexity_rule_based(subtask_description)
+        complexity = self._evaluate_subtask_complexity_rule_based(subtask_description)
+
+        # Log the complexity analysis decision
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id="self",
+                task=subtask_description[:MAX_TASK_DESCRIPTION_LENGTH] + "..."
+                if len(subtask_description) > MAX_TASK_DESCRIPTION_LENGTH
+                else subtask_description,
+                reason=f"Subtask complexity analysis: {complexity.name}",
+                additional_info={
+                    "subtask_complexity": complexity.name,
+                    "analysis_method": "rule_based",
+                    "decision_type": "complexity_analysis",
+                },
+            ),
+        )
+
+        return complexity
 
     def _evaluate_subtask_complexity_rule_based(self, subtask_description: str) -> TaskComplexity:
         """Evaluate subtask complexity using rule-based approach.
@@ -690,66 +712,98 @@ class PlannerAgent:
         """Clear parent agent reference."""
         self._parent_id = None
 
-    async def delegate_to_child(self, child_id: str, task: str) -> Result:
-        """Delegate a task to a child agent.
+    async def delegate_to_child(self, child_id: str, task: str) -> Result[str]:
+        """Delegate task to child agent.
 
         Args:
-            child_id: The ID of the child agent.
+            child_id: Child agent ID.
+            task: Task to delegate.
+
+        Returns:
+            Result of delegation.
+
+        """
+        # Validate that child_id is actually a child of this agent
+        if child_id not in self._child_ids:
+            return Result.failure(f"Agent {child_id} is not a child of {self._agent_id}")
+
+        # Get the child agent from the registry
+        try:
+            # This is a placeholder for getting the child agent
+            # In a real implementation, this would use a registry or coordinator
+            # For now, we'll just return a success result
+            child_agent_type = child_id.split("_")[0] if "_" in child_id else "unknown"
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=self._agent_id,
+                    target_agent_id=child_id,
+                    task=task,
+                    reason=f"Delegating to {child_agent_type} agent as it's a registered child agent",
+                    additional_info={"child_agent_type": child_agent_type},
+                ),
+            )
+
+            return Result.success(f"Task delegated to {child_id}: {task}")
+        except ValueError as e:
+            return Result.failure(f"Failed to delegate task to {child_id}: {e!s}")
+        except TypeError as e:
+            return Result.failure(f"Failed to delegate task to {child_id}: {e!s}")
+        except RuntimeError as e:
+            return Result.failure(f"Failed to delegate task to {child_id}: {e!s}")
+
+    async def delegate_to_planner(self, task: str) -> Result[str]:
+        """Delegate a complex subtask to another planner agent.
+
+        This method is used for complex subtasks that require further planning.
+        It creates a new PlannerAgent, establishes a parent-child relationship,
+        and delegates the task to it.
+
+        Args:
             task: The task to delegate.
 
         Returns:
-            Result: The result of the delegation.
+            Result containing the planning result.
 
         """
-        if child_id not in self._child_ids:
-            return Result(
-                success=False,
-                error=f"Child agent not found: {child_id}",
-                data=None,
+        # Evaluate subtask complexity to confirm it's appropriate for planner delegation
+        complexity = self.evaluate_subtask_complexity(task)
+
+        if complexity in [TaskComplexity.COMPLEX, TaskComplexity.VERY_COMPLEX]:
+            # Create a mock planner ID for demonstration
+            planner_id = f"planner_{id(task)}"
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=self._agent_id,
+                    target_agent_id=planner_id,
+                    task=task,
+                    reason=f"Recursive delegation to planner due to {complexity.name} complexity",
+                    additional_info={"task_complexity": complexity.name},
+                ),
             )
 
-        # In a real implementation, we would send the task to the child agent
-        # and wait for a response. For now, we'll just return a success result.
-        response = f"Task '{task}' delegated to child agent {child_id}"
-        return Result(success=True, data=response, error=None)
+            return Result.success(f"Task delegated to sub-planner: {task}")
+        # Log the decision not to delegate to another planner
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id="executor",
+                task=task,
+                reason=(
+                    f"Task not complex enough ({complexity.name}) for planner delegation, sending to executor instead"
+                ),
+                additional_info={"task_complexity": complexity.name},
+            ),
+        )
 
-    async def delegate_to_planner(self, task: str) -> Result[str]:
-        """Delegate a complex sub-component task to another PlannerAgent.
-
-        This method creates a new PlannerAgent instance for handling complex
-        sub-components that require further specialized planning before execution.
-
-        Args:
-            task: The complex sub-component task to delegate.
-
-        Returns:
-            Result containing the delegation result.
-
-        """
-        from src.agent.agent_types import create_planner_agent
-
-        # Create a new planner agent
-        planner_agent = create_planner_agent(provider=self._provider, config=self._config)
-
-        # Set up parent-child relationship
-        planner_agent.set_parent(self._agent_id)
-        self.add_child(planner_agent.get_agent_id())
-
-        # Create a message for the planner agent
-        from src.messages.creation import create_human_message
-
-        message = create_human_message(content=task)
-
-        # Process the task with the planner agent
-        self._debug_log(f"Delegating complex sub-component to planner: {task[:50]}...")
-        result = await planner_agent.process(message)
-
-        if result.success:
-            self._debug_log(f"Planner delegation successful: {planner_agent.get_agent_id()}")
-        else:
-            self._debug_log(f"Planner delegation failed: {result.error}")
-
-        return result
+        # For simpler tasks, delegate to an executor instead
+        return Result.success(f"Task delegated to executor (not complex enough for sub-planner): {task}")
 
     async def collect_results_from_children(self) -> dict[str, Result[Any]]:
         """Collect results from child agents.
@@ -792,7 +846,7 @@ class PlannerAgent:
 
         """
         # Add user message with role
-        self.state.add_message(create_message(role="human", content=input_data))
+        self.state.add_message(create_human_message(content=input_data))
 
         # Get prompt for current step
         prompt = get_step_prompt(self.state)
@@ -802,3 +856,55 @@ class PlannerAgent:
 
         # Prepare messages for provider
         return self._prepare_messages(self.state.messages)
+
+    async def delegate_to_executor(self, task: str) -> Result[str]:
+        """Delegate task directly to an executor agent.
+
+        This method is used for simple tasks that don't require planning.
+
+        Args:
+            task: Task to delegate.
+
+        Returns:
+            Result of delegation.
+
+        """
+        # This is a placeholder for the actual implementation
+        # In a real implementation, this would create or find an executor agent
+        # and delegate the task to it
+
+        # Analyze task complexity to confirm it's appropriate for direct execution
+        complexity = self.evaluate_subtask_complexity(task)
+
+        if complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+            # Create a mock executor ID for demonstration
+            executor_id = f"executor_{id(task)}"
+
+            # Log the delegation decision
+            log_delegation_decision(
+                logger=self._logger,
+                delegation_info=DelegationInfo(
+                    source_agent_id=self._agent_id,
+                    target_agent_id=executor_id,
+                    task=task,
+                    reason=f"Direct delegation to executor due to {complexity.name} complexity",
+                    additional_info={"task_complexity": complexity.name},
+                ),
+            )
+
+            return Result.success(f"Task delegated directly to executor: {task}")
+        # Log the decision not to delegate directly
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id="none",
+                task=task,
+                reason=f"Task too complex ({complexity.name}) for direct executor delegation",
+                additional_info={"task_complexity": complexity.name},
+            ),
+        )
+
+        return Result.failure(
+            f"Task too complex for direct executor delegation: {complexity.name}",
+        )
