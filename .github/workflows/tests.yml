@@ -31,10 +31,6 @@ jobs:
         run: |
           ruff check . --select=E,F,W,I,N,UP,B,A,C4,T20,PT,RET,SIM,ERA,PL,RUF --target-version=py312 --fix
 
-      - name: Validate agent creation functionality
-        run: |
-          python -m pytest tests/unit/test_agent_creation.py tests/integration/test_dynamic_agents.py -v
-
       - name: Run pytest with coverage
         run: |
           python -m pytest --doctest-modules --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=36
