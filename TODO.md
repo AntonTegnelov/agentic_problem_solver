@@ -77,7 +77,7 @@
   - [x] Implement capability matching in `src/agent/coordination.py` to route tasks to appropriate agent types
   - [x] Create decision logging in each agent type to track delegation choices
   - [x] Add unit tests in `tests/unit/test_flexible_delegation.py` to verify delegation logic
-  - [ ] Create integration tests that verify direct and recursive delegation patterns
+  - [x] Create integration tests that verify direct and recursive delegation patterns
   - [ ] Update documentation in `docs/howto/delegation_strategies.md` with delegation decision guidelines
 
 - enable the top agent to create other agents by itself, as a tool
