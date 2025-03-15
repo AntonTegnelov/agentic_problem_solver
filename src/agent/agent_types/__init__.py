@@ -40,6 +40,7 @@ def create_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
     config: dict | None = None,
+    parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create an agent based on the specified role.
 
@@ -48,6 +49,7 @@ def create_agent(
         provider: LLM provider.
         state_manager: State manager or agent state.
         config: Agent configuration.
+        parent_id: Optional parent agent ID for hierarchical relationships.
 
     Returns:
         An agent instance of the specified role.
@@ -57,11 +59,11 @@ def create_agent(
 
     """
     if role == AgentRole.ARCHITECT:
-        return create_architect_agent(provider, state_manager, config)
+        return create_architect_agent(provider, state_manager, config, parent_id)
     if role == AgentRole.PLANNER:
-        return create_planner_agent(provider, state_manager, config)
+        return create_planner_agent(provider, state_manager, config, parent_id)
     if role == AgentRole.EXECUTOR:
-        return create_executor_agent(provider, state_manager, config)
+        return create_executor_agent(provider, state_manager, config, parent_id)
     msg = f"Unsupported agent role: {role}"
     raise ValueError(msg)
 
@@ -70,6 +72,7 @@ def create_architect_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
     config: dict | None = None,
+    parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create an architect agent.
 
@@ -77,11 +80,19 @@ def create_architect_agent(
         provider: LLM provider.
         state_manager: State manager or agent state.
         config: Agent configuration.
+        parent_id: Optional parent agent ID for hierarchical relationships.
 
     Returns:
         An architect agent instance.
 
     """
+    # Prepare config with parent_id if provided
+    if config is None:
+        config = {}
+
+    if parent_id is not None:
+        config["parent_id"] = parent_id
+
     agent = ArchitectAgent(provider=provider, state_manager=state_manager, config=config)
 
     # Create a wrapper class that adapts the async process method to the sync interface
@@ -123,6 +134,7 @@ def create_planner_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
     config: dict | None = None,
+    parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create a planner agent.
 
@@ -130,11 +142,19 @@ def create_planner_agent(
         provider: LLM provider.
         state_manager: State manager or agent state.
         config: Agent configuration.
+        parent_id: Optional parent agent ID for hierarchical relationships.
 
     Returns:
         A planner agent instance.
 
     """
+    # Prepare config with parent_id if provided
+    if config is None:
+        config = {}
+
+    if parent_id is not None:
+        config["parent_id"] = parent_id
+
     agent = PlannerAgent(provider=provider, state_manager=state_manager, config=config)
 
     # Create a wrapper class that adapts the async process method to the sync interface
@@ -176,6 +196,7 @@ def create_executor_agent(
     provider: object = None,
     state_manager: AgentState | StateManager | None = None,
     config: dict | None = None,
+    parent_id: str | None = None,
 ) -> Agent[Any]:
     """Create an executor agent.
 
@@ -183,11 +204,19 @@ def create_executor_agent(
         provider: LLM provider.
         state_manager: State manager or agent state.
         config: Agent configuration.
+        parent_id: Optional parent agent ID for hierarchical relationships.
 
     Returns:
         An executor agent instance.
 
     """
+    # Prepare config with parent_id if provided
+    if config is None:
+        config = {}
+
+    if parent_id is not None:
+        config["parent_id"] = parent_id
+
     agent = ExecutorAgent(provider=provider, state_manager=state_manager, config=config)
 
     # Create a wrapper class that adapts the async process method to the sync interface

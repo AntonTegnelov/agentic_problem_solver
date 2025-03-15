@@ -54,6 +54,10 @@ class ExecutorAgent:
         self._parent_id: str | None = None
         self._child_ids: list[str] = []
 
+        # Set parent_id from config if provided
+        if config and "parent_id" in config:
+            self._parent_id = config["parent_id"]
+
         # Handle both AgentState and StateManager
         if state_manager is None:
             # Create a new state manager with a new agent state

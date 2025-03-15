@@ -59,6 +59,10 @@ class ArchitectAgent:
         self._task_breakdown_step = TaskBreakdownStep(agent_role=AgentRole.ARCHITECT)
         self._task_breakdown_step.set_agent(self)
 
+        # Set parent_id from config if provided
+        if config and "parent_id" in config:
+            self._parent_id = config["parent_id"]
+
         # Handle both AgentState and StateManager
         if state_manager is None:
             # Create a new state manager with a new agent state

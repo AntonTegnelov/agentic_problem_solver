@@ -59,6 +59,10 @@ class PlannerAgent:
         self._parent_id = None
         self._child_ids = []
 
+        # Set parent_id from config if provided
+        if config and "parent_id" in config:
+            self._parent_id = config["parent_id"]
+
         # Set up state
         if state_manager is None:
             state_manager = InMemoryStateManager()

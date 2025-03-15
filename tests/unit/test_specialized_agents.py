@@ -460,7 +460,7 @@ class TestPlannerAgent:
         assert "Result from child agent child2" in results["child2"].data
 
     @pytest.mark.asyncio
-    async def test_delegate_to_planner(self, planner_agent: PlannerAgent, mock_provider: MagicMock) -> None:
+    async def test_delegate_to_planner(self, planner_agent: PlannerAgent) -> None:
         """Test delegating to another planner agent for complex sub-components."""
         # Mock the create_planner_agent function
         with patch("src.agent.agent_types.create_planner_agent") as mock_create_planner:
@@ -468,7 +468,7 @@ class TestPlannerAgent:
             mock_planner = MagicMock()
             mock_planner.get_agent_id.return_value = "planner_child"
             mock_planner.process = AsyncMock(
-                return_value=Result(success=True, data="Delegated task processed", error=None)
+                return_value=Result(success=True, data="Delegated task processed", error=None),
             )
             mock_create_planner.return_value = mock_planner
 

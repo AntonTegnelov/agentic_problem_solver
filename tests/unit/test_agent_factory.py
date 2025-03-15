@@ -53,3 +53,22 @@ class TestAgentFactory:
         """Test create_agent function with an invalid role."""
         with pytest.raises(ValueError, match="Unsupported agent role"):
             create_agent(AgentRole.SOLVER)
+
+    def test_create_agent_with_parent_id(self) -> None:
+        """Test creating agents with parent-child relationships."""
+        # Create a parent architect agent
+        architect = create_architect_agent()
+        architect_id = architect.get_agent_id()
+
+        # Create a planner agent with the architect as parent
+        planner = create_planner_agent(parent_id=architect_id)
+        assert planner.get_parent_id() == architect_id
+
+        # Create an executor agent with the planner as parent
+        planner_id = planner.get_agent_id()
+        executor = create_executor_agent(parent_id=planner_id)
+        assert executor.get_parent_id() == planner_id
+
+        # Test with create_agent function
+        executor2 = create_agent(AgentRole.EXECUTOR, parent_id=planner_id)
+        assert executor2.get_parent_id() == planner_id
