@@ -7,7 +7,7 @@ These tests verify that the CLI works end-to-end, including the "APS solve" comm
 import os
 import subprocess
 from collections.abc import Generator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -210,7 +210,7 @@ def test_cli_solve_command_agent_exception(mock_create_architect_agent: MagicMoc
     """
     # Setup mock to raise an exception during process
     instance = mock_create_architect_agent.return_value
-    instance.process_sync = AsyncMock(side_effect=AgentError("Agent process error"))
+    instance.process_sync = MagicMock(side_effect=AgentError("Agent process error"))
 
     # Create a CLI runner
     from click.testing import CliRunner
@@ -240,7 +240,8 @@ def test_process_message_success(mock_create_architect_agent: MagicMock) -> None
     mock_result.error = None
 
     # Set up the mock process method to return the mock result
-    instance.process_sync.return_value = mock_result
+    # Use MagicMock instead of AsyncMock since process_sync is synchronous
+    instance.process_sync = MagicMock(return_value=mock_result)
 
     # Call the function with env vars mock
     with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "GEMINI_MODEL": "test-model"}):
@@ -274,7 +275,7 @@ def test_process_message_agent_error(mock_create_architect_agent: MagicMock) -> 
     # Setup mock to raise an AgentError during process
     error_msg = "Agent process error"
     instance = mock_create_architect_agent.return_value
-    instance.process_sync.side_effect = AgentError(error_msg)
+    instance.process_sync = MagicMock(side_effect=AgentError(error_msg))
 
     # Mock environment variables
     with (
