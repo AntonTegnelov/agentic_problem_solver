@@ -85,15 +85,34 @@ def create_architect_agent(
     agent = ArchitectAgent(provider=provider, state_manager=state_manager, config=config)
 
     # Create a wrapper class that adapts the async process method to the sync interface
-    class SyncArchitectAgent:
+    # and inherits from ArchitectAgent to pass isinstance checks
+    class SyncArchitectAgent(ArchitectAgent):
         def __init__(self, async_agent) -> None:
             self._async_agent = async_agent
+            # Don't call super().__init__ to avoid creating a new agent
+            # Just copy the attributes from the wrapped agent
+            for attr in dir(async_agent):
+                if not attr.startswith("_") and not hasattr(self, attr):
+                    setattr(self, attr, getattr(async_agent, attr))
 
         def process(self, message: Message) -> Result[Any]:
             """Process a message synchronously by running the async method in an event loop."""
             import asyncio
 
-            return asyncio.run(self._async_agent.process(message))
+            # Get the current event loop or create a new one if none exists
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # If the loop is already running, create a task and wait for it
+            if loop.is_running():
+                # Create a future to get the result
+                future = asyncio.run_coroutine_threadsafe(self._async_agent.process(message), loop)
+                return future.result()
+            # If no loop is running, we can use loop.run_until_complete
+            return loop.run_until_complete(self._async_agent.process(message))
 
         def __getattr__(self, name):
             """Delegate all other attribute access to the wrapped agent."""
@@ -122,15 +141,34 @@ def create_planner_agent(
     agent = PlannerAgent(provider=provider, state_manager=state_manager, config=config)
 
     # Create a wrapper class that adapts the async process method to the sync interface
-    class SyncPlannerAgent:
+    # and inherits from PlannerAgent to pass isinstance checks
+    class SyncPlannerAgent(PlannerAgent):
         def __init__(self, async_agent) -> None:
             self._async_agent = async_agent
+            # Don't call super().__init__ to avoid creating a new agent
+            # Just copy the attributes from the wrapped agent
+            for attr in dir(async_agent):
+                if not attr.startswith("_") and not hasattr(self, attr):
+                    setattr(self, attr, getattr(async_agent, attr))
 
         def process(self, message: Message) -> Result[Any]:
             """Process a message synchronously by running the async method in an event loop."""
             import asyncio
 
-            return asyncio.run(self._async_agent.process(message))
+            # Get the current event loop or create a new one if none exists
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # If the loop is already running, create a task and wait for it
+            if loop.is_running():
+                # Create a future to get the result
+                future = asyncio.run_coroutine_threadsafe(self._async_agent.process(message), loop)
+                return future.result()
+            # If no loop is running, we can use loop.run_until_complete
+            return loop.run_until_complete(self._async_agent.process(message))
 
         def __getattr__(self, name):
             """Delegate all other attribute access to the wrapped agent."""
@@ -159,15 +197,34 @@ def create_executor_agent(
     agent = ExecutorAgent(provider=provider, state_manager=state_manager, config=config)
 
     # Create a wrapper class that adapts the async process method to the sync interface
-    class SyncExecutorAgent:
+    # and inherits from ExecutorAgent to pass isinstance checks
+    class SyncExecutorAgent(ExecutorAgent):
         def __init__(self, async_agent) -> None:
             self._async_agent = async_agent
+            # Don't call super().__init__ to avoid creating a new agent
+            # Just copy the attributes from the wrapped agent
+            for attr in dir(async_agent):
+                if not attr.startswith("_") and not hasattr(self, attr):
+                    setattr(self, attr, getattr(async_agent, attr))
 
         def process(self, message: Message) -> Result[Any]:
             """Process a message synchronously by running the async method in an event loop."""
             import asyncio
 
-            return asyncio.run(self._async_agent.process(message))
+            # Get the current event loop or create a new one if none exists
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # If the loop is already running, create a task and wait for it
+            if loop.is_running():
+                # Create a future to get the result
+                future = asyncio.run_coroutine_threadsafe(self._async_agent.process(message), loop)
+                return future.result()
+            # If no loop is running, we can use loop.run_until_complete
+            return loop.run_until_complete(self._async_agent.process(message))
 
         def __getattr__(self, name):
             """Delegate all other attribute access to the wrapped agent."""
