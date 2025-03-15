@@ -76,7 +76,7 @@ def test_cli_solve_command_execution(mock_create_architect_agent: MagicMock) -> 
     mock_result.error = None
 
     # Set up the mock process method to return the mock result
-    instance.process.return_value = mock_result
+    instance.process_sync.return_value = mock_result
 
     # Create a CLI runner
     from click.testing import CliRunner
@@ -131,7 +131,7 @@ def test_cli_solve_command_with_options(
     mock_result.error = None
 
     # Set up the mock process method to return the mock result
-    instance.process.return_value = mock_result
+    instance.process_sync.return_value = mock_result
 
     # Setup the test to intercept AgentConfig creation
     with patch("src.cli.main.AgentConfig") as mock_agent_config:
@@ -210,7 +210,7 @@ def test_cli_solve_command_agent_exception(mock_create_architect_agent: MagicMoc
     """
     # Setup mock to raise an exception during process
     instance = mock_create_architect_agent.return_value
-    instance.process = AsyncMock(side_effect=AgentError("Agent process error"))
+    instance.process_sync = AsyncMock(side_effect=AgentError("Agent process error"))
 
     # Create a CLI runner
     from click.testing import CliRunner
@@ -240,7 +240,7 @@ def test_process_message_success(mock_create_architect_agent: MagicMock) -> None
     mock_result.error = None
 
     # Set up the mock process method to return the mock result
-    instance.process.return_value = mock_result
+    instance.process_sync.return_value = mock_result
 
     # Call the function with env vars mock
     with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "GEMINI_MODEL": "test-model"}):
@@ -274,7 +274,7 @@ def test_process_message_agent_error(mock_create_architect_agent: MagicMock) -> 
     # Setup mock to raise an AgentError during process
     error_msg = "Agent process error"
     instance = mock_create_architect_agent.return_value
-    instance.process.side_effect = AgentError(error_msg)
+    instance.process_sync.side_effect = AgentError(error_msg)
 
     # Mock environment variables
     with (
