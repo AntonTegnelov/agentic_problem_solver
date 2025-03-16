@@ -11,6 +11,7 @@ import click
 from src.agent.agent_types import Agent, create_architect_agent
 from src.agent.state.base import InMemoryStateManager, StateManager
 from src.common_types.error_types import AgentError, ConfigError
+from src.common_types.result_types import Result
 from src.config.agent import AgentConfig
 from src.config.constants import (
     DEFAULT_MODEL,
@@ -108,6 +109,42 @@ def setup_agent(
         return agent, provider, state_manager
 
 
+def get_final_solution(agent: Agent[Any], result: Result[Any]) -> str:
+    """Extract the final solution from a result.
+
+    This method navigates through delegation chains if necessary to find
+    the actual solution content rather than just delegation messages.
+
+    Args:
+        agent: The agent that produced the result.
+        result: The result object containing the solution or delegation info.
+
+    Returns:
+        The final solution content as a string.
+
+    """
+    # If the result doesn't have data, return the error or a default message
+    if not result.data:
+        return str(result.error) if result.error else "No solution data available"
+
+    # Check if the result data contains a delegation message
+    data_str = str(result.data)
+    if "delegated" in data_str.lower() and agent.get_child_ids():
+        # This is likely a delegation message, try to get results from child agents
+        child_results = agent.collect_results_from_children()
+        if child_results:
+            # Return the first non-empty result from child agents
+            for child_id, child_result in child_results.items():
+                if child_result.success and child_result.data:
+                    # Recursively get the final solution from the child result
+                    child_agent = agent.state.get_agent(child_id)
+                    if child_agent:
+                        return get_final_solution(child_agent, child_result)
+
+    # If no delegation or no child results, return the original result data
+    return data_str
+
+
 @click.group()
 def cli() -> None:
     """Agentic Problem Solver CLI."""
@@ -164,7 +201,9 @@ def solve(
 
         # Extract data from the Result object
         if result.success:
-            click.echo(result.data)
+            # Get the final solution content instead of just the raw result data
+            solution = get_final_solution(agent, result)
+            click.echo(solution)
         else:
             click.echo(f"Error: {result.error}", err=True)
             sys.exit(1)
