@@ -309,7 +309,8 @@ class TestArchitectAgent:
 
             # Verify the result
             assert result.success is True
-            assert "Task delegated directly to executor" in result.data
+            # The method now returns the executor's result directly
+            assert result.data == "Test response"
 
 
 class TestPlannerAgent:

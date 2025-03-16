@@ -67,17 +67,28 @@ class TestArchitectAgentDelegation:
     async def test_architect_delegates_to_executor_for_simple_task(self) -> None:
         """Test that ArchitectAgent delegates simple tasks directly to ExecutorAgent."""
         # Arrange
-        with patch("src.agent.agent_types.architect.ArchitectAgent._validate_provider"):
+        with (
+            patch("src.agent.agent_types.architect.ArchitectAgent._validate_provider"),
+            patch("src.agent.agent_types.create_executor_agent") as mock_create_executor,
+        ):
+            # Create a mock executor agent
+            mock_executor = MagicMock()
+            mock_executor.get_agent_id.return_value = "executor_123"
+            mock_executor.state = MagicMock()
+            mock_executor.process.return_value = Result.success("Test response")
+            mock_create_executor.return_value = mock_executor
+
             architect = ArchitectAgent()
             architect.analyze_task_complexity = MagicMock(return_value=TaskComplexity.SIMPLE)
             architect._logger = MagicMock()
+            architect._provider = MagicMock()
 
             # Act
             result = await architect.delegate_to_executor("Implement a simple hello world function")
 
             # Assert
             assert result.success is True
-            assert "Task delegated directly to executor" in result.data
+            assert result.data == "Test response"
 
     @pytest.mark.asyncio
     async def test_architect_analyzes_task_complexity_correctly(self) -> None:

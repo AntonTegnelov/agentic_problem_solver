@@ -143,7 +143,7 @@
     - [x] Implement a `get_final_result` method to retrieve completed task results from executor agents
     - [x] Add utilities to collect and format solution output from task execution results
   - [ ] Update delegation methods in hierarchical agents
-    - [ ] Modify `delegate_to_executor` in `src/agent/agent_types/architect.py` to return execution results
+    - [x] Modify `delegate_to_executor` in `src/agent/agent_types/architect.py` to return execution results
     - [ ] Enhance the `process` method in `src/agent/agent_types/executor.py` to include solution output
     - [ ] Add a new method in `src/agent/agent_types/executor.py` to retrieve completed task solutions
   - [ ] Create tests in `tests/unit/test_solution_output.py`
@@ -153,6 +153,20 @@
     - [ ] Add new test case verifying actual solution output for simple tasks
     - [ ] Ensure delegation chain properly returns solution content
   - [ ] Add documentation in `docs/howto/cli_usage.md` with examples of solution output
+
+- Refactor `src/agent/coordination.py`
+
+  - [ ] make detailed migration plan and put it into a dosctring at the top of coordination.py
+  - [ ] add documentation in src/docs that the migration is taking place
+  - [ ] find all references using coordination.py and list them in both the docstring of coordination.py and in the documentation
+  - [ ] create its own folder. `src/agent/coordination`
+  - [ ] create `src/agent/coordination/__init__.py`
+  - [ ] copy code from `src/agent/coordination.py` and split it into multiple files in `src/agent/coordination`, logically dividing the responsibilities of the file
+  - [ ] check any references and update those that will change because of the move into `src/agent/coordination`.
+  - [ ] remove coordination.py, completing the migration into `src/agent/coordination`
+  - [ ] verify that all tests pass and the linter is happy
+  - [ ] remove the documentation that mentions the migration and only leave documentation of the current situation
+  - [ ] remove any comments that mention the migration
 
 - implement project management infrastructure and CLI commands for file generation
 

@@ -112,7 +112,8 @@ class TestFlexibleDelegationPatterns:
 
             # Verify the result
             assert result.success is True
-            assert "delegated directly to executor" in result.data
+            # The method now returns the executor's result directly
+            assert result.data == "Test response"
 
     @pytest.mark.asyncio
     async def test_planner_recursive_delegation_to_planner(
@@ -163,7 +164,8 @@ class TestFlexibleDelegationPatterns:
             # Test delegation for simple task
             simple_result = await architect.delegate_to_executor("Implement a simple login form")
             assert simple_result.success is True
-            assert "delegated directly to executor" in simple_result.data
+            # The method now returns the executor's result directly
+            assert simple_result.data == "Test response"
 
             # Test delegation for complex task
             complex_result = await architect.delegate_to_executor("Design a complex distributed system")
@@ -272,7 +274,8 @@ class TestFlexibleDelegationPatterns:
 
             # Verify the result
             assert result.success is True
-            assert "delegated directly to executor" in result.data
+            # The method now returns the executor's result directly
+            assert result.data == "Test response"
 
         # Test delegation from architect to planner
         # First, we need to register the planner as a child of the architect
