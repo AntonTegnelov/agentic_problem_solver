@@ -142,10 +142,10 @@
     - [x] Create a new method `follow_delegation_chain` in `AgentCoordinator` class to track delegation
     - [x] Implement a `get_final_result` method to retrieve completed task results from executor agents
     - [x] Add utilities to collect and format solution output from task execution results
-  - [ ] Update delegation methods in hierarchical agents
+  - [x] Update delegation methods in hierarchical agents
     - [x] Modify `delegate_to_executor` in `src/agent/agent_types/architect.py` to return execution results
-    - [ ] Enhance the `process` method in `src/agent/agent_types/executor.py` to include solution output
-    - [ ] Add a new method in `src/agent/agent_types/executor.py` to retrieve completed task solutions
+    - [x] Enhance the `process` method in `src/agent/agent_types/executor.py` to include solution output. NOTE: might be done?
+    - [x] Add a new method in `src/agent/agent_types/executor.py` to retrieve completed task solutions
   - [ ] Create tests in `tests/unit/test_solution_output.py`
     - [ ] Test the solution retrieval flow from CLI to executor agents
     - [ ] Verify proper handling of different solution formats

@@ -152,43 +152,54 @@ class ExecutorAgent:
         return any(keyword in task.lower() for keyword in low_level_keywords)
 
     async def process(self, message: Message) -> Result[str]:
-        """Process a message.
+        """Process a message and return a result.
+
+        This method validates the provider, prepares messages, and handles various exceptions.
+        It returns a structured result that includes the solution content.
 
         Args:
-            message: Message to process.
+            message: The message to process.
 
         Returns:
-            Result of processing.
+            Result containing the processed result or an error.
 
         """
         try:
-            self._validate_provider()
-            messages = self._prepare_messages([message])
+            # Validate provider
+            if not self._provider:
+                return Result.failure("No provider available for processing")
 
-            # Check if the provider's generate method is a coroutine function (async)
+            # Prepare messages
+            messages = self._prepare_messages(message)
+
+            # Check if generate is a coroutine
             if inspect.iscoroutinefunction(self._provider.generate):
-                # If it's async, await it
                 response = await self._provider.generate(messages)
             else:
-                # If it's not async, call it directly
                 response = self._provider.generate(messages)
 
-            response_str = str(response)  # Convert response to string regardless of type
-            return Result(success=True, data=response_str, error=None)
-        except (ConnectionError, TimeoutError) as e:
-            return Result(success=False, error=f"Connection error: {e!s}", data=None)
+            # Extract solution content and format the result
+            solution_content = response.content if hasattr(response, "content") else str(response)
+
+            # Create a structured result with solution content
+            result = {
+                "content": solution_content,
+                "solution": solution_content,  # Add explicit solution field
+                "timestamp": time.time(),
+            }
+
+            # Convert to JSON string for consistent return format
+            return Result.success(json.dumps(result))
+
+        except ConnectionError as e:
+            return Result.failure(f"Connection error: {e!s}")
+        except TimeoutError as e:
+            return Result.failure(f"Timeout error: {e!s}")
         except json.JSONDecodeError as e:
-            return Result(success=False, error=f"Invalid JSON response: {e!s}", data=None)
-        except (ValueError, KeyError, AttributeError, TypeError) as e:
-            # Handle specific exceptions that might occur during processing
-            return Result(success=False, error=f"Processing error: {e!s}", data=None)
-        except (RuntimeError, OSError) as e:
-            # Handle runtime and OS errors
-            return Result(success=False, error=f"Runtime error: {e!s}", data=None)
+            return Result.failure(f"JSON decode error: {e!s}")
         except Exception as e:
-            # Log unexpected errors but still return a structured result
-            logging.exception("Unexpected error in executor process")
-            return Result(success=False, error=f"Unexpected error: {e!s}", data=None)
+            self._logger.exception("Unexpected error in process")
+            return Result.failure(f"Processing error: {e!s}")
 
     async def process_stream(self, message: Message) -> AsyncGenerator[str, None]:
         """Process message with streaming.
@@ -294,6 +305,15 @@ class ExecutorAgent:
     def clear_parent(self) -> None:
         """Clear parent agent reference."""
         self._parent_id = None
+
+    def get_state(self) -> AgentState:
+        """Get the agent's state.
+
+        Returns:
+            The agent's state.
+
+        """
+        return self.state
 
     async def delegate_to_child(self, child_agent_id: str, task: str) -> Result[Any]:
         """Delegate task to child agent.
@@ -1624,14 +1644,34 @@ class ExecutorAgent:
 
         Args:
             task: The task to update.
-            result: The result to set.
+            result: The result to set, expected to be a JSON string with solution content.
 
         Returns:
             The updated task.
 
         """
-        # Update task with result
-        task.result = result
+        try:
+            # Try to parse the result as JSON
+            result_data = json.loads(result)
+
+            # Extract the solution content
+            if isinstance(result_data, dict) and "solution" in result_data:
+                # Store the full result data in execution_metadata for reference
+                if "execution_results" not in task.execution_metadata:
+                    task.execution_metadata["execution_results"] = []
+
+                # Add this result to the execution results history
+                task.execution_metadata["execution_results"].append(result_data)
+
+                # Set the task result to the solution content
+                task.result = result_data["solution"]
+            else:
+                # If the result doesn't have the expected structure, use it as is
+                task.result = result
+        except (json.JSONDecodeError, TypeError, KeyError):
+            # If parsing fails, use the raw result string
+            self._debug_log(f"Failed to parse result as JSON, using raw string: {result[:100]}...")
+            task.result = result
 
         # Progress to the next execution stage
         task = self._advance_execution_stage(task)
@@ -2252,3 +2292,118 @@ class ExecutorAgent:
 
         """
         return self._evaluate_completion_criteria(task)
+
+    def get_task_solution(self, task_id: str) -> Result[str]:
+        """Retrieve the solution from a completed task.
+
+        This method finds a task by ID and returns its solution if the task is completed.
+
+        Args:
+            task_id: The ID of the task to retrieve the solution for.
+
+        Returns:
+            Result containing the solution or an error.
+
+        """
+        # Get the agent state
+        state = self.get_state()
+        if not state:
+            return Result.failure("Agent has no state")
+
+        # Get tasks from state
+        tasks = state.get_tasks()
+
+        # Find the task with the given ID
+        task = next((t for t in tasks if t.task_id == task_id), None)
+
+        if not task:
+            return Result.failure(f"Task with ID {task_id} not found")
+
+        if task.status != TaskStatus.COMPLETED:
+            return Result.failure(f"Task with ID {task_id} is not completed")
+
+        if not task.result:
+            return Result.failure(f"Task with ID {task_id} has no result")
+
+        # Create a solution object
+        solution_data = {
+            "solution": task.result,
+            "task_id": task.task_id,
+            "completed_at": task.completed_at,
+        }
+
+        return Result.success(json.dumps(solution_data))
+
+    def get_latest_solution(self) -> Result[str]:
+        """Retrieve the solution from the most recently completed task.
+
+        This method finds the most recently completed task and returns its solution.
+
+        Returns:
+            Result containing the solution or an error.
+
+        """
+        # Get the agent state
+        state = self.get_state()
+        if not state:
+            return Result.failure("Agent has no state")
+
+        # Get tasks from state
+        tasks = state.get_tasks()
+
+        # Filter completed tasks
+        completed_tasks = [t for t in tasks if t.status == TaskStatus.COMPLETED and t.result]
+
+        if not completed_tasks:
+            return Result.failure("No completed tasks found")
+
+        # Find the most recently completed task
+        latest_task = max(completed_tasks, key=lambda t: t.completed_at or 0)
+
+        # Create a solution object
+        solution_data = {
+            "solution": latest_task.result,
+            "task_id": latest_task.task_id,
+            "completed_at": latest_task.completed_at,
+        }
+
+        return Result.success(json.dumps(solution_data))
+
+    def get_all_completed_solutions(self) -> Result[str]:
+        """Retrieve solutions from all completed tasks.
+
+        This method finds all completed tasks and returns their solutions.
+
+        Returns:
+            Result containing a list of solutions or an error.
+
+        """
+        # Get the agent state
+        state = self.get_state()
+        if not state:
+            return Result.failure("Agent has no state")
+
+        # Get tasks from state
+        tasks = state.get_tasks()
+
+        # Filter completed tasks
+        completed_tasks = [t for t in tasks if t.status == TaskStatus.COMPLETED and t.result]
+
+        if not completed_tasks:
+            return Result.failure("No completed tasks found")
+
+        # Create solution objects for each completed task
+        solutions = []
+        for task in completed_tasks:
+            solution_data = {
+                "solution": task.result,
+                "task_id": task.task_id,
+                "completed_at": task.completed_at,
+                "description": task.description,
+            }
+            solutions.append(solution_data)
+
+        # Sort solutions by completion time (most recent first)
+        solutions.sort(key=lambda s: s["completed_at"] or 0, reverse=True)
+
+        return Result.success(json.dumps({"solutions": solutions}))
