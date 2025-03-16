@@ -125,12 +125,12 @@
   - [x] Add reporting capabilities in `src/messages/schemas/execution.py`
     - [x] Create progress report messages
     - [x] Add completion report
-  - [ ] Implement success criteria in `src/utils/validation.py`
-    - [ ] Add code quality checks
-    - [ ] Implement requirements validation
-  - [ ] Create unit tests in `tests/unit/test_executor_self_prompting.py`
-  - [ ] Create integration tests in `tests/integration/test_task_execution.py`
-  - [ ] Update documentation in `docs/howto/self_executing_tasks.md`
+  - [x] Implement success criteria in `src/utils/validation.py`
+    - [x] Add code quality checks
+    - [x] Implement requirements validation
+  - [x] Create unit tests in `tests/unit/test_executor_self_prompting.py`
+  - [x] Create integration tests in `tests/integration/test_task_execution.py`
+  - [x] Update documentation in `docs/howto/self_executing_tasks.md`
 
 - setup a system for the agents to use tools with Model Context Protocol (MCP)
   https://modelcontextprotocol.io/introduction
