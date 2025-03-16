@@ -151,6 +151,51 @@ def cli() -> None:
     setup_logging(level=logging.INFO)
 
 
+def format_error_message(error: Exception | None) -> str:
+    """Format an error message based on the error type.
+
+    Args:
+        error: The error to format.
+
+    Returns:
+        A formatted error message.
+
+    """
+    if error is None:
+        return "Unknown error occurred during processing"
+
+    if isinstance(error, AgentError):
+        return f"Agent error - {error}"
+    if "timeout" in str(error).lower() or isinstance(error, TimeoutError):
+        return f"Request timed out - {error}"
+    if "connection" in str(error).lower() or isinstance(error, ConnectionError):
+        return f"Connection error - {error}"
+
+    return str(error)
+
+
+def handle_solution_retrieval(agent: Agent[Any], result: Result[Any]) -> None:
+    """Handle solution retrieval and display.
+
+    Args:
+        agent: The agent that produced the result.
+        result: The result object containing the solution or delegation info.
+
+    Raises:
+        ValueError: If solution retrieval fails.
+
+    """
+    try:
+        # Get the final solution content instead of just the raw result data
+        solution = get_final_solution(agent, result)
+        click.echo(solution)
+    except (ValueError, KeyError, AttributeError, TypeError) as e:
+        # Handle specific errors that might occur during solution retrieval
+        error_msg = f"Error retrieving solution: {e}"
+        click.echo(error_msg, err=True)
+        sys.exit(1)
+
+
 @cli.command()
 @click.argument("task")
 @click.option(
@@ -201,20 +246,19 @@ def solve(
 
         # Extract data from the Result object
         if result.success:
-            # Get the final solution content instead of just the raw result data
-            solution = get_final_solution(agent, result)
-            click.echo(solution)
+            handle_solution_retrieval(agent, result)
         else:
-            click.echo(f"Error: {result.error}", err=True)
+            # Provide more detailed error information
+            error_msg = f"Error: {format_error_message(result.error)}"
+            click.echo(error_msg, err=True)
             sys.exit(1)
-
-    except AgentError as e:
-        logger.exception("Agent error")
+    except (ValueError, KeyError, AttributeError, TypeError, AgentError) as e:
+        # Catch specific errors
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
-    except Exception:
-        logger.exception(TASK_ERROR)
-        click.echo("An unexpected error occurred. Check logs for details.", err=True)
+    except (ConnectionError, TimeoutError) as e:
+        # Handle network-related errors
+        click.echo(f"Network error: {e}", err=True)
         sys.exit(1)
 
 
