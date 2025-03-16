@@ -122,9 +122,9 @@
   - [ ] Enhance prompts in `src/prompts/templates.py` for self-guided execution
     - [x] Create implementation prompts
     - [x] Create verification prompts
-  - [ ] Add reporting capabilities in `src/messages/schemas/execution.py`
-    - [ ] Create progress report messages
-    - [ ] Add completion report
+  - [x] Add reporting capabilities in `src/messages/schemas/execution.py`
+    - [x] Create progress report messages
+    - [x] Add completion report
   - [ ] Implement success criteria in `src/utils/validation.py`
     - [ ] Add code quality checks
     - [ ] Implement requirements validation
