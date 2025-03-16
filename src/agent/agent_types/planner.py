@@ -822,16 +822,20 @@ class PlannerAgent:
             )
         return results
 
-    def _prepare_messages(self, messages: list[Message]) -> list[Message]:
+    def _prepare_messages(self, messages: Message | list[Message]) -> list[Message]:
         """Prepare messages for processing.
 
         Args:
-            messages: Messages to prepare.
+            messages: Message or list of messages to prepare.
 
         Returns:
-            Prepared messages.
+            Prepared messages as a list.
 
         """
+        # Handle single message case by wrapping it in a list
+        if not isinstance(messages, list):
+            messages = [messages]
+
         # For now, just return the messages as is
         return messages
 

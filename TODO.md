@@ -156,10 +156,10 @@
 
 - implement task breakdown delegation to connect task breakdown with actual task execution
 
-  - [ ] Fix the gap between task breakdown and agent delegation
+  - [x] Fix the gap between task breakdown and agent delegation
     - [x] Add `delegate_breakdown_tasks` method in `src/agent/agent_types/architect.py` to process broken-down tasks
     - [x] Update the `process_normal_message` method to call this new method after task breakdown
-    - [ ] Implement retry and error handling for the delegation process
+    - [x] Implement retry and error handling for the delegation process
   - [ ] Enhance task result collection and aggregation
     - [ ] Create a `TaskResultAggregator` class in `src/agent/coordination.py` to collect and combine results
     - [ ] Add methods for tracking subtask completion status

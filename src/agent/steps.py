@@ -569,7 +569,21 @@ class TaskBreakdownStep:
         try:
             # Get the agent for this step
             logger.debug("Getting agent for task breakdown")
-            agent = state.get_agent_for_step(self.name)
+            agent = None
+            try:
+                agent = state.get_agent_for_step(self.name)
+            except AgentNotFoundError:
+                # If no agent found in state, use the agent set directly on this step
+                if self.agent is not None:
+                    agent = self.agent
+                    # Register this agent in the state for future use
+                    state.register_agent(agent.get_agent_id(), agent)
+                    logger.debug("Using agent set directly on TaskBreakdownStep")
+                else:
+                    error_msg = f"No suitable agent found for task breakdown with role {self.agent_role}"
+                    logger.exception(error_msg)
+                    return Result(success=False, error=error_msg)
+
             if not agent:
                 error_msg = f"No suitable agent found for task breakdown with role {self.agent_role}"
                 logger.error(error_msg)

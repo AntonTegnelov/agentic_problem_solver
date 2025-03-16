@@ -365,16 +365,20 @@ class ExecutorAgent:
 
         return {}
 
-    def _prepare_messages(self, messages: list[Message]) -> list[Message]:
+    def _prepare_messages(self, messages: Message | list[Message]) -> list[Message]:
         """Prepare messages for LLM.
 
         Args:
-            messages: Messages to prepare.
+            messages: Message or list of messages to prepare.
 
         Returns:
-            Prepared messages.
+            Prepared messages as a list.
 
         """
+        # Handle single message case by wrapping it in a list
+        if not isinstance(messages, list):
+            messages = [messages]
+
         # In a real implementation, this would add system prompts, format messages, etc.
         return messages
 

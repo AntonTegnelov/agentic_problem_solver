@@ -320,3 +320,148 @@ def test_main_function(mock_cli: MagicMock) -> None:
 
     # Verify that the CLI was called
     mock_cli.assert_called_once()
+
+
+@patch("src.cli.main.create_architect_agent")
+def test_cli_solve_command_with_solution_output(mock_create_architect_agent: MagicMock) -> None:
+    """Test the 'solve' command with actual solution output.
+
+    This test verifies that the CLI correctly displays only the code portion
+    of the solution output in non-verbose mode.
+    """
+    # Setup mock
+    instance = mock_create_architect_agent.return_value
+
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Delegation message"
+    mock_result.error = None
+
+    # Set up the mock process method to return the mock result
+    instance.process_sync.return_value = mock_result
+
+    # Mock the coordinator and get_final_result_sync method
+    mock_coordinator = MagicMock()
+    mock_final_result = MagicMock()
+    mock_final_result.success = True
+
+    # Create a realistic solution output with explanations and code
+    solution_content = """Here's a simple calculator in Python:
+
+```python
+def add(x, y):
+    return x + y
+
+def subtract(x, y):
+    return x - y
+```
+
+Save this as calculator.py and run it!"""
+
+    mock_final_result.data = {"result": solution_content}
+    mock_coordinator.get_final_result_sync.return_value = mock_final_result
+
+    # Set up the agent's state to have the coordinator
+    mock_state = MagicMock()
+    mock_state.coordinator = mock_coordinator
+    instance.state = mock_state
+
+    # Create a CLI runner
+    from click.testing import CliRunner
+
+    runner = CliRunner()
+
+    # Run the command
+    result = runner.invoke(cli, ["solve", "Make a simple calculator in Python"])
+
+    # Verify the command executed successfully
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
+
+    # Check that the output contains ONLY the code content
+    assert "def add(x, y):" in result.output
+    assert "def subtract(x, y):" in result.output
+
+    # Check that explanations are NOT in the output
+    assert "Here's a simple calculator" not in result.output
+    assert "Save this as calculator.py" not in result.output
+
+    # Check that code block markers are not in the output
+    assert "```python" not in result.output
+    assert "```" not in result.output
+
+    # Verify the delegation chain was properly followed
+    mock_coordinator.get_final_result_sync.assert_called_once()
+
+
+@patch("src.cli.main.create_architect_agent")
+def test_cli_solve_command_with_verbose_output(mock_create_architect_agent: MagicMock) -> None:
+    """Test the 'solve' command with verbose output.
+
+    This test verifies that the CLI correctly displays both delegation messages
+    and the full solution output when the --verbose flag is used.
+    """
+    # Setup mock
+    instance = mock_create_architect_agent.return_value
+
+    # Create a mock result for the process method
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.data = "Delegation message"
+    mock_result.error = None
+
+    # Set up the mock process method to return the mock result
+    instance.process_sync.return_value = mock_result
+
+    # Mock the coordinator and get_final_result_sync method
+    mock_coordinator = MagicMock()
+    mock_final_result = MagicMock()
+    mock_final_result.success = True
+
+    # Create a realistic solution output with explanations and code
+    solution_content = """Here's a simple calculator in Python:
+
+```python
+def add(x, y):
+    return x + y
+
+def subtract(x, y):
+    return x - y
+```
+
+Save this as calculator.py and run it!"""
+
+    mock_final_result.data = {"result": solution_content}
+    mock_coordinator.get_final_result_sync.return_value = mock_final_result
+
+    # Set up the agent's state to have the coordinator
+    mock_state = MagicMock()
+    mock_state.coordinator = mock_coordinator
+    instance.state = mock_state
+
+    # Create a CLI runner
+    from click.testing import CliRunner
+
+    runner = CliRunner()
+
+    # Run the command with verbose flag
+    result = runner.invoke(cli, ["solve", "--verbose", "Make a simple calculator in Python"])
+
+    # Verify the command executed successfully
+    assert result.exit_code == 0, f"Command failed with output: {result.output}"
+
+    # Check that the output contains the full solution content including explanations
+    assert "Here's a simple calculator" in result.output
+    assert "def add(x, y):" in result.output
+    assert "def subtract(x, y):" in result.output
+    assert "Save this as calculator.py" in result.output
+
+    # Check that code block markers are in the output
+    assert "```python" in result.output
+    assert "```" in result.output
+
+    # Check for the separator line which should only appear in verbose mode
+    assert "-" * 80 in result.output
+
+    # Verify the delegation chain was properly followed
+    mock_coordinator.get_final_result_sync.assert_called_once()

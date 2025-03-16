@@ -6,6 +6,7 @@ for high-level task decomposition and system design in the hierarchical agent sy
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -902,72 +903,161 @@ class ArchitectAgent:
 
         self._logger.info("Delegating %d broken-down tasks", len(tasks))
 
+        # Process tasks with retry logic
+        results, errors = await self._process_tasks_with_retry(tasks)
+
+        # Return appropriate result based on success/failure
+        return self._create_delegation_result(results, errors)
+
+    async def _process_tasks_with_retry(self, tasks: list[Task]) -> tuple[dict[str, str], list[str]]:
+        """Process tasks with retry logic.
+
+        Args:
+            tasks: List of tasks to process.
+
+        Returns:
+            Tuple containing results dictionary and errors list.
+
+        """
         results = {}
         errors = []
 
-        for task in tasks:
-            task_description = task.description
-            task_complexity = task.complexity or self.analyze_task_complexity(task_description)
+        # Track tasks that need to be retried
+        max_retries = 3  # Maximum number of retry attempts
+        retry_count = 0
 
-            try:
-                # For simple tasks, delegate directly to an ExecutorAgent
-                if task_complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
-                    self._logger.info("Delegating task '%s...' directly to ExecutorAgent", task_description[:50])
-                    result = await self.delegate_to_executor(task_description)
+        # Process all tasks
+        tasks_to_process = tasks.copy()
+
+        while tasks_to_process and retry_count < max_retries:
+            # If this is a retry attempt, log it
+            if retry_count > 0:
+                self._logger.info("Retry attempt %d for %d tasks", retry_count, len(tasks_to_process))
+
+            current_tasks = tasks_to_process.copy()
+            tasks_to_process = []  # Reset for next iteration
+
+            # Process current batch of tasks
+            for task in current_tasks:
+                task_result, should_retry, error = await self._delegate_single_task(task)
+
+                # Handle the result
+                if task_result is not None:
+                    results[str(task.id)] = task_result
+                elif should_retry and retry_count < max_retries - 1:
+                    tasks_to_process.append(task)
                 else:
-                    # For more complex tasks, delegate to a PlannerAgent
-                    self._logger.info("Delegating task '%s...' to PlannerAgent", task_description[:50])
-                    # Import here to avoid circular imports
-                    from src.agent.agent_types import create_planner_agent
+                    errors.append(error)
 
-                    # Create a planner agent
-                    planner_agent = create_planner_agent(
-                        provider=self._provider,
-                        parent_id=self._agent_id,
-                    )
-                    planner_id = planner_agent.get_agent_id()
+            # Increment retry counter if we have tasks to retry
+            if tasks_to_process:
+                retry_count += 1
+                # Add a small delay before retrying to allow for transient issues to resolve
+                await asyncio.sleep(1)
 
-                    # Add the planner as a child of this agent
-                    self.add_child(planner_id)
-                    planner_agent.set_parent(self._agent_id)
+        return results, errors
 
-                    # Log the delegation decision
-                    log_delegation_decision(
-                        logger=self._logger,
-                        delegation_info=DelegationInfo(
-                            source_agent_id=self._agent_id,
-                            target_agent_id=planner_id,
-                            task=task_description,
-                            reason=f"Delegation to planner due to {task_complexity.name} complexity",
-                            additional_info={"task_complexity": task_complexity.name},
-                        ),
-                    )
+    async def _delegate_single_task(self, task: Task) -> tuple[str | None, bool, str]:
+        """Delegate a single task to an appropriate agent.
 
-                    # Create a message for the planner
-                    from src.messages.creation import create_human_message
+        Args:
+            task: Task to delegate.
 
-                    message = create_human_message(content=task_description)
+        Returns:
+            Tuple containing (result data if successful, whether to retry, error message if any)
 
-                    # Send the task to the planner
-                    process_result = planner_agent.process(message)
+        """
+        task_description = task.description
+        task_complexity = task.complexity or self.analyze_task_complexity(task_description)
 
-                    # Check if the result is a coroutine that needs to be awaited
-                    if inspect.iscoroutine(process_result):
-                        result = await process_result
-                    else:
-                        result = process_result
+        try:
+            # For simple tasks, delegate directly to an ExecutorAgent
+            if task_complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+                self._logger.info("Delegating task '%s...' directly to ExecutorAgent", task_description[:50])
+                result = await self.delegate_to_executor(task_description)
+            else:
+                # For more complex tasks, delegate to a PlannerAgent
+                result = await self._delegate_to_planner(task_description, task_complexity)
+        except (ConnectionError, TimeoutError) as e:
+            # Network-related errors are good candidates for retry
+            error_msg = f"Network error delegating task '{task_description[:50]}...': {e!s}"
+            self._logger.warning(error_msg)
+            return None, True, error_msg
+        except Exception as e:
+            # For other exceptions, log and record the error
+            error_msg = f"Error delegating task '{task_description[:50]}...': {e!s}"
+            self._logger.exception(error_msg)
+            return None, False, error_msg
+        else:
+            # Handle the result
+            if result.success:
+                return result.data, False, ""
+            # Delegation failed
+            error_msg = f"Task '{task_description[:50]}...' failed: {result.error}"
+            self._logger.warning(error_msg)
+            return None, True, error_msg
 
-                # Store the result
-                if result.success:
-                    results[str(task.id)] = result.data
-                else:
-                    errors.append(f"Task '{task_description[:50]}...' failed: {result.error}")
+    async def _delegate_to_planner(self, task_description: str, task_complexity: TaskComplexity) -> Result[str]:
+        """Delegate a task to a planner agent.
 
-            except Exception as e:
-                error_msg = f"Error delegating task '{task_description[:50]}...': {e!s}"
-                self._logger.exception(error_msg)
-                errors.append(error_msg)
+        Args:
+            task_description: Description of the task.
+            task_complexity: Complexity of the task.
 
+        Returns:
+            Result of delegation.
+
+        """
+        # Import here to avoid circular imports
+        from src.agent.agent_types import create_planner_agent
+
+        # Create a planner agent
+        planner_agent = create_planner_agent(
+            provider=self._provider,
+            parent_id=self._agent_id,
+        )
+        planner_id = planner_agent.get_agent_id()
+
+        # Add the planner as a child of this agent
+        self.add_child(planner_id)
+        planner_agent.set_parent(self._agent_id)
+
+        # Log the delegation decision
+        log_delegation_decision(
+            logger=self._logger,
+            delegation_info=DelegationInfo(
+                source_agent_id=self._agent_id,
+                target_agent_id=planner_id,
+                task=task_description,
+                reason=f"Delegation to planner due to {task_complexity.name} complexity",
+                additional_info={"task_complexity": task_complexity.name},
+            ),
+        )
+
+        # Create a message for the planner
+        from src.messages.creation import create_human_message
+
+        message = create_human_message(content=task_description)
+
+        # Send the task to the planner
+        process_result = planner_agent.process(message)
+
+        # Check if the result is a coroutine that needs to be awaited
+        if inspect.iscoroutine(process_result):
+            return await process_result
+        return process_result
+
+    def _create_delegation_result(self, results: dict[str, str], errors: list[str]) -> Result[str]:
+        """Create a result object from delegation results and errors.
+
+        Args:
+            results: Dictionary mapping task IDs to result data.
+            errors: List of error messages.
+
+        Returns:
+            Result object.
+
+        """
         # If there were any errors, include them in the result
         if errors:
             if not results:  # If all tasks failed

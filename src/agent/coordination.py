@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
 from src.common_types import AgentInfo, AgentNotFoundError
@@ -20,13 +20,404 @@ if TYPE_CHECKING:
     from src.agent.state.base import AgentState
     from src.common_types.result_types import Result as StepResult
 
+# Define type variables and protocols for better type annotations
+T = TypeVar("T")
+R = TypeVar("R")
+
+
+class TaskProtocol(Protocol):
+    """Protocol for task objects."""
+
+    @property
+    def task_id(self) -> uuid.UUID:
+        """Get the task ID."""
+        ...
+
+    @property
+    def description(self) -> str:
+        """Get the task description."""
+        ...
+
+    @property
+    def status(self) -> TaskStatus:
+        """Get the task status."""
+        ...
+
+    @property
+    def result(self) -> object:
+        """Get the task result."""
+        ...
+
+    @property
+    def assigned_agent_id(self) -> str | None:
+        """Get the assigned agent ID."""
+        ...
+
+
 # Constants
 DESCRIPTION_TRUNCATION_LENGTH = 100
 MIN_CAPABILITY_MATCH_THRESHOLD = 0.3
 
 
+class TaskResultAggregator:
+    """Aggregator for task results.
+
+    This class is responsible for collecting and combining results from subtasks,
+    tracking completion status, and merging results of different types.
+    """
+
+    def __init__(self, registry: AgentRegistry) -> None:
+        """Initialize the TaskResultAggregator.
+
+        Args:
+            registry: The agent registry to use for agent lookups.
+
+        """
+        self._registry = registry
+        self._logger = get_logger(__name__)
+
+    def collect_results(
+        self,
+        parent_agent_id: str,
+        task_ids: list[str] | None = None,
+    ) -> Result:
+        """Collect results from multiple subtasks.
+
+        Args:
+            parent_agent_id: ID of the parent agent.
+            task_ids: Optional list of specific task IDs to collect results for.
+                      If not provided, all tasks for the parent agent will be used.
+
+        Returns:
+            Result containing collected data from all subtasks.
+
+        """
+        try:
+            # Get the parent agent
+            parent_agent = self._registry.get_agent(parent_agent_id)
+
+            # Get the parent agent's state
+            parent_state = parent_agent.get_state()
+            if not parent_state:
+                return Result.failure(
+                    error=ValueError("Parent agent has no state"),
+                    message="Cannot collect results without parent state",
+                )
+
+            # Get tasks to collect
+            tasks = self._get_tasks_to_collect(parent_state, task_ids)
+            if not tasks:
+                return Result.success(
+                    data={"message": "No tasks found for collection"},
+                    message="No results to collect",
+                )
+
+            # Process tasks and collect results
+            collected_results = self._process_tasks(tasks)
+
+            # Create summary
+            summary = self._create_result_summary(collected_results)
+
+            # Return collected results
+            return Result.success(
+                data={
+                    "summary": summary,
+                    "results": collected_results,
+                },
+                message="Successfully collected results from subtasks",
+            )
+
+        except AgentNotFoundError as e:
+            error_msg = f"Agent not found during result collection: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+        except (ValueError, TypeError, RuntimeError) as e:
+            error_msg = f"Error during result collection: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def _get_tasks_to_collect(
+        self,
+        parent_state: AgentState,
+        task_ids: list[str] | None,
+    ) -> list[TaskProtocol]:
+        """Get the list of tasks to collect based on filters.
+
+        Args:
+            parent_state: The parent agent's state.
+            task_ids: Optional list of specific task IDs to filter by.
+
+        Returns:
+            List of tasks to collect.
+
+        """
+        all_tasks = parent_state.get_tasks()
+
+        if not all_tasks:
+            return []
+
+        result_tasks = []
+        for task_data in all_tasks:
+            task_id_str = task_data.get("task_id")
+            if task_id_str:
+                task_id = uuid.UUID(task_id_str) if isinstance(task_id_str, str) else task_id_str
+                task = parent_state.get_task_by_id(task_id)
+                if task and (not task_ids or task_id_str in task_ids):
+                    result_tasks.append(task)
+
+        return result_tasks
+
+    def _process_tasks(self, tasks: list[TaskProtocol]) -> list[dict]:
+        """Process tasks and collect results.
+
+        Args:
+            tasks: List of tasks to process.
+
+        Returns:
+            List of processed task results.
+
+        """
+        processed_results = []
+
+        for task in tasks:
+            # Get task status and result
+            status = task.status
+            result = task.result
+
+            # Add to processed results
+            processed_results.append(
+                {
+                    "task_id": str(task.task_id),
+                    "description": task.description,
+                    "status": status.value if hasattr(status, "value") else str(status),
+                    "result": result,
+                    "assigned_agent_id": task.assigned_agent_id,
+                },
+            )
+
+        return processed_results
+
+    def _create_result_summary(self, results: list[dict]) -> dict:
+        """Create a summary of the collected results.
+
+        Args:
+            results: List of processed task results.
+
+        Returns:
+            Summary dictionary with counts and statistics.
+
+        """
+        status_counts = {}
+        total_tasks = len(results)
+
+        for result in results:
+            status = result.get("status")
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        completion_percentage = 0.0
+        if total_tasks > 0:
+            completed_count = status_counts.get(TaskStatus.COMPLETED.value, 0)
+            completion_percentage = (completed_count / total_tasks) * 100.0
+
+        return {
+            "total_tasks": total_tasks,
+            "status_counts": status_counts,
+            "completion_percentage": completion_percentage,
+        }
+
+    def merge_results(self, results: list[dict], result_type: str = "default") -> Result:
+        """Merge multiple task results into a single result.
+
+        Args:
+            results: List of task results to merge.
+            result_type: Type of result merging to perform (default, text, code, etc.).
+
+        Returns:
+            Result containing the merged data.
+
+        """
+        if not results:
+            return Result.success(
+                data=None,
+                message="No results to merge",
+            )
+
+        try:
+            if result_type == "text":
+                return self._merge_text_results(results)
+            if result_type == "code":
+                return self._merge_code_results(results)
+            return self._merge_default_results(results)
+        except Exception as e:
+            error_msg = f"Error merging results: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def _merge_default_results(self, results: list[dict]) -> Result:
+        """Merge results using the default strategy (dictionary of results).
+
+        Args:
+            results: List of task results to merge.
+
+        Returns:
+            Result containing the merged data.
+
+        """
+        merged_data = {}
+
+        for result in results:
+            task_id = result.get("task_id")
+            if task_id:
+                merged_data[task_id] = {
+                    "description": result.get("description"),
+                    "status": result.get("status"),
+                    "result": result.get("result"),
+                }
+
+        return Result.success(
+            data=merged_data,
+            message="Successfully merged results using default strategy",
+        )
+
+    def _merge_text_results(self, results: list[dict]) -> Result:
+        """Merge text-based results into a single text.
+
+        Args:
+            results: List of task results to merge.
+
+        Returns:
+            Result containing the merged text.
+
+        """
+        text_parts = []
+
+        # Sort results by task_id to ensure consistent ordering
+        sorted_results = sorted(results, key=lambda r: r.get("task_id", ""))
+
+        for result in sorted_results:
+            result_data = result.get("result")
+            if isinstance(result_data, str):
+                text_parts.append(result_data)
+            elif isinstance(result_data, dict) and "text" in result_data:
+                text_parts.append(result_data["text"])
+
+        merged_text = "\n\n".join(text_parts)
+
+        return Result.success(
+            data=merged_text,
+            message="Successfully merged text results",
+        )
+
+    def _merge_code_results(self, results: list[dict]) -> Result:
+        """Merge code-based results into a structured code output.
+
+        Args:
+            results: List of task results to merge.
+
+        Returns:
+            Result containing the merged code.
+
+        """
+        code_sections = {}
+
+        for result in results:
+            result_data = result.get("result")
+            if isinstance(result_data, dict) and "code" in result_data:
+                file_path = result_data.get("file_path", "unknown")
+                code_content = result_data["code"]
+                code_sections[file_path] = code_content
+
+        return Result.success(
+            data={"code_sections": code_sections},
+            message="Successfully merged code results",
+        )
+
+    def track_completion_status(self, parent_agent_id: str, task_ids: list[str] | None = None) -> Result:
+        """Track the completion status of subtasks.
+
+        Args:
+            parent_agent_id: ID of the parent agent.
+            task_ids: Optional list of specific task IDs to track.
+                      If not provided, all tasks for the parent agent will be tracked.
+
+        Returns:
+            Result containing the completion status information.
+
+        """
+        try:
+            # Collect results first
+            collection_result = self.collect_results(parent_agent_id, task_ids)
+            if not collection_result.success:
+                return collection_result
+
+            collection_data = collection_result.data
+            if not collection_data:
+                return Result.success(
+                    data={"message": "No tasks found for tracking"},
+                    message="No completion status to track",
+                )
+
+            results = collection_data.get("results", [])
+            summary = collection_data.get("summary", {})
+
+            # Calculate additional tracking metrics
+            tracking_info = self._calculate_tracking_metrics(results, summary)
+
+            return Result.success(
+                data=tracking_info,
+                message="Successfully tracked completion status",
+            )
+
+        except Exception as e:
+            error_msg = f"Error tracking completion status: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def _calculate_tracking_metrics(self, results: list[dict], summary: dict) -> dict:
+        """Calculate additional tracking metrics for tasks.
+
+        Args:
+            results: List of processed task results.
+            summary: Summary information from result collection.
+
+        Returns:
+            Dictionary with tracking metrics.
+
+        """
+        # Extract status counts from summary
+        status_counts = summary.get("status_counts", {})
+
+        # Calculate completion percentage
+        total_tasks = summary.get("total_tasks", 0)
+        completed_count = status_counts.get(TaskStatus.COMPLETED.value, 0)
+        failed_count = status_counts.get(TaskStatus.FAILED.value, 0)
+        in_progress_count = status_counts.get(TaskStatus.IN_PROGRESS.value, 0)
+        pending_count = status_counts.get(TaskStatus.PENDING.value, 0)
+        blocked_count = status_counts.get(TaskStatus.BLOCKED.value, 0)
+
+        completion_percentage = 0.0
+        if total_tasks > 0:
+            completion_percentage = (completed_count / total_tasks) * 100.0
+
+        # Identify blocked tasks
+        blocked_tasks = [result for result in results if result.get("status") == TaskStatus.BLOCKED.value]
+
+        return {
+            "total_tasks": total_tasks,
+            "completed_count": completed_count,
+            "failed_count": failed_count,
+            "in_progress_count": in_progress_count,
+            "pending_count": pending_count,
+            "blocked_count": blocked_count,
+            "completion_percentage": completion_percentage,
+            "is_complete": completed_count + failed_count == total_tasks,
+            "is_successful": completed_count == total_tasks,
+            "blocked_tasks": blocked_tasks,
+        }
+
+
 class InMemoryAgentRegistry(AgentRegistry):
-    """Agent registry for managing agents."""
+    """In-memory implementation of the AgentRegistry protocol."""
 
     def __init__(self) -> None:
         """Initialize agent registry."""
@@ -2207,6 +2598,461 @@ class AgentCoordinator:
         if complexity_score <= complex_complexity_threshold:
             return TaskComplexity.COMPLEX
         return TaskComplexity.VERY_COMPLEX
+
+    async def follow_delegation_chain(self, agent_id: str, task_id: str | None = None) -> Result:
+        """Follow the delegation chain from a source agent to the final executor.
+
+        This method tracks the delegation path from a source agent to the final executor
+        that completes the task. It returns information about the delegation path and
+        the final result.
+
+        Args:
+            agent_id: ID of the source agent.
+            task_id: Optional ID of a specific task to follow. If not provided,
+                     the most recent task for the agent will be used.
+
+        Returns:
+            Result containing information about the delegation chain and final result.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+            ValueError: If task not found or delegation chain cannot be followed.
+
+        """
+        try:
+            # Get the source agent and task
+            source_agent_result = self._get_source_agent_and_task(agent_id, task_id)
+            if not source_agent_result.success:
+                return source_agent_result
+
+            task = source_agent_result.data
+
+            # Initialize delegation chain tracking
+            delegation_chain = []
+            current_agent_id = agent_id
+            current_task_id = str(task.task_id) if hasattr(task, "task_id") else task_id
+            final_result = None
+
+            # Track the delegation chain
+            chain_result = await self._track_delegation_chain(
+                current_agent_id,
+                current_task_id,
+                task,
+                delegation_chain,
+            )
+
+            if chain_result.success and chain_result.data:
+                final_result = chain_result.data
+
+            # Return the delegation chain and final result
+            return Result.success(
+                data={
+                    "delegation_chain": delegation_chain,
+                    "final_result": final_result,
+                    "source_agent_id": agent_id,
+                    "final_agent_id": delegation_chain[-1]["agent_id"] if delegation_chain else None,
+                },
+                message="Successfully followed delegation chain",
+            )
+
+        except AgentNotFoundError as e:
+            error_msg = f"Agent not found: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+        except (ValueError, TypeError, RuntimeError) as e:
+            error_msg = f"Error following delegation chain: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def _get_source_agent_and_task(self, agent_id: str, task_id: str | None = None) -> Result:
+        """Get the source agent and task for delegation chain tracking.
+
+        Args:
+            agent_id: ID of the source agent.
+            task_id: Optional ID of a specific task to follow.
+
+        Returns:
+            Result containing the task object.
+
+        """
+        # Get the source agent
+        source_agent = self._registry.get_agent(agent_id)
+        source_state = source_agent.get_state()
+
+        if not source_state:
+            return Result.failure("Agent has no state")
+
+        # Get the task to follow
+        task = None
+        if task_id:
+            # Find the specific task by ID
+            task = source_state.get_task_by_id(uuid.UUID(task_id) if isinstance(task_id, str) else task_id)
+        else:
+            # Get the most recent task
+            tasks = source_state.get_tasks()
+            if tasks:
+                # Sort tasks by creation time (newest first) if available
+                if hasattr(tasks[0], "created_at") and all(hasattr(t, "created_at") for t in tasks):
+                    tasks = sorted(tasks, key=lambda t: t.created_at, reverse=True)
+                task = tasks[0]
+
+        if not task:
+            return Result.failure("No task found to follow delegation chain")
+
+        return Result.success(data=task)
+
+    async def _track_delegation_chain(
+        self,
+        start_agent_id: str,
+        start_task_id: str | None,
+        original_task: TaskProtocol,
+        delegation_chain: list[dict[str, str | None]],
+    ) -> Result:
+        """Track the delegation chain from a starting agent to the final executor.
+
+        Args:
+            start_agent_id: ID of the starting agent.
+            start_task_id: ID of the starting task.
+            original_task: The original task object.
+            delegation_chain: List to populate with delegation chain information.
+
+        Returns:
+            Result containing the final result if found.
+
+        """
+        current_agent_id = start_agent_id
+        current_task_id = start_task_id
+        final_result = None
+
+        # Track the delegation chain
+        max_chain_length = 10  # Prevent infinite loops
+        for _ in range(max_chain_length):
+            # Get current agent info
+            try:
+                # Get agent and task information
+                agent_task_result = self._get_agent_and_task(current_agent_id, current_task_id, original_task)
+
+                if not agent_task_result.success:
+                    break
+
+                current_agent, current_task = agent_task_result.data
+
+                # Add to delegation chain
+                self._add_to_delegation_chain(current_agent_id, current_task, delegation_chain)
+
+                # Check if this is the final executor
+                if self._is_final_executor(current_agent_id, current_task):
+                    # This is the final executor, get the result
+                    if hasattr(current_task, "result") and current_task.result:
+                        final_result = current_task.result
+                    break
+
+                # Follow the delegation to the next agent
+                next_agent_id = current_task.assigned_agent_id
+                if not next_agent_id or next_agent_id == current_agent_id:
+                    break
+
+                current_agent_id = next_agent_id
+
+            except (AgentNotFoundError, AttributeError, ValueError) as e:
+                self._logger.warning(
+                    "Error following delegation chain: %s",
+                    str(e),
+                    extra={
+                        "agent_id": current_agent_id,
+                        "task_id": current_task_id,
+                    },
+                )
+                break
+
+        return Result.success(data=final_result)
+
+    def _get_agent_and_task(self, agent_id: str, task_id: str | None, original_task: TaskProtocol) -> Result:
+        """Get the agent and task for a step in the delegation chain.
+
+        Args:
+            agent_id: ID of the agent.
+            task_id: ID of the task.
+            original_task: The original task object for description matching.
+
+        Returns:
+            Result containing the agent and task objects.
+
+        """
+        current_agent = self._registry.get_agent(agent_id)
+        current_state = current_agent.get_state()
+
+        if not current_state:
+            return Result.failure("Agent has no state")
+
+        # Get current task
+        current_task = current_state.get_task_by_id(uuid.UUID(task_id) if isinstance(task_id, str) else task_id)
+
+        if not current_task:
+            # Try to find task by description match if ID doesn't work
+            tasks = current_state.get_tasks()
+            if original_task and hasattr(original_task, "description") and tasks:
+                matching_tasks = [
+                    t for t in tasks if hasattr(t, "description") and t.description == original_task.description
+                ]
+                if matching_tasks:
+                    current_task = matching_tasks[0]
+
+        if not current_task:
+            return Result.failure("Task not found")
+
+        return Result.success(data=(current_agent, current_task))
+
+    def _add_to_delegation_chain(
+        self,
+        agent_id: str,
+        task: TaskProtocol,
+        delegation_chain: list[dict[str, str | None]],
+    ) -> None:
+        """Add an entry to the delegation chain.
+
+        Args:
+            agent_id: ID of the agent.
+            task: The task object.
+            delegation_chain: List to append the entry to.
+
+        """
+        agent_info = self._registry.get_agent_info(agent_id)
+        agent_role = getattr(agent_info, "role", "unknown")
+
+        delegation_chain.append(
+            {
+                "agent_id": agent_id,
+                "agent_role": agent_role,
+                "task_id": str(task.task_id) if hasattr(task, "task_id") else None,
+                "task_description": task.description if hasattr(task, "description") else "Unknown task",
+                "task_status": task.status.value
+                if hasattr(task, "status") and hasattr(task.status, "value")
+                else "unknown",
+            },
+        )
+
+    def _is_final_executor(self, agent_id: str, task: TaskProtocol) -> bool:
+        """Check if the agent is the final executor for the task.
+
+        Args:
+            agent_id: ID of the agent.
+            task: The task object.
+
+        Returns:
+            True if the agent is the final executor, False otherwise.
+
+        """
+        agent_info = self._registry.get_agent_info(agent_id)
+        agent_role = getattr(agent_info, "role", "unknown")
+
+        return (
+            agent_role == "EXECUTOR"
+            or not hasattr(task, "assigned_agent_id")
+            or not task.assigned_agent_id
+            or task.assigned_agent_id == agent_id
+        )
+
+    def _format_solution_output(self, result: dict[str, object] | str | object) -> str:
+        """Format the solution output for better readability.
+
+        Args:
+            result: The raw result from the executor agent.
+
+        Returns:
+            Formatted result as a string.
+
+        """
+        # Handle different result types
+        if isinstance(result, str):
+            return result
+
+        # If result is a dictionary, check for common result fields
+        if isinstance(result, dict):
+            # Check for common result fields in order of priority
+            for key in ["solution", "answer", "output", "content", "result"]:
+                if key in result:
+                    return str(result[key])
+
+            # If no common fields found, return the whole dictionary as a string
+            return str(result)
+
+        # For other types, return as string if possible, otherwise as is
+        try:
+            return str(result)
+        except (ValueError, TypeError):
+            return str(repr(result))
+
+    async def get_final_result(self, agent_id: str, task_id: str | None = None) -> Result:
+        """Retrieve the final result from the executor agent that completed a task.
+
+        This method follows the delegation chain to find the executor agent that
+        completed the task and extracts the final result.
+
+        Args:
+            agent_id: ID of the source agent.
+            task_id: Optional ID of a specific task to follow. If not provided,
+                     the most recent task for the agent will be used.
+
+        Returns:
+            Result containing the final result from the executor agent.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+            ValueError: If task not found or result cannot be retrieved.
+
+        """
+        # Follow the delegation chain to find the executor agent
+        chain_result = await self.follow_delegation_chain(agent_id, task_id)
+
+        if not chain_result.success:
+            return chain_result
+
+        # Extract the final result from the chain result
+        chain_data = chain_result.data
+        final_result = chain_data.get("final_result")
+
+        if not final_result:
+            # If no final result was found, check if we have a final agent to query directly
+            final_agent_id = chain_data.get("final_agent_id")
+            if not final_agent_id:
+                return Result.failure("No final agent found in delegation chain")
+
+            # Try to get the result directly from the final agent
+            try:
+                final_agent = self._registry.get_agent(final_agent_id)
+                final_state = final_agent.get_state()
+
+                if not final_state:
+                    return Result.failure("Final agent has no state")
+
+                # Get the most recent completed task
+                tasks = final_state.get_tasks()
+                completed_tasks = [
+                    t
+                    for t in tasks
+                    if hasattr(t, "status")
+                    and (t.status.value == "COMPLETED" if hasattr(t.status, "value") else t.status == "COMPLETED")
+                ]
+
+                if completed_tasks:
+                    # Sort by completion time if available
+                    if hasattr(completed_tasks[0], "completed_at") and all(
+                        hasattr(t, "completed_at") for t in completed_tasks
+                    ):
+                        completed_tasks = sorted(completed_tasks, key=lambda t: t.completed_at, reverse=True)
+
+                    # Get the result from the most recent completed task
+                    if hasattr(completed_tasks[0], "result") and completed_tasks[0].result:
+                        final_result = completed_tasks[0].result
+
+            except (AgentNotFoundError, AttributeError, ValueError) as e:
+                return Result.failure(f"Error retrieving result from final agent: {e!s}")
+
+        if not final_result:
+            return Result.failure("No result found in delegation chain")
+
+        # Format the final result
+        formatted_result = self._format_solution_output(final_result)
+
+        return Result.success(
+            data={
+                "result": formatted_result,
+                "source_agent_id": agent_id,
+                "final_agent_id": chain_data.get("final_agent_id"),
+            },
+            message="Successfully retrieved final result",
+        )
+
+    def get_final_result_sync(self, agent_id: str, task_id: str | None = None) -> Result:
+        """Run the get_final_result method synchronously.
+
+        This method is a wrapper around the async get_final_result method that runs it in an event loop.
+
+        Args:
+            agent_id: ID of the source agent.
+            task_id: Optional ID of a specific task to follow. If not provided,
+                     the most recent task for the agent will be used.
+
+        Returns:
+            Result containing the final result from the executor agent.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+            ValueError: If task not found or result cannot be retrieved.
+
+        """
+        import asyncio
+
+        # Create a new event loop if needed
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            # No event loop exists, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Run the async method in the event loop
+        try:
+            if loop.is_running():
+                # If the loop is already running, use run_coroutine_threadsafe
+                future = asyncio.run_coroutine_threadsafe(self.get_final_result(agent_id, task_id), loop)
+                return future.result(timeout=30)  # 30 second timeout
+            # Otherwise, use run_until_complete
+            return loop.run_until_complete(self.get_final_result(agent_id, task_id))
+        except Exception as e:
+            # If there's an error, return a failure result
+            error_msg = f"Error retrieving final result: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def follow_delegation_chain_sync(self, agent_id: str, task_id: str | None = None) -> Result:
+        """Run the follow_delegation_chain method synchronously.
+
+        This method is a wrapper around the async follow_delegation_chain method that runs it in an event loop.
+
+        Args:
+            agent_id: ID of the source agent.
+            task_id: Optional ID of a specific task to follow. If not provided,
+                     the most recent task for the agent will be used.
+
+        Returns:
+            Result containing information about the delegation chain and final result.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+            ValueError: If task not found or delegation chain cannot be followed.
+
+        """
+        import asyncio
+
+        # Create a new event loop if needed
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            # No event loop exists, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Run the async method in the event loop
+        try:
+            if loop.is_running():
+                # If the loop is already running, use run_coroutine_threadsafe
+                future = asyncio.run_coroutine_threadsafe(self.follow_delegation_chain(agent_id, task_id), loop)
+                return future.result(timeout=30)  # 30 second timeout
+            # Otherwise, use run_until_complete
+            return loop.run_until_complete(self.follow_delegation_chain(agent_id, task_id))
+        except Exception as e:
+            # If there's an error, return a failure result
+            error_msg = f"Error following delegation chain: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
 
 
 class AgentFactory:

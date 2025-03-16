@@ -1,24 +1,24 @@
 """Command line interface for the problem solver."""
 
+import json
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
 import click
 
-# Import hierarchical agent system
-from src.agent.agent_types import Agent, create_architect_agent
+from src.agent.agent_types import create_architect_agent
+from src.agent.agent_types.agent_types import Agent
 from src.agent.state.base import InMemoryStateManager, StateManager
 from src.common_types.error_types import AgentError, ConfigError
 from src.common_types.result_types import Result
 from src.config.agent import AgentConfig
-from src.config.constants import (
-    DEFAULT_MODEL,
-    DEFAULT_TEMPERATURE,
-)
+from src.config.constants import DEFAULT_MODEL, DEFAULT_TEMPERATURE
 from src.config.utils import load_env_var
-from src.llm_providers.providers.gemini import GeminiConfig, GeminiProvider
+from src.llm_providers.config.provider_config import GeminiConfig
+from src.llm_providers.providers.gemini import GeminiProvider
 from src.messages.creation import create_message
 from src.utils.log_utils import setup_logging
 
@@ -57,59 +57,69 @@ class TaskError(RuntimeError):
         super().__init__(message)
 
 
+@dataclass
+class ModelConfig:
+    """Configuration for model generation."""
+
+    model: str = DEFAULT_MODEL
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = DEFAULT_MAX_TOKENS
+
+
 def setup_agent(
-    model: str = DEFAULT_MODEL,
+    model_config: ModelConfig | str | None = None,
     temperature: float = DEFAULT_TEMPERATURE,
     max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> tuple[Agent[Any], object, StateManager]:
-    """Set up the agent with the given parameters.
+    """Set up an agent with the given model and parameters.
 
     Args:
-        model: Model to use for generation.
-        temperature: Temperature for generation.
-        max_tokens: Maximum tokens to generate.
+        model_config: Configuration for the model or model name string.
+        temperature: Temperature for generation (used only if model_config is a string or None).
+        max_tokens: Maximum tokens to generate (used only if model_config is a string or None).
 
     Returns:
-        A tuple of (agent, provider, state_manager).
+        A tuple containing the agent, provider, and state manager.
 
     Raises:
-        ValueError: If API key is not found or other configuration errors.
+        ValueError: If the provider cannot be created.
 
     """
+    # Handle backward compatibility with old function signature
+    if isinstance(model_config, str):
+        model_config = ModelConfig(model=model_config, temperature=temperature, max_tokens=max_tokens)
+    elif model_config is None:
+        model_config = ModelConfig(temperature=temperature, max_tokens=max_tokens)
+
+    # Create the provider
     try:
-        # Create provider
-        api_key = load_env_var("GEMINI_API_KEY")
-
-        # Only use the environment variable if no model is explicitly provided
-        if model == DEFAULT_MODEL:
-            env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
-            model = env_model
-
-        provider_config = GeminiConfig(api_key=api_key, model=model)
-        provider = GeminiProvider(config=provider_config)
-
-        # Create state manager
-        state_manager = InMemoryStateManager()
-
-        # Create configuration
-        config = AgentConfig(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
+        provider = create_provider(
+            model=model_config.model,
+            temperature=model_config.temperature,
+            max_tokens=model_config.max_tokens,
         )
-
-        # Create architect agent
-        agent = create_architect_agent(
-            provider=provider,
-            state_manager=state_manager,
-            config=config,
-        )
-    except ConfigError as e:
-        # Convert ConfigError to ValueError with a descriptive message
-        msg = f"Configuration error: {e}"
+    except ValueError as e:
+        msg = f"Failed to create provider: {e}"
         raise ValueError(msg) from e
-    else:
-        return agent, provider, state_manager
+
+    # Get the state manager
+    state_manager = get_state_manager()
+
+    # Create agent configuration
+    config = AgentConfig(
+        model=model_config.model,
+        temperature=model_config.temperature,
+        max_tokens=model_config.max_tokens,
+    )
+
+    # Create the agent
+    agent = create_architect_agent(
+        provider=provider,
+        state_manager=state_manager,
+        config=config,
+    )
+
+    return agent, provider, state_manager
 
 
 def _get_coordinator_from_agent(agent: Agent[Any]) -> CoordinatorType | None:
@@ -264,12 +274,13 @@ def format_error_message(error: Exception | None) -> str:
     return str(error)
 
 
-def handle_solution_retrieval(agent: Agent[Any], result: Result[Any]) -> None:
+def handle_solution_retrieval(agent: Agent[Any], result: Result[Any], *, verbose: bool = False) -> None:
     """Handle solution retrieval and display.
 
     Args:
         agent: The agent that produced the result.
         result: The result object containing the solution or delegation info.
+        verbose: Whether to show verbose output including delegation messages.
 
     Raises:
         ValueError: If solution retrieval fails.
@@ -278,12 +289,193 @@ def handle_solution_retrieval(agent: Agent[Any], result: Result[Any]) -> None:
     try:
         # Get the final solution content instead of just the raw result data
         solution = get_final_solution(agent, result)
-        click.echo(solution)
+
+        # If solution is a JSON string, parse it to extract the actual solution content
+        if solution.startswith("{") and "solution" in solution:
+            try:
+                parsed = json.loads(solution)
+                if isinstance(parsed, dict) and "solution" in parsed:
+                    solution = parsed["solution"]
+            except json.JSONDecodeError:
+                pass
+
+        if verbose:
+            # In verbose mode, add a separator between delegation messages and the solution
+            click.echo("\n" + "-" * 80 + "\n")
+            # Display the full solution
+            click.echo(solution)
+        else:
+            # Special handling for HTML-like tags
+            if "<code>" in solution and "</code>" in solution:
+                code_only = solution.replace("<code>", "").replace("</code>", "").strip()
+            else:
+                # In non-verbose mode, extract only the code without explanations
+                code_only = extract_code_only(solution)
+            click.echo(code_only)
     except (ValueError, KeyError, AttributeError, TypeError) as e:
         # Handle specific errors that might occur during solution retrieval
         error_msg = f"Error retrieving solution: {e}"
         click.echo(error_msg, err=True)
         sys.exit(1)
+
+
+def extract_code_only(solution: str) -> str:
+    """Extract only the code from a solution, removing explanations and instructions.
+
+    Args:
+        solution: The full solution text.
+
+    Returns:
+        The code-only portion of the solution.
+
+    """
+    # Check if the solution contains a code block with triple backticks
+    import re
+
+    # Try to find Python code blocks with triple backticks
+    code_blocks = re.findall(r"```(?:python)?\n(.*?)```", solution, re.DOTALL)
+
+    if code_blocks:
+        # Return the first code block found
+        return code_blocks[0].strip()
+
+    # If no code blocks with backticks, try to find indented code blocks
+    lines = solution.split("\n")
+    code_lines = []
+    in_code = False
+
+    for line in lines:
+        # Skip lines that are likely explanations or instructions
+        if any(
+            keyword in line.lower()
+            for keyword in [
+                "key improvements",
+                "how to run",
+                "explanation",
+                "improvements",
+                "features",
+                "functionality",
+                "save the code",
+                "run the code",
+            ]
+        ):
+            continue
+
+        # If line starts with code-like patterns, include it
+        if (
+            line.strip().startswith("def ")
+            or line.strip().startswith("class ")
+            or line.strip().startswith("import ")
+            or line.strip().startswith("from ")
+            or line.strip().startswith("if ")
+            or line.strip().startswith("while ")
+            or line.strip().startswith("for ")
+            or line.strip().startswith("print(")
+            or line.strip().startswith("return ")
+            or line.strip().startswith("#")
+            or "=" in line
+            or in_code
+        ):
+            code_lines.append(line)
+            in_code = True
+
+    if code_lines:
+        # Join the code lines and ensure no trailing newline
+        code = "\n".join(code_lines)
+        # Remove any trailing newlines to match expected test output
+        return code.rstrip()
+
+    # If we couldn't extract code specifically, return the original solution
+    return solution
+
+
+def _solve_task(
+    task: str,
+    model_config: ModelConfig,
+    *,
+    verbose: bool = False,
+) -> None:
+    """Solve a task using the provided model configuration.
+
+    Args:
+        task: The task to solve.
+        model_config: Configuration for the model.
+        verbose: Whether to show verbose output.
+
+    Raises:
+        ValueError: If an error occurs during setup.
+        AgentError: If an error occurs during processing.
+
+    """
+    try:
+        # Set up the agent
+        agent, _, _ = setup_agent(model_config)
+    except ValueError as e:
+        if "API key" in str(e):
+            click.echo(API_KEY_ERROR, err=True)
+            sys.exit(1)
+        raise
+
+    # Process task - create a human message and process it
+    message = create_message(role="human", content=task)
+    result = agent.process_sync(message)
+
+    # Extract data from the Result object
+    if result.success:
+        handle_solution_retrieval(agent, result, verbose=verbose)
+    else:
+        # Provide more detailed error information
+        error_msg = f"Error: {format_error_message(result.error)}"
+        click.echo(error_msg, err=True)
+        sys.exit(1)
+
+
+def _create_model_config(
+    model: str = DEFAULT_MODEL,
+    temperature: float = DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> ModelConfig:
+    """Create a model configuration.
+
+    Args:
+        model: Model to use for generation.
+        temperature: Temperature for generation.
+        max_tokens: Maximum tokens to generate.
+
+    Returns:
+        A model configuration.
+
+    """
+    return ModelConfig(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _solve_with_options(
+    task: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    *,
+    verbose: bool,
+) -> None:
+    """Solve a task with the given options.
+
+    Args:
+        task: The task to solve.
+        model: Model to use for generation.
+        temperature: Temperature for generation.
+        max_tokens: Maximum tokens to generate.
+        verbose: Whether to show verbose output.
+
+    """
+    # Create model configuration
+    model_config = _create_model_config(model, temperature, max_tokens)
+
+    # Solve the task
+    _solve_task(task, model_config, verbose=verbose)
 
 
 @cli.command()
@@ -305,43 +497,47 @@ def handle_solution_retrieval(agent: Agent[Any], result: Result[Any]) -> None:
     type=int,
     help="Maximum tokens to generate.",
 )
-def solve(
-    task: str,
-    model: str = DEFAULT_MODEL,
-    temperature: float = DEFAULT_TEMPERATURE,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-) -> None:
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose logging.",
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug mode with maximum logging.",
+)
+def solve(task: str, **kwargs: dict[str, object]) -> None:
     """Solve a task using the architect agent.
 
     Args:
         task: The task to solve.
-        model: Model to use for generation.
-        temperature: Temperature for generation.
-        max_tokens: Maximum tokens to generate.
+        **kwargs: Additional arguments for the solver.
+            model: Model to use for generation.
+            temperature: Temperature for generation.
+            max_tokens: Maximum tokens to generate.
+            verbose: Enable verbose logging.
+            debug: Enable debug mode with maximum logging.
 
     """
+    # Extract parameters from kwargs with defaults
+    model = kwargs.get("model", DEFAULT_MODEL)
+    temperature = kwargs.get("temperature", DEFAULT_TEMPERATURE)
+    max_tokens = kwargs.get("max_tokens", DEFAULT_MAX_TOKENS)
+    verbose = kwargs.get("verbose", False)
+    debug = kwargs.get("debug", False)
+
+    # Set up logging based on verbosity
+    if debug:
+        setup_logging(level=logging.DEBUG, verbose=True)
+    elif verbose:
+        setup_logging(verbose=True)
+    else:
+        # In non-verbose mode, only show warnings and errors
+        setup_logging(level=logging.WARNING)
+
     try:
-        # Set up the agent
-        try:
-            agent, _, _ = setup_agent(model, temperature, max_tokens)
-        except ValueError as e:
-            if "API key" in str(e):
-                click.echo(API_KEY_ERROR, err=True)
-                sys.exit(1)
-            raise
-
-        # Process task - create a human message and process it
-        message = create_message(role="human", content=task)
-        result = agent.process_sync(message)
-
-        # Extract data from the Result object
-        if result.success:
-            handle_solution_retrieval(agent, result)
-        else:
-            # Provide more detailed error information
-            error_msg = f"Error: {format_error_message(result.error)}"
-            click.echo(error_msg, err=True)
-            sys.exit(1)
+        _solve_with_options(task, model, temperature, max_tokens, verbose=verbose)
     except (ValueError, KeyError, AttributeError, TypeError, AgentError) as e:
         # Catch specific errors
         click.echo(f"Error: {e}", err=True)
@@ -392,7 +588,12 @@ def process_message(
 
     except ValueError as err:
         logger.exception("Configuration error")
-        error_msg = f"Configuration error: {err}"
+        # Extract the original error message if it's a nested error from setup_agent
+        if "Failed to create provider: " in str(err):
+            original_error = str(err).replace("Failed to create provider: ", "")
+            error_msg = f"Configuration error: {original_error}"
+        else:
+            error_msg = f"Configuration error: {err}"
         raise TaskError(error_msg) from err
     except AgentError as err:
         logger.exception("Agent error")
@@ -402,6 +603,58 @@ def process_message(
         logger.exception(MESSAGE_ERROR)
         error_msg = f"{MESSAGE_ERROR}: {err}"
         raise TaskError(error_msg) from err
+
+
+def create_provider(
+    model: str = DEFAULT_MODEL,
+    temperature: float = DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> object:
+    """Create a provider with the given parameters.
+
+    Args:
+        model: Model to use for generation.
+        temperature: Temperature for generation.
+        max_tokens: Maximum tokens to generate.
+
+    Returns:
+        A provider instance.
+
+    Raises:
+        ValueError: If API key is not found or other configuration errors.
+
+    """
+    try:
+        # Create provider
+        api_key = load_env_var("GEMINI_API_KEY")
+
+        # Only use the environment variable if no model is explicitly provided
+        if model == DEFAULT_MODEL:
+            env_model = load_env_var("GEMINI_MODEL", default=DEFAULT_MODEL)
+            model = env_model
+
+        provider_config = GeminiConfig(
+            api_key=api_key,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return GeminiProvider(config=provider_config)
+
+    except ConfigError as e:
+        # Convert ConfigError to ValueError with a descriptive message
+        msg = f"Configuration error: {e}"
+        raise ValueError(msg) from e
+
+
+def get_state_manager() -> StateManager:
+    """Get a state manager instance.
+
+    Returns:
+        A state manager instance.
+
+    """
+    return InMemoryStateManager()
 
 
 def main() -> None:
