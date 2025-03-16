@@ -144,15 +144,57 @@
     - [x] Add utilities to collect and format solution output from task execution results
   - [x] Update delegation methods in hierarchical agents
     - [x] Modify `delegate_to_executor` in `src/agent/agent_types/architect.py` to return execution results
-    - [x] Enhance the `process` method in `src/agent/agent_types/executor.py` to include solution output. NOTE: might be done?
+    - [x] Enhance the `process` method in `src/agent/agent_types/executor.py` to include solution output.
     - [x] Add a new method in `src/agent/agent_types/executor.py` to retrieve completed task solutions
-  - [ ] Create tests in `tests/unit/test_solution_output.py`
-    - [ ] Test the solution retrieval flow from CLI to executor agents
-    - [ ] Verify proper handling of different solution formats
-  - [ ] Update integration tests in `tests/integration/test_cli_end_to_end.py`
-    - [ ] Add new test case verifying actual solution output for simple tasks
-    - [ ] Ensure delegation chain properly returns solution content
-  - [ ] Add documentation in `docs/howto/cli_usage.md` with examples of solution output
+  - [x] Create tests in `tests/unit/test_solution_output.py`
+    - [x] Test the solution retrieval flow from CLI to executor agents
+    - [x] Verify proper handling of different solution formats
+  - [x] Update integration tests in `tests/integration/test_cli_end_to_end.py`
+    - [x] Add new test case verifying actual solution output for simple tasks
+    - [x] Ensure delegation chain properly returns solution content
+  - [x] Add documentation in `docs/howto/cli_usage.md` with examples of solution output
+
+- implement task breakdown delegation to connect task breakdown with actual task execution
+
+  - [ ] Fix the gap between task breakdown and agent delegation
+    - [x] Add `delegate_breakdown_tasks` method in `src/agent/agent_types/architect.py` to process broken-down tasks
+    - [x] Update the `process_normal_message` method to call this new method after task breakdown
+    - [ ] Implement retry and error handling for the delegation process
+  - [ ] Enhance task result collection and aggregation
+    - [ ] Create a `TaskResultAggregator` class in `src/agent/coordination.py` to collect and combine results
+    - [ ] Add methods for tracking subtask completion status
+    - [ ] Implement result merging logic for different result types
+  - [ ] Implement parallel delegation capabilities
+    - [ ] Add task parallelization options in `src/common_types/task_types.py`
+    - [ ] Create parallel delegation logic in `ArchitectAgent` and `PlannerAgent`
+    - [ ] Add synchronization mechanisms for dependent tasks
+  - [ ] Update task progress tracking
+    - [ ] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
+    - [ ] Add blocking task detection and resolution
+    - [ ] Implement deadlock prevention mechanisms
+  - [ ] Add logging and observability
+    - [ ] Create detailed delegation logging in `src/utils/log_utils.py`
+    - [ ] Add some very basic and simple task tree visualization tools
+  - [ ] Create fallback mechanisms
+    - [ ] Add timeout handling for delegated tasks
+    - [ ] Implement automatic retries for failed delegations
+    - [ ] Create fallback logic for various failure scenarios
+  - [ ] Update the TaskBreakdownStep to register additional metadata
+    - [ ] Add information about suggested delegation targets based on complexity
+    - [ ] Register task dependencies in graph structure
+    - [ ] Store execution order hints
+  - [ ] Create unit tests in `tests/unit/test_task_delegation.py`
+    - [ ] Test delegation logic for various task complexities
+    - [ ] Verify proper handling of subtask relationships
+    - [ ] Test result aggregation functionality
+  - [ ] Add integration tests in `tests/integration/test_end_to_end_breakdown.py`
+    - [ ] Test complete breakdown-to-execution workflow
+    - [ ] Verify proper handling of complex tasks with multiple levels
+    - [ ] Test parallel execution scenarios
+  - [ ] Update documentation
+    - [ ] Create delegation workflow guide in `docs/howto/task_delegation.md`
+    - [ ] Update architecture documentation to clarify delegation flow
+    - [ ] Add delegation examples in existing documentation
 
 - Refactor `src/agent/coordination.py`
 
@@ -167,6 +209,10 @@
   - [ ] verify that all tests pass and the linter is happy
   - [ ] remove the documentation that mentions the migration and only leave documentation of the current situation
   - [ ] remove any comments that mention the migration
+  - [ ] split `tests/unit/test_agent_coordination.py` into new files corresponding to the layout in `src/agent/coordination`
+  - [ ] bring up the unit test coverage over`src/agent/coordination` to 90%
+  - [ ] add integration tests
+  - [ ] add and update documentation
 
 - implement project management infrastructure and CLI commands for file generation
 

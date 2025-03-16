@@ -16,7 +16,7 @@ from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
 from src.agent.steps import TaskBreakdownStep
 from src.common_types.enums import AgentRole, AgentStep
 from src.common_types.result_types import Result
-from src.common_types.task_types import TaskComplexity, TaskPriority
+from src.common_types.task_types import Task, TaskComplexity, TaskPriority
 from src.config.agent import AgentConfig
 from src.llm_providers.interface import LLMProvider
 from src.messages.creation import create_human_message, create_message
@@ -486,12 +486,28 @@ class ArchitectAgent:
             return await self.delegate_to_executor(task_description)
 
         # For more complex tasks, use the task breakdown step
-        await self._task_breakdown_step(
+        breakdown_result = await self._task_breakdown_step(
             state=self.state,
             task_description=task_description,
             complexity=task_complexity,
             priority=TaskPriority.HIGH,
         )
+
+        # If task breakdown was successful, delegate the tasks
+        if breakdown_result.success and breakdown_result.data:
+            self._logger.info("Task breakdown successful, delegating tasks")
+            try:
+                # Delegate the broken-down tasks
+                delegation_result = await self.delegate_breakdown_tasks(breakdown_result.data)
+                if delegation_result.success:
+                    return delegation_result
+                self._logger.warning("Task delegation failed: %s", delegation_result.error)
+            # Fall back to returning the original response
+            except Exception:
+                self._logger.exception("Error during task delegation")
+                # Fall back to returning the original response
+        else:
+            self._logger.warning("Task breakdown failed or returned no tasks: %s", breakdown_result.error)
 
         # Return the response (with or without task information)
         return Result(success=True, data=str(response), error=None)
@@ -866,3 +882,111 @@ class ArchitectAgent:
         return Result.failure(
             f"Task too complex for direct executor delegation: {complexity.name}",
         )
+
+    async def delegate_breakdown_tasks(self, tasks: list[Task]) -> Result[str]:
+        """Delegate broken-down tasks to appropriate agents.
+
+        This method processes a list of tasks that have been broken down by the
+        TaskBreakdownStep and delegates each task to an appropriate agent based
+        on its complexity.
+
+        Args:
+            tasks: List of tasks to delegate.
+
+        Returns:
+            Result containing aggregated results from all delegated tasks.
+
+        """
+        if not tasks:
+            return Result.failure("No tasks to delegate")
+
+        self._logger.info("Delegating %d broken-down tasks", len(tasks))
+
+        results = {}
+        errors = []
+
+        for task in tasks:
+            task_description = task.description
+            task_complexity = task.complexity or self.analyze_task_complexity(task_description)
+
+            try:
+                # For simple tasks, delegate directly to an ExecutorAgent
+                if task_complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+                    self._logger.info("Delegating task '%s...' directly to ExecutorAgent", task_description[:50])
+                    result = await self.delegate_to_executor(task_description)
+                else:
+                    # For more complex tasks, delegate to a PlannerAgent
+                    self._logger.info("Delegating task '%s...' to PlannerAgent", task_description[:50])
+                    # Import here to avoid circular imports
+                    from src.agent.agent_types import create_planner_agent
+
+                    # Create a planner agent
+                    planner_agent = create_planner_agent(
+                        provider=self._provider,
+                        parent_id=self._agent_id,
+                    )
+                    planner_id = planner_agent.get_agent_id()
+
+                    # Add the planner as a child of this agent
+                    self.add_child(planner_id)
+                    planner_agent.set_parent(self._agent_id)
+
+                    # Log the delegation decision
+                    log_delegation_decision(
+                        logger=self._logger,
+                        delegation_info=DelegationInfo(
+                            source_agent_id=self._agent_id,
+                            target_agent_id=planner_id,
+                            task=task_description,
+                            reason=f"Delegation to planner due to {task_complexity.name} complexity",
+                            additional_info={"task_complexity": task_complexity.name},
+                        ),
+                    )
+
+                    # Create a message for the planner
+                    from src.messages.creation import create_human_message
+
+                    message = create_human_message(content=task_description)
+
+                    # Send the task to the planner
+                    process_result = planner_agent.process(message)
+
+                    # Check if the result is a coroutine that needs to be awaited
+                    if inspect.iscoroutine(process_result):
+                        result = await process_result
+                    else:
+                        result = process_result
+
+                # Store the result
+                if result.success:
+                    results[str(task.id)] = result.data
+                else:
+                    errors.append(f"Task '{task_description[:50]}...' failed: {result.error}")
+
+            except Exception as e:
+                error_msg = f"Error delegating task '{task_description[:50]}...': {e!s}"
+                self._logger.exception(error_msg)
+                errors.append(error_msg)
+
+        # If there were any errors, include them in the result
+        if errors:
+            if not results:  # If all tasks failed
+                return Result.failure(f"All task delegations failed: {'; '.join(errors)}")
+            # If some tasks succeeded
+            combined_results = {
+                "results": results,
+                "errors": errors,
+            }
+            return Result(
+                success=True,
+                data=json.dumps(combined_results),
+                error=f"Some task delegations failed: {'; '.join(errors)}",
+            )
+
+        # Combine all results
+        combined_results = {
+            "results": results,
+            "errors": [],
+        }
+
+        return Result.success(json.dumps(combined_results))
