@@ -138,10 +138,10 @@
     - [x] Modify the results extraction in the `solve` function (around line 150) to wait for task execution
     - [x] Add a new method `get_final_solution` in `src/cli/main.py` to retrieve the actual solution content
     - [x] Update error handling to provide meaningful feedback about solution retrieval status
-  - [ ] Add result tracking in `src/agent/coordination.py`
-    - [ ] Create a new method `follow_delegation_chain` in `AgentCoordinator` class to track delegation
-    - [ ] Implement a `get_final_result` method to retrieve completed task results from executor agents
-    - [ ] Add utilities to collect and format solution output from task execution results
+  - [x] Add result tracking in `src/agent/coordination.py`
+    - [x] Create a new method `follow_delegation_chain` in `AgentCoordinator` class to track delegation
+    - [x] Implement a `get_final_result` method to retrieve completed task results from executor agents
+    - [x] Add utilities to collect and format solution output from task execution results
   - [ ] Update delegation methods in hierarchical agents
     - [ ] Modify `delegate_to_executor` in `src/agent/agent_types/architect.py` to return execution results
     - [ ] Enhance the `process` method in `src/agent/agent_types/executor.py` to include solution output
