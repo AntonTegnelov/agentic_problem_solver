@@ -51,6 +51,19 @@ def test_solve_command_success(
 
     # Set up the mock process method to return the mock result
     mock_agent_instance.process_sync.return_value = mock_result
+
+    # Mock the coordinator and get_final_result_sync method
+    mock_coordinator = MagicMock()
+    mock_final_result = MagicMock()
+    mock_final_result.success = True
+    mock_final_result.data = {"result": "Task solution"}
+    mock_coordinator.get_final_result_sync.return_value = mock_final_result
+
+    # Set up the agent's state to have the coordinator
+    mock_state = MagicMock()
+    mock_state.coordinator = mock_coordinator
+    mock_agent_instance.state = mock_state
+
     mock_create_architect_agent.return_value = mock_agent_instance
 
     # Mock environment variables

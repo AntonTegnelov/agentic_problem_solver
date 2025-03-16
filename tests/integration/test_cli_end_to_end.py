@@ -78,6 +78,18 @@ def test_cli_solve_command_execution(mock_create_architect_agent: MagicMock) -> 
     # Set up the mock process method to return the mock result
     instance.process_sync.return_value = mock_result
 
+    # Mock the coordinator and get_final_result_sync method
+    mock_coordinator = MagicMock()
+    mock_final_result = MagicMock()
+    mock_final_result.success = True
+    mock_final_result.data = {"result": "Mocked response"}
+    mock_coordinator.get_final_result_sync.return_value = mock_final_result
+
+    # Set up the agent's state to have the coordinator
+    mock_state = MagicMock()
+    mock_state.coordinator = mock_coordinator
+    instance.state = mock_state
+
     # Create a CLI runner
     from click.testing import CliRunner
 
@@ -132,6 +144,18 @@ def test_cli_solve_command_with_options(
 
     # Set up the mock process method to return the mock result
     instance.process_sync.return_value = mock_result
+
+    # Mock the coordinator and get_final_result_sync method
+    mock_coordinator = MagicMock()
+    mock_final_result = MagicMock()
+    mock_final_result.success = True
+    mock_final_result.data = {"result": "Mocked response with options"}
+    mock_coordinator.get_final_result_sync.return_value = mock_final_result
+
+    # Set up the agent's state to have the coordinator
+    mock_state = MagicMock()
+    mock_state.coordinator = mock_coordinator
+    instance.state = mock_state
 
     # Setup the test to intercept AgentConfig creation
     with patch("src.cli.main.AgentConfig") as mock_agent_config:

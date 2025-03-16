@@ -3,7 +3,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import click
 
@@ -44,6 +44,9 @@ API key not found. Please follow these steps:
 
 4. Try running the command again
 """
+
+# Define a type variable for the coordinator
+CoordinatorType = TypeVar("CoordinatorType")
 
 
 class TaskError(RuntimeError):
@@ -109,6 +112,89 @@ def setup_agent(
         return agent, provider, state_manager
 
 
+def _get_coordinator_from_agent(agent: Agent[Any]) -> CoordinatorType | None:
+    """Extract the coordinator from an agent's state.
+
+    Args:
+        agent: The agent to extract the coordinator from.
+
+    Returns:
+        The coordinator if found, None otherwise.
+
+    """
+    try:
+        # Check if the agent has a state with a coordinator
+        if hasattr(agent, "state") and agent.state:
+            # Try different ways to access the coordinator
+            if hasattr(agent.state, "coordinator"):
+                return cast(CoordinatorType, agent.state.coordinator)
+            if hasattr(agent.state, "get_coordinator"):
+                return cast(CoordinatorType, agent.state.get_coordinator())
+            if hasattr(agent.state, "agent_registry") and hasattr(agent.state.agent_registry, "coordinator"):
+                return cast(CoordinatorType, agent.state.agent_registry.coordinator)
+    except (AttributeError, TypeError) as e:
+        # Log the error but continue with fallback methods
+        logging.debug("Error accessing coordinator: %s", str(e))
+
+    return None
+
+
+def _get_result_from_coordinator(coordinator: CoordinatorType, agent: Agent[Any]) -> str | None:
+    """Get the final result using the coordinator.
+
+    Args:
+        coordinator: The coordinator to use.
+        agent: The agent that produced the result.
+
+    Returns:
+        The final result as a string if successful, None otherwise.
+
+    """
+    try:
+        # Get the agent ID
+        agent_id = agent.get_agent_id()
+
+        # Use the coordinator to get the final result
+        final_result = coordinator.get_final_result_sync(agent_id)  # type: ignore[attr-defined]
+
+        if final_result.success and final_result.data:
+            # Extract the result from the data
+            if isinstance(final_result.data, dict) and "result" in final_result.data:
+                return str(final_result.data["result"])
+            return str(final_result.data)
+    except (AttributeError, ValueError, TypeError, KeyError, RuntimeError) as e:
+        # Log the error but continue with fallback methods
+        logging.debug("Error using coordinator to get final result: %s", str(e))
+
+    return None
+
+
+def _handle_delegation(agent: Agent[Any], data_str: str) -> str | None:
+    """Handle delegation by checking child agents for results.
+
+    Args:
+        agent: The agent that delegated the task.
+        data_str: The result data string.
+
+    Returns:
+        The final solution from a child agent if found, None otherwise.
+
+    """
+    if "delegated" in data_str.lower() and agent.get_child_ids():
+        # This is likely a delegation message, try to get results from child agents
+        child_results = agent.collect_results_from_children()
+        if child_results:
+            # Return the first non-empty result from child agents
+            for child_id, child_result in child_results.items():
+                if child_result.success and child_result.data:
+                    # Recursively get the final solution from the child result
+                    child_agent = agent.state.get_agent(child_id)
+                    if child_agent:
+                        return get_final_solution(child_agent, child_result)
+
+    return None
+
+
 def get_final_solution(agent: Agent[Any], result: Result[Any]) -> str:
     """Extract the final solution from a result.
 
@@ -122,24 +208,28 @@ def get_final_solution(agent: Agent[Any], result: Result[Any]) -> str:
     Returns:
         The final solution content as a string.
 
+    Raises:
+        ValueError: If solution retrieval fails.
+
     """
     # If the result doesn't have data, return the error or a default message
-    if not result.data:
+    if not result.success or not result.data:
         return str(result.error) if result.error else "No solution data available"
 
-    # Check if the result data contains a delegation message
+    # Try to get the coordinator from the agent's state
+    coordinator = _get_coordinator_from_agent(agent)
+
+    # If we have a coordinator, use the new method to get the final result
+    if coordinator and hasattr(coordinator, "get_final_result"):
+        coordinator_result = _get_result_from_coordinator(coordinator, agent)
+        if coordinator_result:
+            return coordinator_result
+
+    # Fallback: Check if the result data contains a delegation message
     data_str = str(result.data)
-    if "delegated" in data_str.lower() and agent.get_child_ids():
-        # This is likely a delegation message, try to get results from child agents
-        child_results = agent.collect_results_from_children()
-        if child_results:
-            # Return the first non-empty result from child agents
-            for child_id, child_result in child_results.items():
-                if child_result.success and child_result.data:
-                    # Recursively get the final solution from the child result
-                    child_agent = agent.state.get_agent(child_id)
-                    if child_agent:
-                        return get_final_solution(child_agent, child_result)
+    delegation_result = _handle_delegation(agent, data_str)
+    if delegation_result:
+        return delegation_result
 
     # If no delegation or no child results, return the original result data
     return data_str
