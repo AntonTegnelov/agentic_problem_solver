@@ -1120,63 +1120,25 @@ class TaskVerificationStep:
         # Get the task's execution results based on its execution stage
         execution_results = self._get_execution_results(task)
 
-        # Create the verification prompt
-        return f"""
-# Task Verification
+        # Use the specialized verification prompt from templates
+        from src.prompts.templates import get_specialized_role_prompt
 
-## Task Description
-{task.description}
+        # Get acceptance criteria as a formatted string
+        acceptance_criteria = "\n".join(
+            [f"- {criterion}" for criterion in task.acceptance_criteria]
+            if task.acceptance_criteria
+            else ["No specific acceptance criteria provided"],
+        )
 
-## Execution Results
-{execution_results}
-
-## Verification Instructions
-Please verify the execution results against the task requirements and success criteria.
-Your verification should:
-
-1. Evaluate if the implementation meets all requirements specified in the task description
-2. Check for any bugs, errors, or edge cases that weren't handled
-3. Assess the quality and maintainability of the implementation
-4. Determine if any additional work is needed
-
-For each verification criterion, provide:
-- A PASS/FAIL status
-- Detailed explanation of why it passed or failed
-- Suggestions for improvement if applicable
-
-## Verification Format
-Please provide your verification in the following format:
-
-```json
-{{
-  "verification_status": "PASSED|FAILED|PARTIAL",
-  "verification_details": [
-    {{
-      "criterion": "Requirement Fulfillment",
-      "status": "PASS|FAIL",
-      "details": "Explanation of the verification result"
-    }},
-    {{
-      "criterion": "Error Handling",
-      "status": "PASS|FAIL",
-      "details": "Explanation of the verification result"
-    }},
-    {{
-      "criterion": "Code Quality",
-      "status": "PASS|FAIL",
-      "details": "Explanation of the verification result"
-    }}
-  ],
-  "overall_assessment": "Overall assessment of the implementation",
-  "improvement_suggestions": [
-    "Suggestion 1",
-    "Suggestion 2"
-  ]
-}}
-```
-
-Please be thorough and objective in your verification.
-"""
+        # Create the verification prompt using the template
+        return get_specialized_role_prompt(
+            role=AgentRole.EXECUTOR,
+            prompt_type="verification",
+            task_description=task.description,
+            acceptance_criteria=acceptance_criteria,
+            execution_stage=task.execution_stage,
+            execution_results=execution_results,
+        )
 
     def _get_execution_results(self, task: Task) -> str:
         """Get execution results for the task based on its execution stage.

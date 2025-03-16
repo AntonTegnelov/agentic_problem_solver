@@ -121,7 +121,7 @@
     - [x] Create strategy adjustment logic
   - [ ] Enhance prompts in `src/prompts/templates.py` for self-guided execution
     - [x] Create implementation prompts
-    - [ ] Create verification prompts
+    - [x] Create verification prompts
   - [ ] Add reporting capabilities in `src/messages/schemas/execution.py`
     - [ ] Create progress report messages
     - [ ] Add completion report
