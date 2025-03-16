@@ -117,7 +117,7 @@
     - [x] Track task completion status
     - [x] Add blockers and dependencies tracking
   - [ ] Implement retry mechanisms in `src/agent/agent_types/executor.py`
-    - [ ] Add failure detection
+    - [x] Add failure detection
     - [ ] Create strategy adjustment logic
   - [ ] Enhance prompts in `src/prompts/templates.py` for self-guided execution
     - [ ] Create implementation prompts
