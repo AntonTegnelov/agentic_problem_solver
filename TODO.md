@@ -120,7 +120,7 @@
     - [x] Add failure detection
     - [x] Create strategy adjustment logic
   - [ ] Enhance prompts in `src/prompts/templates.py` for self-guided execution
-    - [ ] Create implementation prompts
+    - [x] Create implementation prompts
     - [ ] Create verification prompts
   - [ ] Add reporting capabilities in `src/messages/schemas/execution.py`
     - [ ] Create progress report messages
