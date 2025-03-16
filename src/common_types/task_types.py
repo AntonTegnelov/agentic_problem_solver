@@ -67,6 +67,22 @@ class TaskComplexity(str, Enum):
     VERY_COMPLEX = "very_complex"
 
 
+class ParallelizationStrategy(str, Enum):
+    """Task parallelization strategy enumeration.
+
+    These strategies determine how subtasks should be executed:
+    - SEQUENTIAL: Execute subtasks one after another (default)
+    - PARALLEL_ALL: Execute all subtasks in parallel
+    - PARALLEL_INDEPENDENT: Execute only independent subtasks in parallel
+    - PARALLEL_GROUPS: Execute groups of related subtasks in parallel
+    """
+
+    SEQUENTIAL = "sequential"
+    PARALLEL_ALL = "parallel_all"
+    PARALLEL_INDEPENDENT = "parallel_independent"
+    PARALLEL_GROUPS = "parallel_groups"
+
+
 @dataclass
 class TaskDependency:
     """Task dependency information.
@@ -77,6 +93,19 @@ class TaskDependency:
     task_id: UUID
     description: str
     is_blocking: bool = True  # If True, dependent task cannot start until this is completed
+
+
+@dataclass
+class ParallelizationGroup:
+    """Parallelization group information.
+
+    This class represents a group of tasks that can be executed in parallel.
+    """
+
+    group_id: UUID = field(default_factory=uuid4)
+    task_ids: list[UUID] = field(default_factory=list)
+    description: str = ""
+    priority: TaskPriority = TaskPriority.MEDIUM
 
 
 @dataclass
@@ -112,3 +141,9 @@ class Task:
     execution_logs: list[str] = field(default_factory=list)
     verification_details: dict[str, Any] = field(default_factory=dict)
     execution_metadata: dict[str, Any] = field(default_factory=dict)
+
+    # Parallelization fields
+    parallelization_strategy: ParallelizationStrategy = ParallelizationStrategy.SEQUENTIAL
+    parallelization_groups: list[ParallelizationGroup] = field(default_factory=list)
+    max_parallel_tasks: int | None = None
+    is_parallelizable: bool = False
