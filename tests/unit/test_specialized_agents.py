@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from langchain_core.messages.base import BaseMessage
@@ -11,9 +11,10 @@ from src.agent.agent_types.architect import ArchitectAgent
 from src.agent.agent_types.executor import ExecutorAgent
 from src.agent.agent_types.planner import PlannerAgent
 from src.agent.state.base import AgentState
+from src.common_types.enums import ExecutionStage, VerificationStatus
 from src.common_types.message_types import HumanMessage
 from src.common_types.result_types import Result
-from src.common_types.task_types import TaskComplexity
+from src.common_types.task_types import Task, TaskComplexity, TaskStatus
 
 
 @pytest.fixture
@@ -611,7 +612,7 @@ class TestExecutorAgent:
         """Test the iterate_task method."""
         # Create a task
 
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.message_types import HumanMessage
         from src.common_types.result_types import Result
         from src.common_types.task_types import Task, TaskStatus
@@ -679,7 +680,7 @@ class TestExecutorAgent:
 
     def test_evaluate_completion_criteria_basic_cases(self, executor_agent: ExecutorAgent) -> None:
         """Test the _evaluate_completion_criteria method for basic cases."""
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.task_types import Task
 
         # Test case 1: Task not in final stage
@@ -710,7 +711,7 @@ class TestExecutorAgent:
 
     def test_evaluate_completion_criteria_output_checks(self, executor_agent: ExecutorAgent) -> None:
         """Test the _evaluate_completion_criteria method for output-related checks."""
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.task_types import Task
 
         # Test case 4: Task with missing required outputs
@@ -745,7 +746,7 @@ class TestExecutorAgent:
 
     def test_evaluate_completion_criteria_metadata_checks(self, executor_agent: ExecutorAgent) -> None:
         """Test the _evaluate_completion_criteria method for metadata-related checks."""
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.task_types import Task
 
         # Test case 6: Task with missing execution metadata
@@ -785,7 +786,7 @@ class TestExecutorAgent:
 
     def test_evaluate_completion_criteria_execution_checks(self, executor_agent: ExecutorAgent) -> None:
         """Test the _evaluate_completion_criteria method for execution-related checks."""
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.task_types import Task
 
         # Test case 8: Task with no execution logs
@@ -826,7 +827,7 @@ class TestExecutorAgent:
 
     def test_evaluate_completion_criteria_status_checks(self, executor_agent: ExecutorAgent) -> None:
         """Test the _evaluate_completion_criteria method for status-related checks."""
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.task_types import Task, TaskStatus
 
         # Test case 10: Task marked as failed
@@ -1164,7 +1165,7 @@ class TestExecutorAgent:
 
     def test_evaluate_task_completion(self, executor_agent: ExecutorAgent) -> None:
         """Test the evaluate_task_completion method."""
-        from src.common_types.enums import ExecutionStage, VerificationStatus
+        from src.common_types.enums import ExecutionStage
         from src.common_types.task_types import Task, TaskStatus
 
         # Create a task that meets all completion criteria
@@ -1200,3 +1201,115 @@ class TestExecutorAgent:
         # Verify the result
         assert is_complete is False
         assert "not in final stage" in message
+
+    def test_adjust_strategy_code_error(self, executor_agent: ExecutorAgent) -> None:
+        """Test _adjust_strategy method for code_error failure type."""
+        # Create a basic task
+        task = Task(
+            task_id=uuid4(),
+            description="Test task description",
+            status=TaskStatus.IN_PROGRESS,
+            execution_stage=ExecutionStage.IMPLEMENTING,
+        )
+
+        # Test code_error strategy adjustment
+        executor_agent._adjust_strategy(task, "code_error", "Syntax error in implementation")
+        assert "strategy_adjustments" in task.execution_metadata
+        adjustment = task.execution_metadata["strategy_adjustments"][0]
+        assert adjustment["failure_type"] == "code_error"
+        assert adjustment["adjustment_type"] == "enhanced_instructions"
+        assert "enhanced_instructions" in task.metadata
+        assert "Syntax error in implementation" in task.metadata["enhanced_instructions"][0]
+
+    def test_adjust_strategy_empty_result(self, executor_agent: ExecutorAgent) -> None:
+        """Test _adjust_strategy method for empty_result failure type."""
+        # Create a basic task
+        task = Task(
+            task_id=uuid4(),
+            description="Test task description",
+            status=TaskStatus.IN_PROGRESS,
+            execution_stage=ExecutionStage.IMPLEMENTING,
+        )
+
+        # Test empty_result strategy adjustment
+        executor_agent._adjust_strategy(task, "empty_result", "No output generated")
+        assert "strategy_adjustments" in task.execution_metadata
+        adjustment = task.execution_metadata["strategy_adjustments"][0]
+        assert adjustment["failure_type"] == "empty_result"
+        assert adjustment["adjustment_type"] == "approach_change"
+        assert task.metadata.get("try_different_approach") is True
+
+    def test_adjust_strategy_verification_failed(self, executor_agent: ExecutorAgent) -> None:
+        """Test _adjust_strategy method for verification_failed failure type."""
+        # Create a basic task
+        task = Task(
+            task_id=uuid4(),
+            description="Test task description",
+            status=TaskStatus.IN_PROGRESS,
+            execution_stage=ExecutionStage.IMPLEMENTING,
+        )
+
+        # Test verification_failed strategy adjustment
+        task.verification_details = {"failure_reason": "Output format incorrect"}
+        executor_agent._adjust_strategy(task, "verification_failed", "Verification failed")
+        assert "strategy_adjustments" in task.execution_metadata
+        adjustment = task.execution_metadata["strategy_adjustments"][0]
+        assert adjustment["failure_type"] == "verification_failed"
+        assert adjustment["adjustment_type"] == "verification_focus"
+        assert task.metadata.get("verification_focus") == "Output format incorrect"
+
+    def test_adjust_strategy_stage_stagnation(self, executor_agent: ExecutorAgent) -> None:
+        """Test _adjust_strategy method for stage_stagnation failure type."""
+        # Create a basic task
+        task = Task(
+            task_id=uuid4(),
+            description="Test task description",
+            status=TaskStatus.IN_PROGRESS,
+            execution_stage=ExecutionStage.PLANNING,
+        )
+
+        # Test stage_stagnation strategy adjustment
+        executor_agent._adjust_strategy(task, "stage_stagnation", "Stuck in planning stage")
+        assert "strategy_adjustments" in task.execution_metadata
+        adjustment = task.execution_metadata["strategy_adjustments"][0]
+        assert adjustment["failure_type"] == "stage_stagnation"
+        assert adjustment["adjustment_type"] == "stage_advancement"
+        assert task.execution_stage == ExecutionStage.IMPLEMENTING
+        assert "planning_result" in task.execution_metadata
+
+    def test_adjust_strategy_dependency_failure(self, executor_agent: ExecutorAgent) -> None:
+        """Test _adjust_strategy method for dependency_failure failure type."""
+        # Create a basic task
+        task = Task(
+            task_id=uuid4(),
+            description="Test task description",
+            status=TaskStatus.IN_PROGRESS,
+            execution_stage=ExecutionStage.IMPLEMENTING,
+        )
+
+        # Test dependency_failure strategy adjustment
+        executor_agent._adjust_strategy(task, "dependency_failure", "Required dependency not available")
+        assert "strategy_adjustments" in task.execution_metadata
+        adjustment = task.execution_metadata["strategy_adjustments"][0]
+        assert adjustment["failure_type"] == "dependency_failure"
+        assert adjustment["adjustment_type"] == "dependency_workaround"
+        assert task.metadata.get("ignore_dependencies") is True
+        assert task.status == TaskStatus.IN_PROGRESS
+
+    def test_adjust_strategy_unknown_error(self, executor_agent: ExecutorAgent) -> None:
+        """Test _adjust_strategy method for unknown_error failure type."""
+        # Create a basic task
+        task = Task(
+            task_id=uuid4(),
+            description="Test task description",
+            status=TaskStatus.IN_PROGRESS,
+            execution_stage=ExecutionStage.IMPLEMENTING,
+        )
+
+        # Test general failure strategy adjustment
+        executor_agent._adjust_strategy(task, "unknown_error", "Unknown error occurred")
+        assert "strategy_adjustments" in task.execution_metadata
+        adjustment = task.execution_metadata["strategy_adjustments"][0]
+        assert adjustment["failure_type"] == "unknown_error"
+        assert adjustment["adjustment_type"] == "general_enhancement"
+        assert task.metadata.get("enhanced_context") is True

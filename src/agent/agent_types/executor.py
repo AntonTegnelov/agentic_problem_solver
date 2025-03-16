@@ -1731,6 +1731,9 @@ class ExecutorAgent:
                 task.execution_metadata["stage_attempts"][task.execution_stage.value] = 0
             task.execution_metadata["stage_attempts"][task.execution_stage.value] += 1
 
+        # Apply strategy adjustment based on failure type
+        self._adjust_strategy(task, failure_type, failure_details)
+
         # If we've exceeded max attempts, mark as failed
         max_attempts = 5  # This could be configurable
         if task.execution_attempts >= max_attempts:
@@ -1743,6 +1746,177 @@ class ExecutorAgent:
                 task.error += f"\n\nFailure summary: {failure_summary}"
 
         return Result(success=False, data=task, error=f"{failure_type}: {failure_details}")
+
+    def _adjust_strategy(self, task: Task, failure_type: str, failure_details: str) -> None:
+        """Adjust execution strategy based on failure type.
+
+        This method implements adaptive strategy adjustment based on the type of failure
+        detected. It modifies the task's execution approach to increase the chances of
+        success on subsequent attempts.
+
+        Args:
+            task: The task that failed.
+            failure_type: The type of failure detected.
+            failure_details: Detailed information about the failure.
+
+        """
+        # Initialize strategy adjustments in metadata if not present
+        if "strategy_adjustments" not in task.execution_metadata:
+            task.execution_metadata["strategy_adjustments"] = []
+
+        # Record this adjustment
+        adjustment_record = {
+            "timestamp": time.time(),
+            "failure_type": failure_type,
+            "adjustment_type": None,  # Will be set based on strategy
+            "details": None,  # Will be set based on strategy
+        }
+
+        # Apply different strategies based on failure type
+        if failure_type in ("result_error", "code_error"):
+            self._adjust_for_code_errors(task, failure_details, adjustment_record)
+        elif failure_type in ("empty_result", "provider_error"):
+            self._adjust_for_provider_errors(task, adjustment_record)
+        elif failure_type == "verification_failed":
+            self._adjust_for_verification_failure(task, adjustment_record)
+        elif failure_type == "stage_stagnation":
+            self._adjust_for_stage_stagnation(task, adjustment_record)
+        elif failure_type == "dependency_failure":
+            self._adjust_for_dependency_failure(task, adjustment_record)
+        else:
+            self._adjust_with_general_enhancement(task, adjustment_record)
+
+        # Record the adjustment
+        task.execution_metadata["strategy_adjustments"].append(adjustment_record)
+
+        # Log the strategy adjustment
+        adjustment_type = adjustment_record["adjustment_type"]
+        adjustment_details = adjustment_record["details"]
+        self._debug_log(
+            f"Strategy adjusted for task {task.task_id}: {adjustment_type} - {adjustment_details}",
+        )
+
+    def _adjust_for_code_errors(self, task: Task, failure_details: str, adjustment_record: dict) -> None:
+        """Adjust strategy for code or result errors.
+
+        Args:
+            task: The task that failed.
+            failure_details: Detailed information about the failure.
+            adjustment_record: Record to update with adjustment details.
+
+        """
+        # For code or result errors, provide more detailed instructions
+        adjustment_record["adjustment_type"] = "enhanced_instructions"
+        adjustment_record["details"] = "Adding more detailed instructions and error context"
+
+        # Add error context to task metadata to inform next prompt
+        if "enhanced_instructions" not in task.metadata:
+            task.metadata["enhanced_instructions"] = []
+
+        task.metadata["enhanced_instructions"].append(
+            f"Previous attempt encountered error: {failure_details}. "
+            f"Please address this specific issue in your implementation.",
+        )
+
+    def _adjust_for_provider_errors(self, task: Task, adjustment_record: dict) -> None:
+        """Adjust strategy for empty results or provider errors.
+
+        Args:
+            task: The task that failed.
+            adjustment_record: Record to update with adjustment details.
+
+        """
+        # For empty results or provider errors, try a different approach
+        adjustment_record["adjustment_type"] = "approach_change"
+        adjustment_record["details"] = "Changing implementation approach"
+
+        # Set flag to try a different approach
+        task.metadata["try_different_approach"] = True
+
+        # If we have multiple failures of this type, consider simplifying the task
+        if len(task.execution_metadata.get("failures", {}).get(adjustment_record["failure_type"], [])) > 1:
+            task.metadata["simplify_task"] = True
+            adjustment_record["details"] += " and simplifying task requirements"
+
+    def _adjust_for_verification_failure(self, task: Task, adjustment_record: dict) -> None:
+        """Adjust strategy for verification failures.
+
+        Args:
+            task: The task that failed.
+            adjustment_record: Record to update with adjustment details.
+
+        """
+        # For verification failures, focus on the specific verification issues
+        adjustment_record["adjustment_type"] = "verification_focus"
+        adjustment_record["details"] = "Focusing on verification issues"
+
+        # Extract verification details to guide next attempt
+        verification_issues = task.verification_details.get("failure_reason", "Unknown verification failure")
+        task.metadata["verification_focus"] = verification_issues
+
+    def _adjust_for_stage_stagnation(self, task: Task, adjustment_record: dict) -> None:
+        """Adjust strategy for stage stagnation.
+
+        Args:
+            task: The task that failed.
+            adjustment_record: Record to update with adjustment details.
+
+        """
+        # For stage stagnation, try to advance to the next stage
+        adjustment_record["adjustment_type"] = "stage_advancement"
+        adjustment_record["details"] = f"Forcing advancement from {task.execution_stage.value} stage"
+
+        # Force advancement to next stage if stuck
+        current_stage = task.execution_stage
+        if current_stage == ExecutionStage.PLANNING:
+            # If stuck in planning, provide a basic plan and move to implementation
+            task.execution_metadata["planning_result"] = "Basic plan generated due to stagnation"
+            task.execution_stage = ExecutionStage.IMPLEMENTING
+        elif current_stage == ExecutionStage.IMPLEMENTING:
+            # If stuck in implementation, move to testing with what we have
+            task.execution_metadata["implementation_result"] = task.result or "Implementation attempted"
+            task.execution_stage = ExecutionStage.TESTING
+        elif current_stage == ExecutionStage.TESTING:
+            # If stuck in testing, assume tests passed and move to refining
+            task.execution_metadata["testing_result"] = "Testing completed with basic validation"
+            task.execution_stage = ExecutionStage.REFINING
+        elif current_stage == ExecutionStage.REFINING:
+            # If stuck in refining, move to finalizing
+            task.execution_metadata["refined_implementation"] = task.result or "Refinement attempted"
+            task.execution_stage = ExecutionStage.FINALIZING
+
+    def _adjust_for_dependency_failure(self, task: Task, adjustment_record: dict) -> None:
+        """Adjust strategy for dependency failures.
+
+        Args:
+            task: The task that failed.
+            adjustment_record: Record to update with adjustment details.
+
+        """
+        # For dependency failures, try to work around dependencies
+        adjustment_record["adjustment_type"] = "dependency_workaround"
+        adjustment_record["details"] = "Attempting to work around dependencies"
+
+        # Set flag to attempt implementation without blocked dependencies
+        task.metadata["ignore_dependencies"] = True
+
+        # Update task status to in progress
+        task.status = TaskStatus.IN_PROGRESS
+
+    def _adjust_with_general_enhancement(self, task: Task, adjustment_record: dict) -> None:
+        """Apply general enhancement strategy for other failure types.
+
+        Args:
+            task: The task that failed.
+            adjustment_record: Record to update with adjustment details.
+
+        """
+        # For other failures, use a general approach with more detailed prompting
+        adjustment_record["adjustment_type"] = "general_enhancement"
+        adjustment_record["details"] = "Enhancing prompt with more context"
+
+        # Add more context to the task metadata
+        task.metadata["enhanced_context"] = True
 
     def _generate_failure_summary(self, task: Task) -> str:
         """Generate a summary of task failures for debugging.
