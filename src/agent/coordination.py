@@ -415,6 +415,312 @@ class TaskResultAggregator:
             "blocked_tasks": blocked_tasks,
         }
 
+    def track_subtask_completion_status(
+        self,
+        parent_agent_id: str,
+        parent_task_id: str | None = None,
+        *,
+        include_details: bool = False,
+    ) -> Result:
+        """Track the completion status of subtasks for a specific parent task.
+
+        This method provides more detailed tracking of subtask completion status,
+        including dependency relationships and blocking tasks.
+
+        Args:
+            parent_agent_id: ID of the parent agent.
+            parent_task_id: Optional ID of the parent task to track subtasks for.
+                           If not provided, all tasks for the parent agent will be tracked.
+            include_details: Whether to include detailed information about each subtask.
+
+        Returns:
+            Result containing detailed subtask completion status information.
+
+        """
+        try:
+            # Get parent agent state
+            parent_state_result = self._get_parent_agent_state(parent_agent_id)
+            if not parent_state_result["success"]:
+                return parent_state_result["result"]
+
+            parent_state = parent_state_result["state"]
+
+            # Get and filter subtasks
+            subtasks_result = self._get_filtered_subtasks(parent_state, parent_task_id)
+            if not subtasks_result["success"]:
+                return subtasks_result["result"]
+
+            subtasks = subtasks_result["subtasks"]
+
+            # Process subtasks and collect detailed status information
+            subtask_details = self._process_subtask_details(
+                subtasks,
+                include_details=include_details,
+            )
+
+            # Calculate dependency metrics
+            dependency_metrics = self._calculate_dependency_metrics(subtasks)
+
+            # Combine results
+            tracking_data = {
+                "parent_task_id": parent_task_id,
+                "total_subtasks": len(subtasks),
+                "status_summary": subtask_details["status_summary"],
+                "completion_percentage": subtask_details["completion_percentage"],
+                "is_complete": subtask_details["is_complete"],
+                "is_successful": subtask_details["is_successful"],
+                "dependency_metrics": dependency_metrics,
+            }
+
+            # Include detailed information if requested
+            if include_details:
+                tracking_data["subtask_details"] = subtask_details["details"]
+
+            return Result.success(
+                data=tracking_data,
+                message="Successfully tracked subtask completion status",
+            )
+
+        except AgentNotFoundError as e:
+            error_msg = f"Agent not found during subtask tracking: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+        except (ValueError, TypeError, RuntimeError) as e:
+            error_msg = f"Error during subtask tracking: {e!s}"
+            self._logger.exception(error_msg)
+            return Result.failure(error=e, message=error_msg)
+
+    def _get_parent_agent_state(self, parent_agent_id: str) -> dict:
+        """Get the parent agent state.
+
+        Args:
+            parent_agent_id: ID of the parent agent.
+
+        Returns:
+            Dictionary with success flag and either state or result.
+
+        """
+        # Try to get the parent agent
+        try:
+            parent_agent = self._registry.get_agent(parent_agent_id)
+        except AgentNotFoundError as e:
+            error_msg = f"Agent not found: {e!s}"
+            self._logger.exception(error_msg)
+            return {
+                "success": False,
+                "result": Result.failure(error=e, message=error_msg),
+            }
+
+        # Check if the agent has a state
+        parent_state = parent_agent.get_state()
+        if not parent_state:
+            return {
+                "success": False,
+                "result": Result.failure(
+                    error=ValueError("Parent agent has no state"),
+                    message="Cannot track subtask completion without parent state",
+                ),
+            }
+
+        # Return the state if everything is successful
+        return {"success": True, "state": parent_state}
+
+    def _get_filtered_subtasks(self, parent_state: AgentState, parent_task_id: str | None) -> dict:
+        """Get and filter subtasks based on parent task ID.
+
+        Args:
+            parent_state: The parent agent's state.
+            parent_task_id: Optional ID of the parent task to filter by.
+
+        Returns:
+            Dictionary with success flag and either subtasks or result.
+
+        """
+        # Get all tasks
+        all_tasks = parent_state.get_tasks()
+        if not all_tasks:
+            return {
+                "success": False,
+                "result": Result.success(
+                    data={"message": "No tasks found for tracking"},
+                    message="No subtasks to track",
+                ),
+            }
+
+        # Filter tasks by parent task ID if provided
+        subtasks = self._filter_tasks_by_parent(parent_state, all_tasks, parent_task_id)
+
+        if not subtasks:
+            return {
+                "success": False,
+                "result": Result.success(
+                    data={"message": f"No subtasks found for parent task {parent_task_id}"},
+                    message="No subtasks to track",
+                ),
+            }
+
+        return {"success": True, "subtasks": subtasks}
+
+    def _filter_tasks_by_parent(
+        self,
+        parent_state: AgentState,
+        all_tasks: list[dict],
+        parent_task_id: str | None,
+    ) -> list[TaskProtocol]:
+        """Filter tasks by parent task ID.
+
+        Args:
+            parent_state: The parent agent's state.
+            all_tasks: List of all tasks.
+            parent_task_id: Optional ID of the parent task to filter by.
+
+        Returns:
+            List of filtered task objects.
+
+        """
+        subtasks = []
+        for task_data in all_tasks:
+            task_id_str = task_data.get("task_id")
+            if not task_id_str:
+                continue
+
+            task_id = uuid.UUID(task_id_str) if isinstance(task_id_str, str) else task_id_str
+            task = parent_state.get_task_by_id(task_id)
+
+            if not task:
+                continue
+
+            # If parent_task_id is provided, only include tasks with matching parent
+            if parent_task_id:
+                if task.parent_task_id and str(task.parent_task_id) == parent_task_id:
+                    subtasks.append(task)
+            else:
+                subtasks.append(task)
+
+        return subtasks
+
+    def _process_subtask_details(
+        self,
+        subtasks: list[TaskProtocol],
+        *,
+        include_details: bool = False,
+    ) -> dict:
+        """Process subtasks and collect detailed status information.
+
+        Args:
+            subtasks: List of subtask objects to process.
+            include_details: Whether to include detailed information about each subtask.
+
+        Returns:
+            Dictionary with subtask status information.
+
+        """
+        status_counts = {}
+        details = []
+
+        for task in subtasks:
+            # Get task status
+            status = task.status
+            status_value = status.value if hasattr(status, "value") else str(status)
+
+            # Update status counts
+            status_counts[status_value] = status_counts.get(status_value, 0) + 1
+
+            # Add detailed information if requested
+            if include_details:
+                details.append(
+                    {
+                        "task_id": str(task.task_id),
+                        "description": task.description,
+                        "status": status_value,
+                        "assigned_agent_id": task.assigned_agent_id,
+                        "dependencies": [str(dep.task_id) for dep in task.dependencies] if task.dependencies else [],
+                        "execution_stage": task.execution_stage.value if task.execution_stage else None,
+                        "verification_status": task.verification_status.value if task.verification_status else None,
+                        "execution_attempts": task.execution_attempts,
+                        "progress": task.metadata.get("progress_tracking", {}).get("progress_percentage", 0.0),
+                    },
+                )
+
+        # Calculate completion metrics
+        total_tasks = len(subtasks)
+        completed_count = status_counts.get(TaskStatus.COMPLETED.value, 0)
+        failed_count = status_counts.get(TaskStatus.FAILED.value, 0)
+
+        completion_percentage = 0.0
+        if total_tasks > 0:
+            completion_percentage = (completed_count / total_tasks) * 100.0
+
+        return {
+            "status_summary": status_counts,
+            "completion_percentage": completion_percentage,
+            "is_complete": completed_count + failed_count == total_tasks,
+            "is_successful": completed_count == total_tasks,
+            "details": details,
+        }
+
+    def _calculate_dependency_metrics(self, subtasks: list[TaskProtocol]) -> dict:
+        """Calculate dependency metrics for subtasks.
+
+        Args:
+            subtasks: List of subtask objects to analyze.
+
+        Returns:
+            Dictionary with dependency metrics.
+
+        """
+        # Create a mapping of task IDs to tasks
+        task_map = {str(task.task_id): task for task in subtasks}
+
+        # Track dependency relationships
+        dependency_counts = {
+            "total_dependencies": 0,
+            "resolved_dependencies": 0,
+            "blocking_dependencies": 0,
+        }
+
+        # Track tasks blocked by dependencies
+        blocked_tasks = []
+
+        # Analyze dependencies
+        for task in subtasks:
+            if not task.dependencies:
+                continue
+
+            for dep in task.dependencies:
+                dependency_counts["total_dependencies"] += 1
+
+                # Check if dependency is in our task map
+                dep_id_str = str(dep.task_id)
+                if dep_id_str in task_map:
+                    dep_task = task_map[dep_id_str]
+
+                    # Check if dependency is resolved
+                    if dep_task.status == TaskStatus.COMPLETED:
+                        dependency_counts["resolved_dependencies"] += 1
+                    elif dep.is_blocking:
+                        dependency_counts["blocking_dependencies"] += 1
+
+                        # Add to blocked tasks if not already completed or failed
+                        if task.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED]:
+                            blocked_tasks.append(
+                                {
+                                    "task_id": str(task.task_id),
+                                    "description": task.description,
+                                    "blocked_by": dep_id_str,
+                                },
+                            )
+
+        return {
+            "dependency_counts": dependency_counts,
+            "blocked_tasks": blocked_tasks,
+            "dependency_resolution_percentage": (
+                (dependency_counts["resolved_dependencies"] / dependency_counts["total_dependencies"]) * 100.0
+                if dependency_counts["total_dependencies"] > 0
+                else 100.0
+            ),
+        }
+
 
 class InMemoryAgentRegistry(AgentRegistry):
     """In-memory implementation of the AgentRegistry protocol."""

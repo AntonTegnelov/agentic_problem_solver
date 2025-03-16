@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.agent.coordination import TaskResultAggregator
+from src.common_types.error_types import AgentNotFoundError
 from src.common_types.result_types import Result
 from src.common_types.task_types import TaskStatus
 
@@ -24,8 +25,6 @@ class TestTaskResultAggregator:
 
     def test_collect_results_agent_not_found(self) -> None:
         """Test collect_results when agent is not found."""
-        from src.common_types import AgentNotFoundError
-
         self.mock_registry.get_agent.side_effect = AgentNotFoundError("Agent not found")
         result = self.aggregator.collect_results("agent1")
 
@@ -264,7 +263,7 @@ class TestTaskResultAggregator:
         assert not metrics["is_complete"]
         assert not metrics["is_successful"]
         assert len(metrics["blocked_tasks"]) == 1
-        assert metrics["blocked_tasks"][0]["status"] == TaskStatus.BLOCKED.value
+        assert metrics["blocked_tasks"][0]["task_id"] == "task5"
 
     def test_calculate_tracking_metrics_all_completed(self) -> None:
         """Test _calculate_tracking_metrics with all tasks completed."""
@@ -290,3 +289,148 @@ class TestTaskResultAggregator:
         assert metrics["is_complete"]
         assert metrics["is_successful"]
         assert len(metrics["blocked_tasks"]) == 0
+
+    def test_track_subtask_completion_status(self) -> None:
+        """Test track_subtask_completion_status with successful tracking."""
+        # Create mock agent and state
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+
+        # Create mock tasks
+        parent_task_id = str(uuid.uuid4())
+
+        # Create subtasks with different statuses
+        subtask1_id = uuid.uuid4()
+        subtask1 = MagicMock()
+        subtask1.task_id = subtask1_id
+        subtask1.description = "Subtask 1"
+        subtask1.status = TaskStatus.COMPLETED
+        subtask1.parent_task_id = uuid.UUID(parent_task_id)
+        subtask1.dependencies = []
+        subtask1.assigned_agent_id = "executor1"
+        subtask1.execution_stage = None
+        subtask1.verification_status = None
+        subtask1.execution_attempts = 1
+        subtask1.metadata = {"progress_tracking": {"progress_percentage": 1.0}}
+
+        subtask2_id = uuid.uuid4()
+        subtask2 = MagicMock()
+        subtask2.task_id = subtask2_id
+        subtask2.description = "Subtask 2"
+        subtask2.status = TaskStatus.IN_PROGRESS
+        subtask2.parent_task_id = uuid.UUID(parent_task_id)
+        subtask2.dependencies = []
+        subtask2.assigned_agent_id = "executor2"
+        subtask2.execution_stage = None
+        subtask2.verification_status = None
+        subtask2.execution_attempts = 1
+        subtask2.metadata = {"progress_tracking": {"progress_percentage": 0.5}}
+
+        # Set up mock state to return tasks
+        mock_state.get_tasks.return_value = [
+            {"task_id": str(subtask1_id)},
+            {"task_id": str(subtask2_id)},
+        ]
+        mock_state.get_task_by_id.side_effect = lambda task_id: {
+            subtask1_id: subtask1,
+            subtask2_id: subtask2,
+        }.get(task_id)
+
+        # Set up mock agent to return state
+        mock_agent.get_state.return_value = mock_state
+        self.mock_registry.get_agent.return_value = mock_agent
+
+        # Call the method
+        result = self.aggregator.track_subtask_completion_status("agent1", parent_task_id)
+
+        # Verify the result
+        assert result.success
+        assert result.message == "Successfully tracked subtask completion status"
+        assert result.data["parent_task_id"] == parent_task_id
+        assert result.data["total_subtasks"] == 2
+        assert result.data["status_summary"][TaskStatus.COMPLETED.value] == 1
+        assert result.data["status_summary"][TaskStatus.IN_PROGRESS.value] == 1
+        assert result.data["completion_percentage"] == 50.0
+        assert not result.data["is_complete"]
+        assert not result.data["is_successful"]
+
+    def test_track_subtask_completion_status_with_details(self) -> None:
+        """Test track_subtask_completion_status with details included."""
+        # Create mock agent and state
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+
+        # Create mock tasks
+        parent_task_id = str(uuid.uuid4())
+
+        # Create subtasks with different statuses
+        subtask1_id = uuid.uuid4()
+        subtask1 = MagicMock()
+        subtask1.task_id = subtask1_id
+        subtask1.description = "Subtask 1"
+        subtask1.status = TaskStatus.COMPLETED
+        subtask1.parent_task_id = uuid.UUID(parent_task_id)
+        subtask1.dependencies = []
+        subtask1.assigned_agent_id = "executor1"
+        subtask1.execution_stage = None
+        subtask1.verification_status = None
+        subtask1.execution_attempts = 1
+        subtask1.metadata = {"progress_tracking": {"progress_percentage": 1.0}}
+
+        # Set up mock state to return tasks
+        mock_state.get_tasks.return_value = [{"task_id": str(subtask1_id)}]
+        mock_state.get_task_by_id.return_value = subtask1
+
+        # Set up mock agent to return state
+        mock_agent.get_state.return_value = mock_state
+        self.mock_registry.get_agent.return_value = mock_agent
+
+        # Call the method with include_details=True
+        result = self.aggregator.track_subtask_completion_status(
+            "agent1",
+            parent_task_id,
+            include_details=True,
+        )
+
+        # Verify the result includes details
+        assert result.success
+        assert "subtask_details" in result.data
+        assert len(result.data["subtask_details"]) == 1
+        assert result.data["subtask_details"][0]["task_id"] == str(subtask1_id)
+        assert result.data["subtask_details"][0]["description"] == "Subtask 1"
+        assert result.data["subtask_details"][0]["status"] == TaskStatus.COMPLETED.value
+        assert result.data["subtask_details"][0]["assigned_agent_id"] == "executor1"
+
+    def test_track_subtask_completion_status_no_subtasks(self) -> None:
+        """Test track_subtask_completion_status when there are no subtasks."""
+        # Create mock agent and state
+        mock_agent = MagicMock()
+        mock_state = MagicMock()
+
+        # Set up mock state to return empty task list
+        mock_state.get_tasks.return_value = []
+
+        # Set up mock agent to return state
+        mock_agent.get_state.return_value = mock_state
+        self.mock_registry.get_agent.return_value = mock_agent
+
+        # Call the method
+        result = self.aggregator.track_subtask_completion_status("agent1", "parent_task_id")
+
+        # Verify the result
+        assert result.success
+        assert result.message == "No subtasks to track"
+        assert result.data["message"] == "No tasks found for tracking"
+
+    def test_track_subtask_completion_status_agent_not_found(self) -> None:
+        """Test track_subtask_completion_status when agent is not found."""
+        # Set up mock registry to raise exception
+        self.mock_registry.get_agent.side_effect = AgentNotFoundError("Agent not found")
+
+        # Call the method
+        result = self.aggregator.track_subtask_completion_status("agent1", "parent_task_id")
+
+        # Verify the result
+        assert not result.success
+        assert isinstance(result.error, AgentNotFoundError)
+        assert "Agent not found" in result.message
