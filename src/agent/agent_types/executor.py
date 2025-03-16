@@ -1026,6 +1026,226 @@ class ExecutorAgent:
 
         return ""
 
+    # Constants for failure detection
+    MAX_STAGE_ATTEMPTS = 2  # Maximum attempts in the same stage before considering it stagnated
+
+    def _detect_failure(self, task: Task) -> tuple[bool, str, str]:
+        """Detect task execution failures and identify their causes.
+
+        This method analyzes the task execution results and metadata to identify
+        failures and determine their root causes. It categorizes failures into
+        different types to support targeted retry strategies.
+
+        Args:
+            task: The task to analyze for failures.
+
+        Returns:
+            A tuple containing:
+            - Boolean indicating if a failure was detected
+            - Failure type (empty string if no failure)
+            - Detailed failure message (empty string if no failure)
+
+        """
+        # Define all failure checks to run
+        failure_checks = [
+            self._check_task_status_failure,
+            self._check_result_errors,
+            self._check_execution_issues,
+            self._check_verification_issues,
+            self._check_stage_stagnation,
+            self._check_dependency_issues,
+            self._check_code_implementation_errors,
+        ]
+
+        # Run all checks until a failure is found
+        for check_func in failure_checks:
+            is_failure, failure_type, failure_message = check_func(task)
+            if is_failure:
+                return is_failure, failure_type, failure_message
+
+        # No failure detected
+        return False, "", ""
+
+    def _check_task_status_failure(self, task: Task) -> tuple[bool, str, str]:
+        """Check if task is already marked as failed.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        if task.status == TaskStatus.FAILED:
+            return True, "task_failed", task.error or "Task marked as failed"
+        return False, "", ""
+
+    def _check_result_errors(self, task: Task) -> tuple[bool, str, str]:
+        """Check for explicit errors in the task result.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        error_context = self._check_for_errors(task)
+        if error_context:
+            return True, "result_error", f"Error detected in result: {error_context}"
+        return False, "", ""
+
+    def _check_execution_issues(self, task: Task) -> tuple[bool, str, str]:
+        """Check for execution issues like timeouts, provider errors, or empty results.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        # Check for execution timeouts
+        if task.execution_metadata.get("timeout_occurred", False):
+            return True, "execution_timeout", "Task execution timed out"
+
+        # Check for LLM provider errors
+        if "provider_error" in task.execution_metadata:
+            return True, "provider_error", f"LLM provider error: {task.execution_metadata['provider_error']}"
+
+        # Check for incomplete or empty results
+        if not task.result or (isinstance(task.result, str) and len(task.result.strip()) < MIN_RESULT_LENGTH):
+            return True, "empty_result", "Task result is empty or too short"
+
+        return False, "", ""
+
+    def _check_verification_issues(self, task: Task) -> tuple[bool, str, str]:
+        """Check for verification failures.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        if task.verification_status == VerificationStatus.FAILED:
+            verification_details = task.verification_details.get("failure_reason", "Unknown verification failure")
+            return True, "verification_failed", f"Verification failed: {verification_details}"
+        return False, "", ""
+
+    def _check_stage_stagnation(self, task: Task) -> tuple[bool, str, str]:
+        """Check if task is stuck in the same execution stage for too many attempts.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        stage_attempts = task.execution_metadata.get("stage_attempts", {})
+        current_stage = task.execution_stage
+        if current_stage and stage_attempts.get(current_stage.value, 0) > self.MAX_STAGE_ATTEMPTS:
+            return (
+                True,
+                "stage_stagnation",
+                f"Stuck in {current_stage.value} stage for {stage_attempts[current_stage.value]} attempts",
+            )
+        return False, "", ""
+
+    def _check_dependency_issues(self, task: Task) -> tuple[bool, str, str]:
+        """Check for dependency-related failures.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        if task.status == TaskStatus.BLOCKED:
+            blocked_by = task.metadata.get("blocked_by", "unknown dependencies")
+            return True, "dependency_failure", f"Task blocked by dependencies: {blocked_by}"
+        return False, "", ""
+
+    def _check_code_implementation_errors(self, task: Task) -> tuple[bool, str, str]:
+        """Check for code implementation errors in appropriate execution stages.
+
+        Args:
+            task: The task to check.
+
+        Returns:
+            Failure detection result tuple.
+
+        """
+        if task.execution_stage in [ExecutionStage.IMPLEMENTING, ExecutionStage.TESTING, ExecutionStage.REFINING]:
+            code_errors = self._check_for_code_errors(task)
+            if code_errors:
+                return True, "code_error", f"Code implementation errors: {code_errors}"
+        return False, "", ""
+
+    def _check_for_code_errors(self, task: Task) -> str:
+        """Check for common code implementation errors.
+
+        Args:
+            task: The task to check for code errors.
+
+        Returns:
+            Error message if code errors are found, empty string otherwise.
+
+        """
+        result_str = str(task.result)
+
+        # Check for syntax error indicators
+        syntax_errors = [
+            "SyntaxError",
+            "IndentationError",
+            "invalid syntax",
+            "unexpected indent",
+            "expected an indented block",
+        ]
+
+        for error in syntax_errors:
+            if error in result_str:
+                return f"Syntax error: {error}"
+
+        # Check for incomplete code blocks
+        if self._check_for_incomplete_code_blocks(result_str):
+            return "Incomplete code blocks detected"
+
+        # Check for incomplete functions
+        if self._check_for_incomplete_functions(result_str):
+            return "Incomplete function implementations detected"
+
+        # Check for missing imports that are referenced
+        import_errors = [
+            "ModuleNotFoundError",
+            "ImportError",
+            "No module named",
+            "cannot import",
+        ]
+
+        for error in import_errors:
+            if error in result_str:
+                return f"Import error: {error}"
+
+        # Check for runtime errors
+        runtime_errors = [
+            "TypeError",
+            "ValueError",
+            "AttributeError",
+            "KeyError",
+            "IndexError",
+            "ZeroDivisionError",
+        ]
+
+        for error in runtime_errors:
+            if error in result_str:
+                return f"Runtime error: {error}"
+
+        return ""
+
     def _check_execution_metadata(self, task: Task) -> list[str]:
         """Check if task has complete execution metadata.
 
@@ -1457,6 +1677,10 @@ class ExecutorAgent:
     def _handle_task_failure(self, task: Task, error: str) -> Result[Task]:
         """Handle a task iteration failure.
 
+        This method processes task failures, detects their type using the _detect_failure
+        method, logs appropriate information, and updates the task status. It also
+        tracks failure patterns to inform retry strategies.
+
         Args:
             task: The failed task.
             error: The error message.
@@ -1465,17 +1689,86 @@ class ExecutorAgent:
             Result containing the updated task and error.
 
         """
-        error_log = f"Iteration {task.execution_attempts} failed: {error}"
+        # Detect failure type and details
+        failure_detected, failure_type, failure_details = self._detect_failure(task)
+
+        # If no specific failure detected from task analysis, use the provided error
+        if not failure_detected:
+            failure_type = "general_failure"
+            failure_details = error
+
+        # Log the failure with type information
+        error_log = f"Iteration {task.execution_attempts} failed: {failure_type} - {failure_details}"
         task.execution_logs.append(error_log)
         self._debug_log(error_log)
+
+        # Track failure in execution metadata
+        if "failures" not in task.execution_metadata:
+            task.execution_metadata["failures"] = {}
+
+        if failure_type not in task.execution_metadata["failures"]:
+            task.execution_metadata["failures"][failure_type] = []
+
+        task.execution_metadata["failures"][failure_type].append(
+            {
+                "attempt": task.execution_attempts,
+                "details": failure_details,
+                "timestamp": time.time(),
+            },
+        )
+
+        # Track stage-specific failures
+        if task.execution_stage:
+            stage_key = f"{task.execution_stage.value}_failures"
+            if stage_key not in task.execution_metadata:
+                task.execution_metadata[stage_key] = 0
+            task.execution_metadata[stage_key] += 1
+
+            # Track attempts in current stage
+            if "stage_attempts" not in task.execution_metadata:
+                task.execution_metadata["stage_attempts"] = {}
+            if task.execution_stage.value not in task.execution_metadata["stage_attempts"]:
+                task.execution_metadata["stage_attempts"][task.execution_stage.value] = 0
+            task.execution_metadata["stage_attempts"][task.execution_stage.value] += 1
 
         # If we've exceeded max attempts, mark as failed
         max_attempts = 5  # This could be configurable
         if task.execution_attempts >= max_attempts:
             task.status = TaskStatus.FAILED
-            task.error = f"Failed after {max_attempts} attempts: {error}"
+            task.error = f"Failed after {max_attempts} attempts: {failure_type} - {failure_details}"
 
-        return Result(success=False, data=task, error=error)
+            # Add summary of failure history to task error
+            failure_summary = self._generate_failure_summary(task)
+            if failure_summary:
+                task.error += f"\n\nFailure summary: {failure_summary}"
+
+        return Result(success=False, data=task, error=f"{failure_type}: {failure_details}")
+
+    def _generate_failure_summary(self, task: Task) -> str:
+        """Generate a summary of task failures for debugging.
+
+        Args:
+            task: The task to summarize failures for.
+
+        Returns:
+            A string summarizing the failure patterns.
+
+        """
+        if "failures" not in task.execution_metadata:
+            return ""
+
+        failures = task.execution_metadata["failures"]
+        summary_parts = []
+
+        for failure_type, instances in failures.items():
+            count = len(instances)
+            if count > 0:
+                summary_parts.append(f"{failure_type} ({count}x)")
+
+        if not summary_parts:
+            return ""
+
+        return ", ".join(summary_parts)
 
     def _handle_task_exception(self, task: Task, exception: Exception, prefix: str) -> Result[Task]:
         """Handle an exception during task iteration.
