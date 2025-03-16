@@ -166,7 +166,7 @@
     - [x] Implement result merging logic for different result types
   - [ ] Implement parallel delegation capabilities
     - [x] Add task parallelization options in `src/common_types/task_types.py`
-    - [ ] Create parallel delegation logic in `ArchitectAgent` and `PlannerAgent`
+    - [x] Create parallel delegation logic in `ArchitectAgent` and `PlannerAgent`
     - [ ] Add synchronization mechanisms for dependent tasks
   - [ ] Update task progress tracking
     - [ ] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation

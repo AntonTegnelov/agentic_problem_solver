@@ -17,7 +17,13 @@ from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
 from src.agent.steps import TaskBreakdownStep
 from src.common_types.enums import AgentRole, AgentStep
 from src.common_types.result_types import Result
-from src.common_types.task_types import Task, TaskComplexity, TaskPriority
+from src.common_types.task_types import (
+    ParallelizationGroup,
+    ParallelizationStrategy,
+    Task,
+    TaskComplexity,
+    TaskPriority,
+)
 from src.config.agent import AgentConfig
 from src.llm_providers.interface import LLMProvider
 from src.messages.creation import create_human_message, create_message
@@ -909,6 +915,48 @@ class ArchitectAgent:
         # Return appropriate result based on success/failure
         return self._create_delegation_result(results, errors)
 
+    async def delegate_tasks_parallel(
+        self,
+        tasks: list[Task],
+        strategy: ParallelizationStrategy = ParallelizationStrategy.PARALLEL_INDEPENDENT,
+        max_parallel_tasks: int | None = None,
+        parallelization_groups: list[ParallelizationGroup] | None = None,
+    ) -> Result[str]:
+        """Delegate tasks with parallel execution.
+
+        This method configures tasks for parallel execution based on the specified
+        strategy and then delegates them to appropriate agents.
+
+        Args:
+            tasks: List of tasks to delegate.
+            strategy: Parallelization strategy to use.
+            max_parallel_tasks: Maximum number of tasks to execute in parallel.
+            parallelization_groups: List of parallelization groups for PARALLEL_GROUPS strategy.
+
+        Returns:
+            Result containing aggregated results from all delegated tasks.
+
+        """
+        if not tasks:
+            return Result.failure("No tasks to delegate")
+
+        self._logger.info(
+            "Delegating %d tasks with parallel strategy: %s",
+            len(tasks),
+            strategy.value,
+        )
+
+        # Configure tasks for parallel execution
+        configured_tasks = await self.configure_parallel_delegation(
+            tasks,
+            strategy,
+            max_parallel_tasks,
+            parallelization_groups,
+        )
+
+        # Delegate the configured tasks
+        return await self.delegate_breakdown_tasks(configured_tasks)
+
     async def _process_tasks_with_retry(self, tasks: list[Task]) -> tuple[dict[str, str], list[str]]:
         """Process tasks with retry logic.
 
@@ -929,6 +977,18 @@ class ArchitectAgent:
         # Process all tasks
         tasks_to_process = tasks.copy()
 
+        # Check if there's a parent task with parallelization strategy
+        parent_task_id = tasks_to_process[0].parent_task_id if tasks_to_process else None
+        parallelization_strategy = ParallelizationStrategy.SEQUENTIAL  # Default
+
+        if parent_task_id:
+            # Try to find the parent task in the state
+            parent_task = self.state.get_task_by_id(parent_task_id)
+            if parent_task:
+                parallelization_strategy = parent_task.parallelization_strategy
+
+        self._logger.info("Using parallelization strategy: %s", parallelization_strategy)
+
         while tasks_to_process and retry_count < max_retries:
             # If this is a retry attempt, log it
             if retry_count > 0:
@@ -937,17 +997,173 @@ class ArchitectAgent:
             current_tasks = tasks_to_process.copy()
             tasks_to_process = []  # Reset for next iteration
 
-            # Process current batch of tasks
-            for task in current_tasks:
-                task_result, should_retry, error = await self._delegate_single_task(task)
+            # Process current batch of tasks based on parallelization strategy
+            if parallelization_strategy == ParallelizationStrategy.SEQUENTIAL:
+                # Process tasks sequentially
+                for task in current_tasks:
+                    task_result, should_retry, error = await self._delegate_single_task(task)
+                    self._handle_task_result(
+                        task,
+                        task_result,
+                        should_retry,
+                        error,
+                        results,
+                        tasks_to_process,
+                        errors,
+                        retry_count,
+                        max_retries,
+                    )
 
-                # Handle the result
-                if task_result is not None:
-                    results[str(task.id)] = task_result
-                elif should_retry and retry_count < max_retries - 1:
-                    tasks_to_process.append(task)
+            elif parallelization_strategy == ParallelizationStrategy.PARALLEL_ALL:
+                # Process all tasks in parallel
+                delegation_tasks = [self._delegate_single_task(task) for task in current_tasks]
+                delegation_results = await asyncio.gather(*delegation_tasks, return_exceptions=True)
+
+                for _i, (task, delegation_result) in enumerate(zip(current_tasks, delegation_results, strict=False)):
+                    if isinstance(delegation_result, Exception):
+                        # Handle exception from asyncio.gather
+                        error_msg = f"Error in parallel delegation: {delegation_result!s}"
+                        self._logger.error(error_msg)
+                        errors.append(error_msg)
+                    else:
+                        task_result, should_retry, error = delegation_result
+                        self._handle_task_result(
+                            task,
+                            task_result,
+                            should_retry,
+                            error,
+                            results,
+                            tasks_to_process,
+                            errors,
+                            retry_count,
+                            max_retries,
+                        )
+
+            elif parallelization_strategy == ParallelizationStrategy.PARALLEL_INDEPENDENT:
+                # Group tasks by dependencies
+                independent_tasks = []
+                dependent_tasks = []
+
+                # Find tasks with no dependencies or with all dependencies already completed
+                for task in current_tasks:
+                    if not task.dependencies or all(
+                        str(dep.task_id) in results for dep in task.dependencies if dep.is_blocking
+                    ):
+                        independent_tasks.append(task)
+                    else:
+                        dependent_tasks.append(task)
+
+                # Process independent tasks in parallel
+                if independent_tasks:
+                    delegation_tasks = [self._delegate_single_task(task) for task in independent_tasks]
+                    delegation_results = await asyncio.gather(*delegation_tasks, return_exceptions=True)
+
+                    for _i, (task, delegation_result) in enumerate(
+                        zip(independent_tasks, delegation_results, strict=False),
+                    ):
+                        if isinstance(delegation_result, Exception):
+                            error_msg = f"Error in parallel delegation: {delegation_result!s}"
+                            self._logger.error(error_msg)
+                            errors.append(error_msg)
+                        else:
+                            task_result, should_retry, error = delegation_result
+                            self._handle_task_result(
+                                task,
+                                task_result,
+                                should_retry,
+                                error,
+                                results,
+                                tasks_to_process,
+                                errors,
+                                retry_count,
+                                max_retries,
+                            )
+
+                # Process dependent tasks sequentially
+                for task in dependent_tasks:
+                    task_result, should_retry, error = await self._delegate_single_task(task)
+                    self._handle_task_result(
+                        task,
+                        task_result,
+                        should_retry,
+                        error,
+                        results,
+                        tasks_to_process,
+                        errors,
+                        retry_count,
+                        max_retries,
+                    )
+
+            elif parallelization_strategy == ParallelizationStrategy.PARALLEL_GROUPS:
+                # Process tasks by parallelization groups
+                parent_task = self.state.get_task_by_id(parent_task_id) if parent_task_id else None
+
+                if parent_task and parent_task.parallelization_groups:
+                    # Process each group in sequence, but tasks within groups in parallel
+                    for group in parent_task.parallelization_groups:
+                        group_tasks = [
+                            task for task in current_tasks if str(task.task_id) in [str(tid) for tid in group.task_ids]
+                        ]
+
+                        if group_tasks:
+                            delegation_tasks = [self._delegate_single_task(task) for task in group_tasks]
+                            delegation_results = await asyncio.gather(*delegation_tasks, return_exceptions=True)
+
+                            for _i, (task, delegation_result) in enumerate(
+                                zip(group_tasks, delegation_results, strict=False),
+                            ):
+                                if isinstance(delegation_result, Exception):
+                                    error_msg = f"Error in parallel group delegation: {delegation_result!s}"
+                                    self._logger.error(error_msg)
+                                    errors.append(error_msg)
+                                else:
+                                    task_result, should_retry, error = delegation_result
+                                    self._handle_task_result(
+                                        task,
+                                        task_result,
+                                        should_retry,
+                                        error,
+                                        results,
+                                        tasks_to_process,
+                                        errors,
+                                        retry_count,
+                                        max_retries,
+                                    )
+
+                    # Process any tasks not in groups sequentially
+                    group_task_ids = [
+                        str(tid) for group in parent_task.parallelization_groups for tid in group.task_ids
+                    ]
+                    non_group_tasks = [task for task in current_tasks if str(task.task_id) not in group_task_ids]
+
+                    for task in non_group_tasks:
+                        task_result, should_retry, error = await self._delegate_single_task(task)
+                        self._handle_task_result(
+                            task,
+                            task_result,
+                            should_retry,
+                            error,
+                            results,
+                            tasks_to_process,
+                            errors,
+                            retry_count,
+                            max_retries,
+                        )
                 else:
-                    errors.append(error)
+                    # Fallback to sequential if no groups defined
+                    for task in current_tasks:
+                        task_result, should_retry, error = await self._delegate_single_task(task)
+                        self._handle_task_result(
+                            task,
+                            task_result,
+                            should_retry,
+                            error,
+                            results,
+                            tasks_to_process,
+                            errors,
+                            retry_count,
+                            max_retries,
+                        )
 
             # Increment retry counter if we have tasks to retry
             if tasks_to_process:
@@ -956,6 +1172,152 @@ class ArchitectAgent:
                 await asyncio.sleep(1)
 
         return results, errors
+
+    def _handle_task_result(
+        self,
+        task: Task,
+        task_result: str | None,
+        should_retry: bool,
+        error: str,
+        results: dict[str, str],
+        tasks_to_process: list[Task],
+        errors: list[str],
+        retry_count: int,
+        max_retries: int,
+    ) -> None:
+        """Handle the result of a task delegation.
+
+        Args:
+            task: The task that was delegated
+            task_result: The result of the delegation, if successful
+            should_retry: Whether the task should be retried
+            error: Error message if the delegation failed
+            results: Dictionary to store successful results
+            tasks_to_process: List to store tasks that need to be retried
+            errors: List to store error messages
+            retry_count: Current retry count
+            max_retries: Maximum number of retries
+
+        """
+        if task_result is not None:
+            results[str(task.task_id)] = task_result
+        elif should_retry and retry_count < max_retries - 1:
+            tasks_to_process.append(task)
+        else:
+            errors.append(error)
+
+    def _create_delegation_result(self, results: dict[str, str], errors: list[str]) -> Result[str]:
+        """Create a result object from delegation results and errors.
+
+        Args:
+            results: Dictionary of task results.
+            errors: List of error messages.
+
+        Returns:
+            Result object containing success or failure information.
+
+        """
+        if not errors:
+            # All tasks succeeded
+            if not results:
+                return Result.success("No tasks were processed")
+
+            # Format the results
+            formatted_results = "\n\n".join(f"Task result: {result}" for result in results.values())
+            return Result.success(formatted_results)
+
+        # Some tasks failed
+        if results:
+            # Partial success
+            success_count = len(results)
+            error_count = len(errors)
+            formatted_results = "\n\n".join(f"Task result: {result}" for result in results.values())
+            formatted_errors = "\n".join(f"- {error}" for error in errors)
+            return Result.partial_success(
+                f"Completed {success_count} tasks with {error_count} failures.\n\n"
+                f"Successful results:\n{formatted_results}\n\n"
+                f"Errors:\n{formatted_errors}",
+            )
+
+        # All tasks failed
+        formatted_errors = "\n".join(f"- {error}" for error in errors)
+        return Result.failure(f"All tasks failed:\n{formatted_errors}")
+
+    async def configure_parallel_delegation(
+        self,
+        tasks: list[Task],
+        strategy: ParallelizationStrategy = ParallelizationStrategy.PARALLEL_INDEPENDENT,
+        max_parallel_tasks: int | None = None,
+        parallelization_groups: list[ParallelizationGroup] | None = None,
+    ) -> list[Task]:
+        """Configure tasks for parallel execution.
+
+        This method sets up tasks for parallel execution by configuring their
+        parallelization strategy and related settings.
+
+        Args:
+            tasks: List of tasks to configure for parallel execution.
+            strategy: Parallelization strategy to use.
+            max_parallel_tasks: Maximum number of tasks to execute in parallel.
+            parallelization_groups: List of parallelization groups for PARALLEL_GROUPS strategy.
+
+        Returns:
+            The configured list of tasks.
+
+        """
+        if not tasks:
+            return tasks
+
+        self._logger.info("Configuring %d tasks for parallel execution with strategy: %s", len(tasks), strategy)
+
+        # If there's a parent task, update its parallelization settings
+        parent_task_id = tasks[0].parent_task_id
+        if parent_task_id:
+            parent_task = self.state.get_task_by_id(parent_task_id)
+            if parent_task:
+                parent_task.parallelization_strategy = strategy
+                parent_task.is_parallelizable = True
+                parent_task.max_parallel_tasks = max_parallel_tasks
+
+                if parallelization_groups:
+                    parent_task.parallelization_groups = parallelization_groups
+                elif strategy == ParallelizationStrategy.PARALLEL_GROUPS and not parent_task.parallelization_groups:
+                    # Create default groups if using PARALLEL_GROUPS strategy without specified groups
+                    self._logger.info("Creating default parallelization groups")
+                    parent_task.parallelization_groups = [
+                        ParallelizationGroup(
+                            task_ids=[task.task_id for task in tasks],
+                            description="Default parallelization group",
+                        ),
+                    ]
+
+                # Update the parent task in state
+                self.state.update_task(parent_task)
+
+        # Update each task's parallelization settings
+        for task in tasks:
+            task.is_parallelizable = True
+
+            # Only set these if they're not already set by a parent task
+            if not task.parent_task_id or task.parent_task_id != parent_task_id:
+                task.parallelization_strategy = strategy
+                task.max_parallel_tasks = max_parallel_tasks
+
+                if parallelization_groups:
+                    task.parallelization_groups = parallelization_groups
+                elif strategy == ParallelizationStrategy.PARALLEL_GROUPS and not task.parallelization_groups:
+                    # Create a default group for this task
+                    task.parallelization_groups = [
+                        ParallelizationGroup(
+                            task_ids=[task.task_id],
+                            description=f"Default group for task {task.task_id}",
+                        ),
+                    ]
+
+            # Update the task in state
+            self.state.update_task(task)
+
+        return tasks
 
     async def _delegate_single_task(self, task: Task) -> tuple[str | None, bool, str]:
         """Delegate a single task to an appropriate agent.
@@ -1046,37 +1408,3 @@ class ArchitectAgent:
         if inspect.iscoroutine(process_result):
             return await process_result
         return process_result
-
-    def _create_delegation_result(self, results: dict[str, str], errors: list[str]) -> Result[str]:
-        """Create a result object from delegation results and errors.
-
-        Args:
-            results: Dictionary mapping task IDs to result data.
-            errors: List of error messages.
-
-        Returns:
-            Result object.
-
-        """
-        # If there were any errors, include them in the result
-        if errors:
-            if not results:  # If all tasks failed
-                return Result.failure(f"All task delegations failed: {'; '.join(errors)}")
-            # If some tasks succeeded
-            combined_results = {
-                "results": results,
-                "errors": errors,
-            }
-            return Result(
-                success=True,
-                data=json.dumps(combined_results),
-                error=f"Some task delegations failed: {'; '.join(errors)}",
-            )
-
-        # Combine all results
-        combined_results = {
-            "results": results,
-            "errors": [],
-        }
-
-        return Result.success(json.dumps(combined_results))
