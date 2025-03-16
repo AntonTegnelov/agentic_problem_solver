@@ -1575,7 +1575,7 @@ class ExecutorAgent:
 
         # Process the task to get a result
         message_content = self._create_task_execution_message(task)
-        message = create_message(content=message_content)
+        message = create_message(role="human", content=message_content)
         result = await self.process(message)
 
         if result.success:
@@ -1614,7 +1614,7 @@ class ExecutorAgent:
         """
         # Create a message from the task
         message_content = self._create_task_execution_message(task)
-        message = create_message(content=message_content)
+        message = create_message(role="human", content=message_content)
 
         # Process the task
         return await self.process(message)

@@ -9,12 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
 from src.common_types.enums import ExecutionStage, VerificationStatus
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+# Constants
+MAX_PROGRESS_PERCENTAGE = 100
 
 
 class ProgressStatus(str, Enum):
@@ -57,8 +60,8 @@ class ProgressReport:
     def __post_init__(self) -> None:
         """Validate progress report fields after initialization."""
         # Ensure progress percentage is between 0 and 100
-        if not 0 <= self.progress_percentage <= 100:
-            self.progress_percentage = max(0, min(100, self.progress_percentage))
+        if not 0 <= self.progress_percentage <= MAX_PROGRESS_PERCENTAGE:
+            self.progress_percentage = max(0, min(MAX_PROGRESS_PERCENTAGE, self.progress_percentage))
 
 
 @dataclass
@@ -97,4 +100,4 @@ class CompletionReport:
 
 
 # Type alias for execution reports
-ExecutionReport = Union[ProgressReport, CompletionReport]
+ExecutionReport = ProgressReport | CompletionReport

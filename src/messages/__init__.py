@@ -31,6 +31,12 @@ from .creation import (
 from .handler import MessageHandler
 from .processor import MessageProcessor
 from .router import MessageRouter
+from .schemas import (
+    CompletionReport,
+    ExecutionReport,
+    ProgressReport,
+    ProgressStatus,
+)
 from .utils import (
     get_message_at_index,
     get_message_metadata,
@@ -45,6 +51,8 @@ T = TypeVar("T")
 
 __all__ = [
     "AIMessage",
+    "CompletionReport",
+    "ExecutionReport",
     "HumanMessage",
     "Message",
     "MessageChain",
@@ -52,6 +60,8 @@ __all__ = [
     "MessagePriority",
     "MessageProcessor",
     "MessageRouter",
+    "ProgressReport",
+    "ProgressStatus",
     "SystemMessage",
     "ToolMessage",
     "create_ai_message",

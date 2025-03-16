@@ -36,6 +36,7 @@ The hierarchical system defines three primary agent roles:
 - **Responsibilities**:
   - Implementing specific tasks according to plans
   - Writing code, tests, and documentation
+  - Self-prompting until tasks are complete
   - Reporting implementation details back to Planner Agents
 - **Capabilities**: Coding, testing, debugging, documentation
 - **Position in Hierarchy**: Leaf-level agent, child to Planner Agent
@@ -91,22 +92,54 @@ Communication in the hierarchical system follows both top-down and bottom-up pat
 
 ## Implementation Details
 
+### Asynchronous Design with Synchronous Interface
+
+The hierarchical agent system implements internal asynchronous processing while providing synchronous interfaces for ease of use:
+
+- **Core Implementation**: Agent implementations (`ArchitectAgent`, `PlannerAgent`, `ExecutorAgent`) use async/await patterns internally
+- **Synchronous Wrapper**: Factory methods create adapter classes (e.g., `SyncArchitectAgent`) that provide synchronous interfaces
+- **Dual Processing**: Agents support both `process` (async) and `process_sync` (synchronous) methods
+
+This approach allows for:
+
+- Efficient asynchronous operation internally
+- Simpler synchronous API for most use cases
+- Compatibility with existing synchronous code
+
 ### Agent Creation
 
 Agents are created using factory methods that ensure proper initialization with role-specific capabilities:
 
 ```python
-# Creating agents with specific roles
+# Creating agents with specific roles using factory methods
+from src.agent.agent_types import create_architect_agent, create_planner_agent, create_executor_agent
+
+# Create an architect agent (top level)
 architect = create_architect_agent(provider=llm_provider)
-planner = create_planner_agent(provider=llm_provider)
-executor = create_executor_agent(provider=llm_provider)
+
+# Create a planner agent with parent reference
+planner = create_planner_agent(provider=llm_provider, parent_id=architect.get_agent_id())
+
+# Create an executor agent with parent reference
+executor = create_executor_agent(provider=llm_provider, parent_id=planner.get_agent_id())
 ```
+
+The factory methods handle both setting up the agent with the correct configuration and creating the synchronous wrapper classes necessary for the API compatibility.
 
 ### Hierarchical Relationships
 
 Relationships between agents are established through the registry:
 
 ```python
+# Get the agent registry
+from src.agent.coordination import InMemoryAgentRegistry
+registry = InMemoryAgentRegistry()
+
+# Register the agents
+registry.register_agent(architect)
+registry.register_agent(planner)
+registry.register_agent(executor)
+
 # Establishing parent-child relationships
 registry.register_parent_child_relationship(architect.get_agent_id(), planner.get_agent_id())
 registry.register_parent_child_relationship(planner.get_agent_id(), executor.get_agent_id())
@@ -117,15 +150,56 @@ registry.register_parent_child_relationship(planner.get_agent_id(), executor.get
 Each agent type processes tasks according to its role:
 
 ```python
-# Architect processes high-level task
-architect_result = architect.process(high_level_task)
+# Create a message for the architect
+from src.messages.creation import create_human_message
+message = create_human_message("Design a system to manage user authentication")
 
-# Planner processes component implementation
-planner_result = planner.process(component_task)
+# Process synchronously
+architect_result = architect.process_sync(message)
 
-# Executor implements specific feature
-executor_result = executor.process(implementation_task)
+# Get the first planner's task from the architect's result
+planner_task = architect_result.get_child_tasks()[0]
+planner_message = create_human_message(planner_task.description)
+planner_result = planner.process_sync(planner_message)
+
+# Get an executor task from the planner's result
+executor_task = planner_result.get_child_tasks()[0]
+executor_message = create_human_message(executor_task.description)
+executor_result = executor.process_sync(executor_message)
 ```
+
+## Agent State Management
+
+Each agent maintains its state through a state management system:
+
+- **AgentState**: Maintains the agent's current status, task history, and context
+- **StateManager**: Provides persistence and retrieval capabilities for agent states
+- **InMemoryStateManager**: Default implementation that maintains states in memory
+
+Agent states allow for:
+
+- Context preservation between interactions
+- Task tracking and history
+- Dependency management between tasks
+
+## Task Types and Management
+
+The system defines structured task types for effective delegation and tracking:
+
+- **TaskComplexity**: Indicates the estimated complexity of a task (SIMPLE, MODERATE, COMPLEX)
+- **TaskPriority**: Defines the priority level of tasks (LOW, MEDIUM, HIGH, CRITICAL)
+- **TaskStatus**: Tracks the current status of tasks (PENDING, IN_PROGRESS, COMPLETED, FAILED)
+
+These attributes help agents make informed decisions about task delegation, sequencing, and resource allocation.
+
+## Execution and Self-Prompting
+
+The `ExecutorAgent` includes self-prompting capabilities to iteratively work on tasks until completion:
+
+- Task is broken down into implementation stages (PLANNING, IMPLEMENTING, TESTING, REFINING, FINALIZING)
+- Agent prompts itself through each stage, tracking progress
+- Verification steps ensure quality and completeness
+- Execution continues until success criteria are met
 
 ## Benefits of Hierarchical Design
 
@@ -147,7 +221,7 @@ The hierarchical agent system is designed to be extensible with planned enhancem
 
 ## Integration with Other Systems
 
-The hierarchical agent system integrates with other components of the APS architecture:
+The hierarchical agent system integrates with other components of the architecture:
 
 - **Message System**: For communication between agents
 - **State Management**: For tracking agent status and task progress
@@ -156,4 +230,4 @@ The hierarchical agent system integrates with other components of the APS archit
 
 ## Conclusion
 
-The hierarchical agent system represents a significant advancement over the single-agent approach, enabling more effective handling of complex problems through specialized roles and structured delegation. This architecture provides a foundation for future enhancements in agent autonomy, collaboration, and problem-solving capabilities.
+The hierarchical agent system provides a structured approach to complex problem-solving through specialized roles and effective task delegation. The implementation balances asynchronous internal processing with synchronous interfaces, making it both powerful and easy to use in various contexts.

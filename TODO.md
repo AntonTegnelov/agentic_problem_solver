@@ -103,14 +103,14 @@
 
 - enable the executor agent to systematically solve the TODO lists prompting themselves until the TODO is done
 
-  - [ ] Enhance common types for task execution
+  - [x] Enhance common types for task execution
     - [x] Add execution-related enums in `src/common_types/enums.py` (EXECUTION_STAGE, VERIFICATION_STATUS)
     - [x] Extend task schema in `src/common_types/task_types.py` with execution tracking fields
-  - [ ] Enhance `ExecutorAgent` in `src/agent/agent_types/executor.py` with self-prompting capabilities
+  - [x] Enhance `ExecutorAgent` in `src/agent/agent_types/executor.py` with self-prompting capabilities
     - [x] Add task iteration mechanism
     - [x] Implement progress tracking
     - [x] Add completion criteria evaluation
-  - [ ] Create specialized steps in `src/agent/steps.py` for task execution
+  - [x] Create specialized steps in `src/agent/steps.py` for task execution
     - [x] Add `TaskExecutionStep` for implementing tasks
     - [x] Create `TaskVerificationStep` for validation
   - [x] Add progress monitoring in `src/agent/state/base.py`
@@ -119,7 +119,7 @@
   - [x] Implement retry mechanisms in `src/agent/agent_types/executor.py`
     - [x] Add failure detection
     - [x] Create strategy adjustment logic
-  - [ ] Enhance prompts in `src/prompts/templates.py` for self-guided execution
+  - [x] Enhance prompts in `src/prompts/templates.py` for self-guided execution
     - [x] Create implementation prompts
     - [x] Create verification prompts
   - [x] Add reporting capabilities in `src/messages/schemas/execution.py`

@@ -1,15 +1,8 @@
 # Getting Started with Agentic Problem Solver
 
-> **⚠️ DEPRECATION NOTICE:**
->
-> The underlying implementation of this CLI currently uses the deprecated `SolverAgent` class.
-> In future versions, it will be updated to use the hierarchical agent system.
-> The CLI interface will remain stable, but if you're using the API directly,
-> you should migrate to using the hierarchical agent system.
->
-> See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for more information.
-
 This tutorial will guide you through setting up and using the Agentic Problem Solver to solve your first programming task.
+
+> See the [Hierarchical Agent System](../explanation/hierarchical_agents.md) documentation for more information on the agent architecture.
 
 ## Prerequisites
 
@@ -64,40 +57,60 @@ Let's solve a simple programming task using the agent. We'll create a function t
 
 2. The agent will generate a solution, explaining the factorial function and providing the implementation.
 
-## Using the Hierarchical Agent System Directly
+## Using the Hierarchical Agent System Programmatically
 
-If you want to use the agent system programmatically, you should use the hierarchical agent system directly rather than the deprecated `SolverAgent`:
+You can use the agent system directly in your code:
 
 ```python
-import os
-from src.agent.agent_types.architect import ArchitectAgent
-from src.agent.state.base import InMemoryStateManager
-from src.llm_providers.providers.gemini import GeminiProvider
-from src.llm_providers.config.provider_config import GeminiConfig
+from src.agent.agent_types import create_architect_agent
+from src.messages.creation import create_human_message
+from src.llm_providers.factory import create_provider
 
-# Set up the provider with your API key
-api_key = os.environ.get("GEMINI_API_KEY")
-provider_config = GeminiConfig(
-    api_key=api_key,
-    model="gemini-2.0-pro"
-)
-provider = GeminiProvider(config=provider_config)
+# Create an LLM provider
+provider = create_provider("gemini")  # or "openai", etc.
 
-# Create the state manager and architect agent
-state_manager = InMemoryStateManager()
-agent = ArchitectAgent(
-    provider=provider,
-    state_manager=state_manager
-)
+# Create an architect agent (top-level agent)
+architect = create_architect_agent(provider=provider)
 
-# Process a task
-result = agent.process("Write a function to calculate the factorial of a number in Python.")
+# Create a message with your task
+message = create_human_message("Write a function to calculate the factorial of a number in Python.")
+
+# Process the message (synchronously)
+result = architect.process_sync(message)
+
+# Print the result
+print(result.data)
+```
+
+## Understanding the Agent Hierarchy
+
+The system uses a hierarchical approach with three agent types:
+
+1. **ArchitectAgent**: For high-level design and task decomposition
+2. **PlannerAgent**: For detailed planning and task refinement
+3. **ExecutorAgent**: For implementing specific tasks
+
+For simple tasks, you can use an ExecutorAgent directly:
+
+```python
+from src.agent.agent_types import create_executor_agent
+from src.messages.creation import create_human_message
+
+executor = create_executor_agent(provider=provider)
+message = create_human_message("Write a function to calculate the factorial of a number in Python.")
+result = executor.process_sync(message)
 print(result.data)
 ```
 
 ## Next Steps
 
-- Explore more complex tasks using the hierarchical agent system
+- Try solving more complex programming tasks
+- Explore the [API documentation](../reference/api.md) for advanced usage
 - Learn about the [agent roles](../explanation/hierarchical_agents.md) in the system
-- Check out the [task breakdown](../howto/task_breakdown.md) capabilities
-- See the [API Reference](../reference/api.md) for complete documentation
+- Check out the [examples](../../examples/) directory for more usage patterns
+
+## Troubleshooting
+
+- **API Key Issues**: Ensure your API key is set correctly in the environment variables
+- **Dependency Errors**: Make sure all requirements are installed correctly
+- **Provider Selection**: Try a different LLM provider if you encounter quality issues

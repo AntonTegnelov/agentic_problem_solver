@@ -2,9 +2,7 @@
 
 ## Overview
 
-APS is designed as a modular agent-based system for solving complex programming problems. The initial implementation featured a single `SolverAgent` that handled the entire problem-solving workflow, which has now been transformed into a hierarchical multi-agent system with specialized roles for more effective task decomposition and execution.
-
-> **IMPORTANT: The `SolverAgent` is now deprecated** and will be removed in a future version. All new development should use the hierarchical agent system.
+APS is designed as a modular agent-based system for solving complex programming problems. The system implements a hierarchical multi-agent architecture with specialized roles for effective task decomposition and execution.
 
 ## Current Architecture
 
@@ -25,7 +23,6 @@ The system is built around a protocol-based design with clear separation of conc
   - `architect.py`: Implementation of the top-level ArchitectAgent
   - `planner.py`: Implementation of the mid-level PlannerAgent
   - `executor.py`: Implementation of the bottom-level ExecutorAgent
-- `solver.py`: **Deprecated** - Legacy implementation of the single-agent approach
 - `state/`: Agent state management
   - `base.py`: Base state classes and interfaces
   - `memory.py`: Agent memory implementations
@@ -56,17 +53,6 @@ The system is built around a protocol-based design with clear separation of conc
 
 - Consolidates common types and enums
 
-### Legacy Data Flow (Deprecated)
-
-1. User Input → CLI
-2. CLI → SolverAgent
-3. SolverAgent processes the task through sequential steps:
-   - UNDERSTAND: Analyze and comprehend the task
-   - PLAN: Create a strategy to solve the task
-   - EXECUTE: Implement the planned solution
-   - VERIFY: Test and validate the solution
-4. Results → User
-
 ## Hierarchical Architecture
 
 The current architecture implements a hierarchical multi-agent system with specialized roles:
@@ -92,6 +78,7 @@ The current architecture implements a hierarchical multi-agent system with speci
 3. **ExecutorAgent (Bottom Level)**
    - Receives well-defined tasks with clear scope
    - Implements actual code solutions
+   - Self-prompts through task execution stages until completion
    - Focuses on specific, manageable pieces of work
    - Reports results back up the hierarchy
 
@@ -123,8 +110,8 @@ The system implements agent-driven delegation decisions rather than using a sepa
 The hierarchical system is implemented using protocols rather than inheritance:
 
 - **Agent Protocol**: All agent types implement the same `Agent` protocol defined in `agent_types.py`
-- **SolverAgent Transition**: The existing `SolverAgent` is maintained for backward compatibility but marked as deprecated
 - **Specialized Implementations**: Each agent type has its own implementation file in the `agent/agent_types/` directory
+- **Asynchronous Design**: The agent implementations use asynchronous patterns internally while providing synchronous interfaces through wrapper classes
 
 ### Enhanced Coordination System
 
