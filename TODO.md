@@ -113,9 +113,9 @@
   - [ ] Create specialized steps in `src/agent/steps.py` for task execution
     - [x] Add `TaskExecutionStep` for implementing tasks
     - [x] Create `TaskVerificationStep` for validation
-  - [ ] Add progress monitoring in `src/agent/state/memory.py`
-    - [ ] Track task completion status
-    - [ ] Add blockers and dependencies tracking
+  - [x] Add progress monitoring in `src/agent/state/base.py`
+    - [x] Track task completion status
+    - [x] Add blockers and dependencies tracking
   - [ ] Implement retry mechanisms in `src/agent/agent_types/executor.py`
     - [ ] Add failure detection
     - [ ] Create strategy adjustment logic

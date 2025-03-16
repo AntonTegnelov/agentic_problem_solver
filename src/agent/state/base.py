@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from src.agent.agent_types.agent_types import Agent
 from src.common_types import AgentNotFoundError, ConfigError
-from src.common_types.enums import AgentStep
+from src.common_types.enums import AgentStep, ExecutionStage, VerificationStatus
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 from src.common_types.result_types import Result as StepResult
@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from src.agent.agent_types.agent_types import Agent, Message, Result, StepResult
 
 T = TypeVar("T")
+
+# Constants
+MAX_EXECUTION_ATTEMPTS = 3
 
 
 @dataclass
@@ -613,6 +616,12 @@ class AgentState:
             for dep in task.dependencies
         ]
 
+        # Handle execution stage and verification status
+        if task.execution_stage:
+            task_dict["execution_stage"] = task.execution_stage.value
+        if task.verification_status:
+            task_dict["verification_status"] = task.verification_status.value
+
         tasks.append(task_dict)
         self.set_context("tasks", tasks)
         self.updated_at = datetime.now(UTC).isoformat()
@@ -663,6 +672,12 @@ class AgentState:
                     }
                     for dep in task.dependencies
                 ]
+
+                # Handle execution stage and verification status
+                if task.execution_stage:
+                    updated_task["execution_stage"] = task.execution_stage.value
+                if task.verification_status:
+                    updated_task["verification_status"] = task.verification_status.value
 
                 tasks[i] = updated_task
                 self.set_context("tasks", tasks)
@@ -737,7 +752,10 @@ class AgentState:
                     self.update_task_status_based_on_dependencies(dependent_task_id)
 
     def track_delegated_task_progress(
-        self, task_id: uuid.UUID, progress: float, status_message: str | None = None,
+        self,
+        task_id: uuid.UUID,
+        progress: float,
+        status_message: str | None = None,
     ) -> None:
         """Track progress of a delegated task.
 
@@ -921,6 +939,122 @@ class AgentState:
             "root_tasks": root_task_progress,
         }
 
+    def track_task_completion_status(self, task_id: uuid.UUID) -> None:
+        """Track completion status of a task.
+
+        This method checks the execution stage and verification status of a task
+        to determine if it should be marked as completed or failed.
+
+        Args:
+            task_id: Task ID.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return
+
+        # Check execution stage and verification status
+        if task.execution_stage == ExecutionStage.FINALIZING and task.verification_status == VerificationStatus.PASSED:
+            # Task is complete
+            task.status = TaskStatus.COMPLETED
+            task.completed_at = datetime.now(UTC).timestamp()
+
+            # Update progress tracking
+            if "progress_tracking" not in task.metadata:
+                task.metadata["progress_tracking"] = {}
+
+            task.metadata["progress_tracking"]["progress_percentage"] = 1.0
+            task.metadata["progress_tracking"]["status_message"] = "Task completed successfully"
+            task.metadata["progress_tracking"]["last_updated"] = datetime.now(UTC).isoformat()
+
+            # Add to progress history if it doesn't exist
+            if "progress_history" not in task.metadata["progress_tracking"]:
+                task.metadata["progress_tracking"]["progress_history"] = []
+
+            # Add current progress to history
+            task.metadata["progress_tracking"]["progress_history"].append(
+                {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "progress": 1.0,
+                    "status_message": "Task completed successfully",
+                },
+            )
+
+            # Update the task
+            self.update_task(task)
+
+            # Update dependent tasks
+            self.update_dependent_tasks(task_id)
+
+        elif (
+            task.verification_status == VerificationStatus.FAILED and task.execution_attempts >= MAX_EXECUTION_ATTEMPTS
+        ):
+            # Task has failed after multiple attempts
+            task.status = TaskStatus.FAILED
+            task.error = f"Failed after {task.execution_attempts} attempts"
+
+            # Add failure information to progress tracking
+            if "progress_tracking" not in task.metadata:
+                task.metadata["progress_tracking"] = {}
+
+            progress_tracking = task.metadata["progress_tracking"]
+            progress_tracking["failure_reason"] = task.error
+            progress_tracking["failed_at"] = datetime.now(UTC).isoformat()
+
+            # Update the task
+            self.update_task(task)
+
+    def track_blockers_and_dependencies(self) -> None:
+        """Track blockers and dependencies for all tasks.
+
+        This method updates the status of all tasks based on their dependencies,
+        identifies blocked tasks, and updates the status of tasks that were previously
+        blocked but whose dependencies are now resolved.
+        """
+        tasks = self.get_tasks()
+
+        # First pass: Update status of all tasks based on dependencies
+        for task_dict in tasks:
+            task_id = uuid.UUID(task_dict["task_id"])
+            self.update_task_status_based_on_dependencies(task_id)
+
+        # Second pass: Find tasks that are blocked and add blocker information
+        for task_dict in tasks:
+            task_id = uuid.UUID(task_dict["task_id"])
+            task = self.get_task_by_id(task_id)
+
+            if task and task.status == TaskStatus.BLOCKED:
+                # Identify which dependencies are blocking this task
+                blocking_dependencies = []
+
+                for dependency in task.dependencies:
+                    if dependency.is_blocking:
+                        dep_task = self.get_task_by_id(dependency.task_id)
+                        if not dep_task or dep_task.status != TaskStatus.COMPLETED:
+                            blocking_dependencies.append(
+                                {
+                                    "task_id": str(dependency.task_id),
+                                    "description": dependency.description,
+                                    "status": dep_task.status.value if dep_task else "unknown",
+                                },
+                            )
+
+                # Add blocker information to task metadata
+                if "blockers" not in task.metadata:
+                    task.metadata["blockers"] = {}
+
+                task.metadata["blockers"]["blocking_dependencies"] = blocking_dependencies
+                task.metadata["blockers"]["last_updated"] = datetime.now(UTC).isoformat()
+
+                # Update the task with blocker information
+                self.update_task(task)
+            elif task and task.status == TaskStatus.PENDING:
+                # For pending tasks, clear any previous blocker information
+                if "blockers" in task.metadata:
+                    task.metadata["blockers"]["blocking_dependencies"] = []
+                    task.metadata["blockers"]["last_updated"] = datetime.now(UTC).isoformat()
+                    self.update_task(task)
+
     def _convert_dict_to_task(self, task_dict: dict) -> Task:
         """Convert task dictionary to Task object.
 
@@ -946,6 +1080,21 @@ class AgentState:
             for dep_dict in task_dict.get("dependencies", [])
         ]
 
+        # Handle execution stage and verification status
+        execution_stage = None
+        if task_dict.get("execution_stage"):
+            if isinstance(task_dict["execution_stage"], str):
+                execution_stage = ExecutionStage(task_dict["execution_stage"])
+            else:
+                execution_stage = task_dict["execution_stage"]
+
+        verification_status = None
+        if task_dict.get("verification_status"):
+            if isinstance(task_dict["verification_status"], str):
+                verification_status = VerificationStatus(task_dict["verification_status"])
+            else:
+                verification_status = task_dict["verification_status"]
+
         # Create Task object
         return Task(
             description=task_dict["description"],
@@ -964,6 +1113,12 @@ class AgentState:
             created_at=task_dict.get("created_at"),
             updated_at=task_dict.get("updated_at"),
             completed_at=task_dict.get("completed_at"),
+            execution_stage=execution_stage,
+            verification_status=verification_status,
+            execution_attempts=task_dict.get("execution_attempts", 0),
+            execution_logs=task_dict.get("execution_logs", []),
+            verification_details=task_dict.get("verification_details", {}),
+            execution_metadata=task_dict.get("execution_metadata", {}),
         )
 
 
