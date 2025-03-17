@@ -1,7 +1,0 @@
----
-description: Linter, testing, etc.
-globs: 
-alwaysApply: true
----
-The linter is ruff. Used by command: "ruff check . --fix"
-The testing package is pytest. Used by command: "pytest"
