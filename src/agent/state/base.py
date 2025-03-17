@@ -17,7 +17,7 @@ from src.common_types.enums import AgentStep, ExecutionStage, VerificationStatus
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 from src.common_types.result_types import Result as StepResult
-from src.common_types.task_types import Task, TaskDependency, TaskStatus
+from src.common_types.task_types import Task, TaskComplexity, TaskDependency, TaskPriority, TaskStatus
 from src.messages.creation import create_structured_message
 from src.messages.utils import (
     get_message_at_index,
@@ -818,39 +818,178 @@ class AgentState:
         if not parent_task or not parent_task.subtasks:
             return
 
-        # Calculate progress based on subtask progress
-        total_subtasks = len(parent_task.subtasks)
-        if total_subtasks == 0:
-            return
+        # Use the enhanced rollup calculation
+        rollup_progress = self.calculate_rollup_progress(parent_task_id)
 
-        completed_subtasks = 0
-        total_progress = 0.0
-
-        for subtask_id in parent_task.subtasks:
-            subtask = self.get_task_by_id(subtask_id)
-            if not subtask:
-                continue
-
-            if subtask.status == TaskStatus.COMPLETED:
-                completed_subtasks += 1
-                total_progress += 1.0
-            elif "progress_tracking" in subtask.metadata:
-                progress = subtask.metadata["progress_tracking"].get("progress_percentage", 0.0)
-                total_progress += progress
-
-        # Calculate average progress
-        average_progress = total_progress / total_subtasks
-
-        # Update parent task progress
+        # Update parent task progress with the calculated rollup
         self.track_delegated_task_progress(
             parent_task_id,
-            average_progress,
-            f"Progress based on {completed_subtasks}/{total_subtasks} completed subtasks",
+            rollup_progress["progress"],
+            rollup_progress["status_message"],
         )
 
         # If parent task has a parent, update that as well
         if parent_task.parent_task_id:
             self.update_parent_task_progress(parent_task.parent_task_id)
+
+    def calculate_rollup_progress(self, task_id: uuid.UUID) -> dict[str, Any]:
+        """Calculate rollup progress for a task based on its subtasks.
+
+        This method provides an enhanced progress calculation that takes into account:
+        - Task priorities (higher priority tasks have more weight)
+        - Task complexity (more complex tasks have more weight)
+        - Task status (completed, in progress, blocked, etc.)
+        - Dependency relationships between tasks
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            Dictionary with rollup progress information including:
+            - progress: Overall progress value (0.0 to 1.0)
+            - status_message: Status message describing the progress
+            - weighted_progress: Progress weighted by priority and complexity
+            - critical_path_progress: Progress of tasks on the critical path
+            - blocking_tasks: List of tasks blocking progress
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task or not task.subtasks:
+            return {
+                "progress": 0.0,
+                "status_message": "No subtasks found",
+                "weighted_progress": 0.0,
+                "critical_path_progress": 0.0,
+                "blocking_tasks": [],
+            }
+
+        # Initialize counters and lists
+        total_subtasks = len(task.subtasks)
+        completed_subtasks = 0
+        in_progress_subtasks = 0
+        blocked_subtasks = 0
+        failed_subtasks = 0
+
+        # Priority weights - higher priority tasks count more toward progress
+        priority_weights = {
+            TaskPriority.LOW.value: 0.5,
+            TaskPriority.MEDIUM.value: 1.0,
+            TaskPriority.HIGH.value: 1.5,
+            TaskPriority.CRITICAL.value: 2.0,
+        }
+
+        # Complexity weights - more complex tasks count more toward progress
+        complexity_weights = {
+            TaskComplexity.SIMPLE.value: 0.75,
+            TaskComplexity.MODERATE.value: 1.0,
+            TaskComplexity.COMPLEX.value: 1.5,
+            TaskComplexity.VERY_COMPLEX.value: 2.0,
+        }
+
+        # Track weighted progress
+        total_weight = 0.0
+        weighted_progress = 0.0
+
+        # Track critical path (tasks with dependencies)
+        critical_path_tasks = []
+        blocking_tasks = []
+
+        # Process each subtask
+        for subtask_id in task.subtasks:
+            subtask = self.get_task_by_id(subtask_id)
+            if not subtask:
+                continue
+
+            # Get priority and complexity weights
+            priority = subtask.priority.value if hasattr(subtask.priority, "value") else subtask.priority
+            complexity = subtask.complexity.value if hasattr(subtask.complexity, "value") else subtask.complexity
+
+            priority_weight = priority_weights.get(priority, 1.0)
+            complexity_weight = complexity_weights.get(complexity, 1.0)
+
+            # Calculate combined weight
+            combined_weight = priority_weight * complexity_weight
+            total_weight += combined_weight
+
+            # Track task status
+            if subtask.status == TaskStatus.COMPLETED:
+                completed_subtasks += 1
+                weighted_progress += combined_weight
+            elif subtask.status == TaskStatus.IN_PROGRESS:
+                in_progress_subtasks += 1
+                # For in-progress tasks, use their reported progress
+                if "progress_tracking" in subtask.metadata:
+                    progress = subtask.metadata["progress_tracking"].get("progress_percentage", 0.0)
+                    weighted_progress += combined_weight * progress
+            elif subtask.status == TaskStatus.BLOCKED:
+                blocked_subtasks += 1
+                blocking_tasks.append(
+                    {
+                        "task_id": str(subtask_id),
+                        "description": subtask.description,
+                        "blockers": subtask.metadata.get("blockers", {}).get("blocking_dependencies", []),
+                    },
+                )
+            elif subtask.status == TaskStatus.FAILED:
+                failed_subtasks += 1
+
+            # Check if task is on critical path (has dependencies or dependents)
+            if subtask.dependencies or any(self.is_dependent_on(other_id, subtask_id) for other_id in task.subtasks):
+                critical_path_tasks.append(subtask)
+
+        # Calculate normalized weighted progress
+        normalized_weighted_progress = weighted_progress / total_weight if total_weight > 0 else 0.0
+
+        # Calculate critical path progress
+        critical_path_progress = 0.0
+        if critical_path_tasks:
+            critical_path_completed = sum(1 for t in critical_path_tasks if t.status == TaskStatus.COMPLETED)
+            critical_path_progress = critical_path_completed / len(critical_path_tasks)
+
+        # Calculate overall progress using a weighted combination of metrics
+        # - 60% based on weighted task progress
+        # - 30% based on critical path progress
+        # - 10% based on simple task count progress
+        simple_progress = completed_subtasks / total_subtasks if total_subtasks > 0 else 0.0
+        overall_progress = 0.6 * normalized_weighted_progress + 0.3 * critical_path_progress + 0.1 * simple_progress
+
+        # Generate status message
+        status_message = (
+            f"Progress: {completed_subtasks}/{total_subtasks} tasks completed"
+            f" ({in_progress_subtasks} in progress, {blocked_subtasks} blocked, {failed_subtasks} failed)"
+        )
+
+        return {
+            "progress": overall_progress,
+            "status_message": status_message,
+            "weighted_progress": normalized_weighted_progress,
+            "critical_path_progress": critical_path_progress,
+            "simple_progress": simple_progress,
+            "completed_subtasks": completed_subtasks,
+            "in_progress_subtasks": in_progress_subtasks,
+            "blocked_subtasks": blocked_subtasks,
+            "failed_subtasks": failed_subtasks,
+            "total_subtasks": total_subtasks,
+            "blocking_tasks": blocking_tasks,
+        }
+
+    def is_dependent_on(self, task_id: uuid.UUID, dependency_id: uuid.UUID) -> bool:
+        """Check if a task is dependent on another task.
+
+        Args:
+            task_id: Task ID to check.
+            dependency_id: Potential dependency task ID.
+
+        Returns:
+            True if task_id depends on dependency_id.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return False
+
+        # Check direct dependencies
+        return any(dependency.task_id == dependency_id for dependency in task.dependencies)
 
     def get_task_progress(self, task_id: uuid.UUID) -> dict[str, Any]:
         """Get progress information for a task.
@@ -1054,6 +1193,141 @@ class AgentState:
                     task.metadata["blockers"]["blocking_dependencies"] = []
                     task.metadata["blockers"]["last_updated"] = datetime.now(UTC).isoformat()
                     self.update_task(task)
+
+    def recalculate_all_task_progress(self) -> None:
+        """Recalculate progress for all tasks in the hierarchy.
+
+        This method performs a bottom-up recalculation of progress for all tasks,
+        starting from leaf tasks (those without subtasks) and propagating up to
+        root tasks. This ensures that all progress reporting is up-to-date and
+        accurately reflects the current state of task execution.
+
+        The method also detects stalled tasks (those that haven't made progress
+        in a configurable time period) and updates their metadata accordingly.
+        """
+        tasks = self.get_tasks()
+
+        # First, identify all leaf tasks (tasks without subtasks)
+        leaf_tasks = []
+        for task_dict in tasks:
+            task = self._convert_dict_to_task(task_dict)
+            if not task.subtasks:
+                leaf_tasks.append(task)
+
+        # Next, identify all parent tasks and organize them by level
+        # (where level 0 are parents of leaf tasks, level 1 are parents of level 0, etc.)
+        parent_tasks_by_level = {}
+        processed_task_ids = set()
+
+        # Start with leaf tasks' parents
+        current_level = 0
+        current_parents = set()
+        for leaf_task in leaf_tasks:
+            if leaf_task.parent_task_id and leaf_task.parent_task_id not in processed_task_ids:
+                current_parents.add(leaf_task.parent_task_id)
+                processed_task_ids.add(leaf_task.parent_task_id)
+
+        parent_tasks_by_level[current_level] = list(current_parents)
+
+        # Continue up the hierarchy until we reach root tasks
+        while current_parents:
+            next_level = current_level + 1
+            next_parents = set()
+
+            for parent_id in current_parents:
+                parent_task = self.get_task_by_id(parent_id)
+                if parent_task and parent_task.parent_task_id and parent_task.parent_task_id not in processed_task_ids:
+                    next_parents.add(parent_task.parent_task_id)
+                    processed_task_ids.add(parent_task.parent_task_id)
+
+            if next_parents:
+                parent_tasks_by_level[next_level] = list(next_parents)
+                current_parents = next_parents
+                current_level = next_level
+            else:
+                break
+
+        # Now process tasks bottom-up, starting with leaf tasks
+        # First, check for stalled leaf tasks
+        for leaf_task in leaf_tasks:
+            self._check_for_stalled_task(leaf_task.task_id)
+
+        # Then process parent tasks level by level, from lowest to highest
+        for level in sorted(parent_tasks_by_level.keys()):
+            for parent_id in parent_tasks_by_level[level]:
+                # Recalculate rollup progress for this parent
+                rollup_progress = self.calculate_rollup_progress(parent_id)
+
+                # Update the parent's progress
+                self.track_delegated_task_progress(
+                    parent_id,
+                    rollup_progress["progress"],
+                    rollup_progress["status_message"],
+                )
+
+                # Check if this parent task is stalled
+                self._check_for_stalled_task(parent_id)
+
+        # Finally, update the overall progress information
+        overall_progress = self.get_overall_progress()
+        self.set_context("overall_progress", overall_progress)
+
+    def _check_for_stalled_task(self, task_id: uuid.UUID, stall_threshold_hours: float = 24.0) -> None:
+        """Check if a task has stalled (not made progress in a while).
+
+        Args:
+            task_id: Task ID to check.
+            stall_threshold_hours: Number of hours after which a task is considered stalled.
+
+        """
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return
+
+        # Skip completed or failed tasks
+        if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED]:
+            return
+
+        # Check when the task was last updated
+        progress_tracking = task.metadata.get("progress_tracking", {})
+        last_updated_str = progress_tracking.get("last_updated")
+
+        if not last_updated_str:
+            return
+
+        try:
+            last_updated = datetime.fromisoformat(last_updated_str)
+            now = datetime.now(UTC)
+            hours_since_update = (now - last_updated).total_seconds() / 3600
+
+            # If the task hasn't been updated in the threshold period, mark it as stalled
+            if hours_since_update > stall_threshold_hours:
+                if "stalled" not in task.metadata:
+                    task.metadata["stalled"] = {}
+
+                task.metadata["stalled"]["is_stalled"] = True
+                task.metadata["stalled"]["stalled_since"] = last_updated_str
+                task.metadata["stalled"]["hours_stalled"] = hours_since_update
+                task.metadata["stalled"]["detected_at"] = now.isoformat()
+
+                # Add a note to the progress tracking
+                if "status_message" in progress_tracking:
+                    progress_tracking["status_message"] += f" (Stalled for {hours_since_update:.1f} hours)"
+                else:
+                    progress_tracking["status_message"] = f"Stalled for {hours_since_update:.1f} hours"
+
+                # Update the task
+                self.update_task(task)
+            elif task.metadata.get("stalled", {}).get("is_stalled", False):
+                # If the task was previously stalled but has been updated, clear the stalled flag
+                task.metadata["stalled"]["is_stalled"] = False
+                task.metadata["stalled"]["resolved_at"] = now.isoformat()
+
+                # Update the task
+                self.update_task(task)
+        except (ValueError, TypeError):
+            # If there's an error parsing the timestamp, just skip this check
+            pass
 
     def _convert_dict_to_task(self, task_dict: dict) -> Task:
         """Convert task dictionary to Task object.

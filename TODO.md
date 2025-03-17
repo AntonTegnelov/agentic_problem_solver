@@ -164,12 +164,12 @@
     - [x] Create a `TaskResultAggregator` class in `src/agent/coordination.py` to collect and combine results
     - [x] Add methods for tracking subtask completion status
     - [x] Implement result merging logic for different result types
-  - [ ] Implement parallel delegation capabilities
+  - [x] Implement parallel delegation capabilities
     - [x] Add task parallelization options in `src/common_types/task_types.py`
     - [x] Create parallel delegation logic in `ArchitectAgent` and `PlannerAgent`
-    - [ ] Add synchronization mechanisms for dependent tasks
+    - [x] Add synchronization mechanisms for dependent tasks
   - [ ] Update task progress tracking
-    - [ ] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
+    - [x] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
     - [ ] Add blocking task detection and resolution
     - [ ] Implement deadlock prevention mechanisms
   - [ ] Add logging and observability
