@@ -23,6 +23,7 @@ from src.common_types.task_types import (
     Task,
     TaskComplexity,
     TaskPriority,
+    TaskStatus,
 )
 from src.config.agent import AgentConfig
 from src.llm_providers.interface import LLMProvider
@@ -1165,6 +1166,21 @@ class ArchitectAgent:
                             max_retries,
                         )
 
+            elif parallelization_strategy == ParallelizationStrategy.PARALLEL_DEPENDENCIES:
+                # Process tasks using dependency-based synchronization
+                batch_results, batch_errors = await self.execute_synchronized_tasks(current_tasks)
+
+                # Add results and errors
+                results.update(batch_results)
+                errors.extend(batch_errors)
+
+                # Check for tasks that need to be retried
+                for task in current_tasks:
+                    str(task.task_id)
+                    if task.status == TaskStatus.FAILED and retry_count < max_retries:
+                        # Only add to retry list if we haven't exceeded max retries
+                        tasks_to_process.append(task)
+
             # Increment retry counter if we have tasks to retry
             if tasks_to_process:
                 retry_count += 1
@@ -1319,6 +1335,168 @@ class ArchitectAgent:
 
         return tasks
 
+    def synchronize_dependent_tasks(self, tasks: list[Task]) -> list[list[Task]]:
+        """Synchronize dependent tasks for parallel execution.
+
+        This method analyzes task dependencies and creates execution batches
+        where each batch contains tasks that can be executed in parallel.
+
+        Args:
+            tasks: List of tasks to synchronize.
+
+        Returns:
+            List of task batches, where each batch contains tasks that can be executed in parallel.
+
+        """
+        if not tasks:
+            return []
+
+        self._logger.info("Synchronizing %d tasks for parallel execution", len(tasks))
+
+        # Create a dependency graph
+        dependency_graph: dict[str, set[str]] = {}  # task_id -> set of dependency task_ids
+        reverse_graph: dict[str, set[str]] = {}  # task_id -> set of dependent task_ids
+        task_map: dict[str, Task] = {}  # task_id -> Task object
+
+        # Build the dependency graph
+        for task in tasks:
+            task_id_str = str(task.task_id)
+            task_map[task_id_str] = task
+            dependency_graph[task_id_str] = set()
+
+            # Add dependencies to the graph
+            for dep in task.dependencies:
+                if dep.is_blocking:
+                    dep_id_str = str(dep.task_id)
+                    dependency_graph[task_id_str].add(dep_id_str)
+
+                    # Add to reverse graph
+                    if dep_id_str not in reverse_graph:
+                        reverse_graph[dep_id_str] = set()
+                    reverse_graph[dep_id_str].add(task_id_str)
+
+        # Create a copy of the dependency graph for processing
+        remaining_dependencies = {task_id: deps.copy() for task_id, deps in dependency_graph.items()}
+
+        # Create batches of tasks that can be executed in parallel
+        batches: list[list[Task]] = []
+        remaining_tasks = set(task_map.keys())
+
+        while remaining_tasks:
+            # Find tasks with no dependencies
+            ready_tasks = [task_id for task_id in remaining_tasks if not remaining_dependencies[task_id]]
+
+            if not ready_tasks:
+                # If there are no ready tasks but we still have remaining tasks,
+                # there might be a circular dependency
+                self._logger.warning(
+                    "Possible circular dependency detected among tasks: %s",
+                    ", ".join(remaining_tasks),
+                )
+                # Break the cycle by selecting the first remaining task
+                ready_tasks = [next(iter(remaining_tasks))]
+
+            # Create a batch with the ready tasks
+            current_batch = [task_map[task_id] for task_id in ready_tasks]
+            batches.append(current_batch)
+
+            # Remove the ready tasks from the remaining tasks
+            for task_id in ready_tasks:
+                remaining_tasks.remove(task_id)
+
+                # Update the dependencies of tasks that depend on this task
+                if task_id in reverse_graph:
+                    for dependent_id in reverse_graph[task_id]:
+                        if dependent_id in remaining_dependencies:
+                            remaining_dependencies[dependent_id].discard(task_id)
+
+        # Log the batches
+        for i, batch in enumerate(batches):
+            self._logger.info(
+                "Execution batch %d: %s",
+                i + 1,
+                ", ".join(
+                    task.description[:30] + "..." if len(task.description) > 30 else task.description for task in batch
+                ),
+            )
+
+        return batches
+
+    async def execute_synchronized_tasks(self, tasks: list[Task]) -> tuple[dict[str, str], list[str]]:
+        """Execute tasks in synchronized batches based on dependencies.
+
+        This method organizes tasks into batches where each batch contains tasks
+        that can be executed in parallel. It then executes each batch in sequence,
+        ensuring that dependencies are respected.
+
+        Args:
+            tasks: List of tasks to execute.
+
+        Returns:
+            Tuple containing (results dictionary, errors list).
+
+        """
+        if not tasks:
+            return {}, []
+
+        self._logger.info("Executing %d tasks with dependency synchronization", len(tasks))
+
+        # Organize tasks into batches based on dependencies
+        batches = self.synchronize_dependent_tasks(tasks)
+
+        # Initialize results and errors
+        results: dict[str, str] = {}
+        errors: list[str] = []
+
+        # Execute each batch in sequence
+        for batch_index, batch in enumerate(batches):
+            self._logger.info("Executing batch %d of %d (%d tasks)", batch_index + 1, len(batches), len(batch))
+
+            # Execute all tasks in the current batch in parallel
+            delegation_tasks = [self._delegate_single_task(task) for task in batch]
+            delegation_results = await asyncio.gather(*delegation_tasks, return_exceptions=True)
+
+            # Process the results of the current batch
+            for task, delegation_result in zip(batch, delegation_results, strict=False):
+                task_id_str = str(task.task_id)
+
+                if isinstance(delegation_result, Exception):
+                    # Handle exception from asyncio.gather
+                    error_msg = f"Error in batch {batch_index + 1} for task {task_id_str}: {delegation_result!s}"
+                    self._logger.error(error_msg)
+                    errors.append(error_msg)
+
+                    # Update task status to failed
+                    task.status = TaskStatus.FAILED
+                    task.error = error_msg
+                    self.state.update_task(task)
+                else:
+                    task_result, should_retry, error = delegation_result
+
+                    if task_result is not None:
+                        # Success
+                        results[task_id_str] = task_result
+
+                        # Update task status to completed
+                        task.status = TaskStatus.COMPLETED
+                        task.result = task_result
+                        self.state.update_task(task)
+                    else:
+                        # Failure
+                        error_msg = f"Failed to execute task {task_id_str}: {error}"
+                        self._logger.warning(error_msg)
+                        errors.append(error_msg)
+
+                        # Update task status to failed
+                        task.status = TaskStatus.FAILED
+                        task.error = error
+                        self.state.update_task(task)
+
+            # Update the state's dependency tracking after each batch
+            self.state.track_blockers_and_dependencies()
+
+        return results, errors
+
     async def _delegate_single_task(self, task: Task) -> tuple[str | None, bool, str]:
         """Delegate a single task to an appropriate agent.
 
@@ -1408,3 +1586,39 @@ class ArchitectAgent:
         if inspect.iscoroutine(process_result):
             return await process_result
         return process_result
+
+    def configure_parent_task_parallelization(
+        self,
+        parent_task: Task,
+        strategy: str = ParallelizationStrategy.SEQUENTIAL,
+    ) -> None:
+        """Configure parallel delegation for subtasks.
+
+        Args:
+            parent_task: The parent task containing subtasks.
+            strategy: The parallelization strategy to use.
+                - SEQUENTIAL: Execute subtasks sequentially
+                - PARALLEL_ALL: Execute all subtasks in parallel
+                - PARALLEL_INDEPENDENT: Execute only independent subtasks in parallel
+                - PARALLEL_GROUPS: Execute groups of related subtasks in parallel
+                - PARALLEL_DEPENDENCIES: Execute subtasks in batches based on dependencies
+
+        """
+        if strategy not in [
+            ParallelizationStrategy.SEQUENTIAL,
+            ParallelizationStrategy.PARALLEL_ALL,
+            ParallelizationStrategy.PARALLEL_INDEPENDENT,
+            ParallelizationStrategy.PARALLEL_GROUPS,
+            ParallelizationStrategy.PARALLEL_DEPENDENCIES,
+        ]:
+            self._logger.warning(
+                "Invalid parallelization strategy: %s. Using SEQUENTIAL instead.",
+                strategy,
+            )
+            strategy = ParallelizationStrategy.SEQUENTIAL
+
+        parent_task.parallelization_strategy = strategy
+        self._logger.info("Configured parallelization strategy: %s", strategy)
+
+        # Update the task in the state
+        self.state.update_task(parent_task)

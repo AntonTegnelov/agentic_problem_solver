@@ -243,11 +243,18 @@ class TaskResultAggregator:
             )
 
         try:
-            if result_type == "text":
-                return self._merge_text_results(results)
-            if result_type == "code":
-                return self._merge_code_results(results)
-            return self._merge_default_results(results)
+            # Use a dictionary to map result types to their respective merge methods
+            merge_methods = {
+                "text": self._merge_text_results,
+                "code": self._merge_code_results,
+                "json": self._merge_json_results,
+                "mixed": self._merge_mixed_results,
+                "data": self._merge_data_results,
+            }
+
+            # Get the appropriate merge method or default to _merge_default_results
+            merge_method = merge_methods.get(result_type, self._merge_default_results)
+            return merge_method(results)
         except Exception as e:
             error_msg = f"Error merging results: {e!s}"
             self._logger.exception(error_msg)
@@ -330,6 +337,214 @@ class TaskResultAggregator:
         return Result.success(
             data={"code_sections": code_sections},
             message="Successfully merged code results",
+        )
+
+    def _merge_json_results(self, results: list[dict]) -> Result:
+        """Merge JSON/dictionary results into a combined structure.
+
+        Args:
+            results: List of task results to merge.
+
+        Returns:
+            Result containing the merged JSON data.
+
+        """
+        merged_data = {}
+
+        # Sort results by task_id to ensure consistent ordering
+        sorted_results = sorted(results, key=lambda r: r.get("task_id", ""))
+
+        for result in sorted_results:
+            result_data = result.get("result")
+
+            # Handle dictionary results
+            if isinstance(result_data, dict):
+                # Use task description as key if available, otherwise use task_id
+                key = result.get("description", result.get("task_id", f"result_{len(merged_data)}"))
+                # Truncate long descriptions for readability
+                if isinstance(key, str) and len(key) > DESCRIPTION_TRUNCATION_LENGTH:
+                    key = key[:DESCRIPTION_TRUNCATION_LENGTH] + "..."
+
+                # Ensure key is unique
+                base_key = key
+                counter = 1
+                while key in merged_data:
+                    key = f"{base_key}_{counter}"
+                    counter += 1
+
+                merged_data[key] = result_data
+
+        return Result.success(
+            data=merged_data,
+            message="Successfully merged JSON results",
+        )
+
+    def _merge_mixed_results(self, results: list[dict]) -> Result:
+        """Merge mixed result types into categorized sections.
+
+        This method handles cases where results contain different types of data
+        (text, code, JSON, etc.) and organizes them by type.
+
+        Args:
+            results: List of task results to merge.
+
+        Returns:
+            Result containing the categorized merged data.
+
+        """
+        merged_data = {
+            "text": [],
+            "code": {},
+            "json": {},
+            "other": [],
+        }
+
+        # Process each result and categorize by type
+        for result in results:
+            result_data = result.get("result")
+            task_id = result.get("task_id", "unknown")
+            description = result.get("description", "")
+
+            # Skip empty results
+            if result_data is None:
+                continue
+
+            self._categorize_result(merged_data, result_data, task_id, description)
+
+        # Clean up empty sections and join text entries
+        self._clean_up_merged_data(merged_data)
+
+        return Result.success(
+            data=merged_data,
+            message="Successfully merged mixed result types",
+        )
+
+    def _categorize_result(
+        self,
+        merged_data: dict,
+        result_data: dict | str | list | None,
+        task_id: str,
+        description: str,
+    ) -> None:
+        """Categorize a result into the appropriate section of merged data.
+
+        Args:
+            merged_data: Dictionary to store categorized results
+            result_data: The result data to categorize
+            task_id: ID of the task
+            description: Description of the task
+
+        """
+        # Handle string results as text
+        if isinstance(result_data, str):
+            merged_data["text"].append(result_data)
+            return
+
+        # Handle dictionary results based on content
+        if isinstance(result_data, dict):
+            # Code results with file_path and code
+            if "code" in result_data and "file_path" in result_data:
+                file_path = result_data["file_path"]
+                merged_data["code"][file_path] = result_data["code"]
+                return
+
+            # Text results
+            if "text" in result_data:
+                merged_data["text"].append(result_data["text"])
+                return
+
+            # Other dictionary results go to json section
+            key = description if description else f"result_{task_id}"
+            if len(key) > DESCRIPTION_TRUNCATION_LENGTH:
+                key = key[:DESCRIPTION_TRUNCATION_LENGTH] + "..."
+
+            # Ensure key is unique
+            base_key = key
+            counter = 1
+            while key in merged_data["json"]:
+                key = f"{base_key}_{counter}"
+                counter += 1
+
+            merged_data["json"][key] = result_data
+            return
+
+        # Handle other types of results
+        merged_data["other"].append(
+            {
+                "task_id": task_id,
+                "description": description,
+                "data": result_data,
+            },
+        )
+
+    def _clean_up_merged_data(self, merged_data: dict) -> None:
+        """Clean up the merged data by removing empty sections and joining text.
+
+        Args:
+            merged_data: Dictionary containing categorized results
+
+        """
+        # Remove empty sections
+        for key in list(merged_data.keys()):
+            if not merged_data[key]:
+                del merged_data[key]
+            elif key == "text" and merged_data[key]:
+                # Join text entries for convenience
+                merged_data["text"] = "\n\n".join(merged_data["text"])
+
+    def _merge_data_results(self, results: list[dict]) -> Result:
+        """Merge structured data results.
+
+        This method is designed for merging results that contain structured data
+        with consistent schemas, attempting to combine them into a unified dataset.
+
+        Args:
+            results: List of task results to merge.
+
+        Returns:
+            Result containing the merged structured data.
+
+        """
+        # Determine if we're dealing with a list of items or individual records
+        list_results = []
+        record_results = {}
+
+        for result in results:
+            result_data = result.get("result")
+
+            # Skip empty results
+            if result_data is None:
+                continue
+
+            # Handle list results - collect items for concatenation
+            if isinstance(result_data, list):
+                list_results.extend(result_data)
+
+            # Handle dictionary results - collect as individual records
+            elif isinstance(result_data, dict):
+                task_id = result.get("task_id", f"record_{len(record_results)}")
+                record_results[task_id] = result_data
+
+        # Determine the appropriate merged structure
+        if list_results and not record_results:
+            # If we only have list results, return the combined list
+            return Result.success(
+                data=list_results,
+                message="Successfully merged list data results",
+            )
+        if record_results and not list_results:
+            # If we only have record results, return the dictionary of records
+            return Result.success(
+                data=record_results,
+                message="Successfully merged record data results",
+            )
+        # If we have both or neither, return a structured combination
+        return Result.success(
+            data={
+                "items": list_results,
+                "records": record_results,
+            },
+            message="Successfully merged structured data results",
         )
 
     def track_completion_status(self, parent_agent_id: str, task_ids: list[str] | None = None) -> Result:

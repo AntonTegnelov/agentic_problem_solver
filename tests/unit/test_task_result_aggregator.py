@@ -156,6 +156,154 @@ class TestTaskResultAggregator:
         assert result.data["code_sections"]["file1.py"] == "def func1():\n    pass"
         assert result.data["code_sections"]["file2.py"] == "def func2():\n    pass"
 
+    def test_merge_json_results(self) -> None:
+        """Test merge_results with json strategy."""
+        results = [
+            {
+                "task_id": "task1",
+                "description": "Task 1",
+                "result": {"key1": "value1", "nested": {"subkey": "subvalue"}},
+            },
+            {
+                "task_id": "task2",
+                "description": "Task 2",
+                "result": {"key2": "value2", "list": [1, 2, 3]},
+            },
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="json")
+
+        assert result.success
+        assert result.message == "Successfully merged JSON results"
+        assert "Task 1" in result.data
+        assert "Task 2" in result.data
+        assert result.data["Task 1"]["key1"] == "value1"
+        assert result.data["Task 1"]["nested"]["subkey"] == "subvalue"
+        assert result.data["Task 2"]["key2"] == "value2"
+        assert result.data["Task 2"]["list"] == [1, 2, 3]
+
+    def test_merge_json_results_with_long_descriptions(self) -> None:
+        """Test merge_results with json strategy and long descriptions."""
+        long_description = "This is a very long description that should be truncated " * 5
+        results = [
+            {
+                "task_id": "task1",
+                "description": long_description,
+                "result": {"key": "value"},
+            },
+            {
+                "task_id": "task2",
+                "description": long_description,
+                "result": {"another_key": "another_value"},
+            },
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="json")
+
+        assert result.success
+        # Check that keys were truncated and made unique
+        assert any(key.endswith("...") for key in result.data)
+        assert len(result.data) == 2
+        # Verify the content is preserved
+        assert any("key" in data for data in result.data.values())
+        assert any("another_key" in data for data in result.data.values())
+
+    def test_merge_mixed_results(self) -> None:
+        """Test merge_results with mixed strategy."""
+        results = [
+            {"task_id": "task1", "description": "Text task", "result": "Plain text result"},
+            {
+                "task_id": "task2",
+                "description": "Code task",
+                "result": {"code": "def func():\n    pass", "file_path": "file.py"},
+            },
+            {"task_id": "task3", "description": "JSON task", "result": {"data": {"key": "value"}}},
+            {"task_id": "task4", "description": "Text in dict", "result": {"text": "Text in dictionary"}},
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="mixed")
+
+        assert result.success
+        assert result.message == "Successfully merged mixed result types"
+
+        # Check text section
+        assert "text" in result.data
+        assert "Plain text result" in result.data["text"]
+        assert "Text in dictionary" in result.data["text"]
+
+        # Check code section
+        assert "code" in result.data
+        assert "file.py" in result.data["code"]
+        assert result.data["code"]["file.py"] == "def func():\n    pass"
+
+        # Check json section
+        assert "json" in result.data
+        assert "JSON task" in result.data["json"] or any("data" in item for item in result.data["json"].values())
+
+    def test_merge_mixed_results_empty_sections(self) -> None:
+        """Test merge_results with mixed strategy and some empty sections."""
+        results = [
+            {"task_id": "task1", "description": "Text task", "result": "Plain text result"},
+            {"task_id": "task2", "description": "Another text task", "result": "Another text result"},
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="mixed")
+
+        assert result.success
+        assert "text" in result.data
+        assert "Plain text result" in result.data["text"]
+        assert "Another text result" in result.data["text"]
+        # Empty sections should be removed
+        assert "code" not in result.data
+        assert "json" not in result.data
+        assert "other" not in result.data
+
+    def test_merge_data_results_lists(self) -> None:
+        """Test merge_results with data strategy and list results."""
+        results = [
+            {"task_id": "task1", "result": [1, 2, 3]},
+            {"task_id": "task2", "result": [4, 5, 6]},
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="data")
+
+        assert result.success
+        assert result.message == "Successfully merged list data results"
+        assert result.data == [1, 2, 3, 4, 5, 6]
+
+    def test_merge_data_results_records(self) -> None:
+        """Test merge_results with data strategy and record results."""
+        results = [
+            {"task_id": "task1", "result": {"name": "Item 1", "value": 10}},
+            {"task_id": "task2", "result": {"name": "Item 2", "value": 20}},
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="data")
+
+        assert result.success
+        assert result.message == "Successfully merged record data results"
+        assert "task1" in result.data
+        assert "task2" in result.data
+        assert result.data["task1"]["name"] == "Item 1"
+        assert result.data["task2"]["name"] == "Item 2"
+
+    def test_merge_data_results_mixed(self) -> None:
+        """Test merge_results with data strategy and mixed data types."""
+        results = [
+            {"task_id": "task1", "result": [1, 2, 3]},
+            {"task_id": "task2", "result": {"name": "Item", "value": 10}},
+        ]
+
+        result = self.aggregator.merge_results(results, result_type="data")
+
+        assert result.success
+        assert result.message == "Successfully merged structured data results"
+        assert "items" in result.data
+        assert "records" in result.data
+        assert result.data["items"] == [1, 2, 3]
+        assert "task2" in result.data["records"]
+        assert result.data["records"]["task2"]["name"] == "Item"
+
     def test_merge_results_exception(self) -> None:
         """Test merge_results with an exception."""
         with patch.object(self.aggregator, "_merge_default_results", side_effect=ValueError("Test error")):

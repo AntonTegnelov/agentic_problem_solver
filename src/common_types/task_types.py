@@ -75,12 +75,14 @@ class ParallelizationStrategy(str, Enum):
     - PARALLEL_ALL: Execute all subtasks in parallel
     - PARALLEL_INDEPENDENT: Execute only independent subtasks in parallel
     - PARALLEL_GROUPS: Execute groups of related subtasks in parallel
+    - PARALLEL_DEPENDENCIES: Execute subtasks based on dependencies
     """
 
     SEQUENTIAL = "sequential"
     PARALLEL_ALL = "parallel_all"
     PARALLEL_INDEPENDENT = "parallel_independent"
     PARALLEL_GROUPS = "parallel_groups"
+    PARALLEL_DEPENDENCIES = "parallel_dependencies"
 
 
 @dataclass
@@ -104,7 +106,9 @@ class ParallelizationGroup:
 
     group_id: UUID = field(default_factory=uuid4)
     task_ids: list[UUID] = field(default_factory=list)
+    task_indices: list[int] = field(default_factory=list)
     description: str = ""
+    name: str = ""
     priority: TaskPriority = TaskPriority.MEDIUM
 
 

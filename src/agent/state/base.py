@@ -1194,6 +1194,420 @@ class AgentState:
                     task.metadata["blockers"]["last_updated"] = datetime.now(UTC).isoformat()
                     self.update_task(task)
 
+    def detect_and_resolve_blocking_tasks(self) -> dict[str, Any]:
+        """Detect and attempt to resolve blocking tasks.
+
+        This method identifies tasks that are blocked, analyzes the blockers,
+        and attempts to resolve the blocking situation by suggesting alternative
+        execution paths, detecting circular dependencies, and providing detailed
+        diagnostics.
+
+        Returns:
+            Dictionary with information about blocked tasks and resolution actions:
+            - blocked_tasks: List of blocked task IDs
+            - circular_dependencies: List of circular dependency chains detected
+            - resolution_actions: List of suggested resolution actions
+            - unresolvable_tasks: List of tasks that cannot be resolved automatically
+            - critical_path_blockers: List of blockers on the critical path
+
+        """
+        tasks = self.get_tasks()
+        blocked_tasks = []
+        circular_dependencies = []
+        resolution_actions = []
+        unresolvable_tasks = []
+        critical_path_blockers = []
+
+        # First, ensure blocker information is up-to-date
+        self.track_blockers_and_dependencies()
+
+        # Identify all blocked tasks
+        for task_dict in tasks:
+            task_id = uuid.UUID(task_dict["task_id"])
+            task = self.get_task_by_id(task_id)
+
+            if task and task.status == TaskStatus.BLOCKED:
+                blocked_tasks.append(str(task_id))
+
+                # Check for circular dependencies
+                circular_deps = self._detect_circular_dependencies(task_id)
+                if circular_deps:
+                    circular_dependencies.append(circular_deps)
+
+                    # Add resolution action for circular dependency
+                    resolution_action = {
+                        "task_id": str(task_id),
+                        "action_type": "BREAK_CIRCULAR_DEPENDENCY",
+                        "description": f"Break circular dependency chain: {' -> '.join(circular_deps)}",
+                        "suggested_changes": [
+                            {
+                                "dependency_to_modify": circular_deps[0],
+                                "action": "MAKE_NON_BLOCKING",
+                                "reason": "Part of circular dependency chain",
+                            },
+                        ],
+                    }
+                    resolution_actions.append(resolution_action)
+
+                    # Update task metadata with circular dependency information
+                    if "resolution_suggestions" not in task.metadata:
+                        task.metadata["resolution_suggestions"] = {}
+
+                    task.metadata["resolution_suggestions"]["circular_dependency"] = {
+                        "detected_at": datetime.now(UTC).isoformat(),
+                        "dependency_chain": circular_deps,
+                        "suggested_action": "Break circular dependency by making one of the dependencies non-blocking",
+                    }
+                    self.update_task(task)
+                    continue  # Skip further analysis for tasks with circular dependencies
+
+                # Analyze blockers to determine if they can be resolved
+                blockers = task.metadata.get("blockers", {}).get("blocking_dependencies", [])
+                if not blockers:
+                    # No blockers found despite task being blocked - this is an inconsistency
+                    resolution_action = {
+                        "task_id": str(task_id),
+                        "action_type": "FIX_INCONSISTENCY",
+                        "description": "Task is marked as blocked but no blocking dependencies were found",
+                        "suggested_changes": [
+                            {
+                                "action": "UPDATE_STATUS",
+                                "new_status": "PENDING",
+                                "reason": "No actual blockers found",
+                            },
+                        ],
+                    }
+                    resolution_actions.append(resolution_action)
+
+                    # Update task status to pending
+                    task.status = TaskStatus.PENDING
+                    if "resolution_suggestions" not in task.metadata:
+                        task.metadata["resolution_suggestions"] = {}
+
+                    task.metadata["resolution_suggestions"]["status_inconsistency"] = {
+                        "detected_at": datetime.now(UTC).isoformat(),
+                        "issue": "Task marked as blocked but no blocking dependencies found",
+                        "action_taken": "Updated status to PENDING",
+                    }
+                    self.update_task(task)
+                    continue
+
+                # Check if any blockers are failed tasks
+                failed_blockers = []
+                stalled_blockers = []
+                in_progress_blockers = []
+                pending_blockers = []
+
+                for blocker in blockers:
+                    blocker_id = uuid.UUID(blocker["task_id"])
+                    blocker_task = self.get_task_by_id(blocker_id)
+
+                    if not blocker_task:
+                        # Blocker task doesn't exist - this is an error
+                        failed_blockers.append(
+                            {
+                                "task_id": blocker["task_id"],
+                                "description": blocker["description"],
+                                "issue": "Task not found",
+                            },
+                        )
+                    elif blocker_task.status == TaskStatus.FAILED:
+                        failed_blockers.append(
+                            {
+                                "task_id": blocker["task_id"],
+                                "description": blocker["description"],
+                                "error": blocker_task.error,
+                            },
+                        )
+                    elif blocker_task.status == TaskStatus.IN_PROGRESS:
+                        # Check if the blocker is stalled
+                        if blocker_task.metadata.get("stalled", {}).get("is_stalled", False):
+                            stalled_blockers.append(
+                                {
+                                    "task_id": blocker["task_id"],
+                                    "description": blocker["description"],
+                                    "hours_stalled": blocker_task.metadata["stalled"].get("hours_stalled", 0),
+                                },
+                            )
+                        else:
+                            in_progress_blockers.append(
+                                {
+                                    "task_id": blocker["task_id"],
+                                    "description": blocker["description"],
+                                    "progress": blocker_task.metadata.get("progress_tracking", {}).get(
+                                        "progress_percentage",
+                                        0,
+                                    ),
+                                },
+                            )
+                    elif blocker_task.status == TaskStatus.PENDING:
+                        pending_blockers.append(
+                            {
+                                "task_id": blocker["task_id"],
+                                "description": blocker["description"],
+                            },
+                        )
+
+                # Determine if this task is on the critical path
+                is_on_critical_path = self._is_task_on_critical_path(task_id)
+
+                # Create resolution suggestions based on blocker analysis
+                if failed_blockers:
+                    # If there are failed blockers, suggest making them non-blocking or retrying
+                    resolution_action = {
+                        "task_id": str(task_id),
+                        "action_type": "HANDLE_FAILED_BLOCKERS",
+                        "description": f"Task has {len(failed_blockers)} failed blocking dependencies",
+                        "suggested_changes": [
+                            {
+                                "dependency_id": blocker["task_id"],
+                                "action": "MAKE_NON_BLOCKING" if not is_on_critical_path else "RETRY",
+                                "reason": f"Blocker failed: {blocker.get('error', 'Unknown error')}",
+                            }
+                            for blocker in failed_blockers
+                        ],
+                    }
+                    resolution_actions.append(resolution_action)
+
+                    # Update task metadata with failed blocker information
+                    if "resolution_suggestions" not in task.metadata:
+                        task.metadata["resolution_suggestions"] = {}
+
+                    task.metadata["resolution_suggestions"]["failed_blockers"] = {
+                        "detected_at": datetime.now(UTC).isoformat(),
+                        "blockers": failed_blockers,
+                        "suggested_action": "Make failed dependencies non-blocking or retry them",
+                    }
+                    self.update_task(task)
+
+                    # If this task is on the critical path, add it to critical path blockers
+                    if is_on_critical_path:
+                        critical_path_blockers.append(
+                            {
+                                "task_id": str(task_id),
+                                "description": task.description,
+                                "failed_blockers": failed_blockers,
+                            },
+                        )
+
+                if stalled_blockers:
+                    # If there are stalled blockers, suggest intervention
+                    resolution_action = {
+                        "task_id": str(task_id),
+                        "action_type": "HANDLE_STALLED_BLOCKERS",
+                        "description": f"Task has {len(stalled_blockers)} stalled blocking dependencies",
+                        "suggested_changes": [
+                            {
+                                "dependency_id": blocker["task_id"],
+                                "action": "INTERVENTION_NEEDED",
+                                "reason": f"Blocker stalled for {blocker.get('hours_stalled', 0):.1f} hours",
+                            }
+                            for blocker in stalled_blockers
+                        ],
+                    }
+                    resolution_actions.append(resolution_action)
+
+                    # Update task metadata with stalled blocker information
+                    if "resolution_suggestions" not in task.metadata:
+                        task.metadata["resolution_suggestions"] = {}
+
+                    task.metadata["resolution_suggestions"]["stalled_blockers"] = {
+                        "detected_at": datetime.now(UTC).isoformat(),
+                        "blockers": stalled_blockers,
+                        "suggested_action": "Intervention needed for stalled dependencies",
+                    }
+                    self.update_task(task)
+
+                    # If this task is on the critical path, add it to critical path blockers
+                    if is_on_critical_path:
+                        critical_path_blockers.append(
+                            {
+                                "task_id": str(task_id),
+                                "description": task.description,
+                                "stalled_blockers": stalled_blockers,
+                            },
+                        )
+
+                # If all blockers are pending, suggest prioritization
+                if pending_blockers and not failed_blockers and not stalled_blockers and not in_progress_blockers:
+                    resolution_action = {
+                        "task_id": str(task_id),
+                        "action_type": "PRIORITIZE_BLOCKERS",
+                        "description": f"Task has {len(pending_blockers)} pending blocking dependencies",
+                        "suggested_changes": [
+                            {
+                                "dependency_id": blocker["task_id"],
+                                "action": "INCREASE_PRIORITY",
+                                "reason": "Blocking a dependent task",
+                            }
+                            for blocker in pending_blockers
+                        ],
+                    }
+                    resolution_actions.append(resolution_action)
+
+                    # Update task metadata with pending blocker information
+                    if "resolution_suggestions" not in task.metadata:
+                        task.metadata["resolution_suggestions"] = {}
+
+                    task.metadata["resolution_suggestions"]["pending_blockers"] = {
+                        "detected_at": datetime.now(UTC).isoformat(),
+                        "blockers": pending_blockers,
+                        "suggested_action": "Increase priority of pending dependencies",
+                    }
+                    self.update_task(task)
+
+                # If no resolution was found, mark as unresolvable
+                if not resolution_actions:
+                    unresolvable_tasks.append(
+                        {
+                            "task_id": str(task_id),
+                            "description": task.description,
+                            "blockers": blockers,
+                        },
+                    )
+
+        # Return summary of blocked tasks and resolution actions
+        return {
+            "blocked_tasks": blocked_tasks,
+            "circular_dependencies": circular_dependencies,
+            "resolution_actions": resolution_actions,
+            "unresolvable_tasks": unresolvable_tasks,
+            "critical_path_blockers": critical_path_blockers,
+        }
+
+    def _detect_circular_dependencies(
+        self,
+        task_id: uuid.UUID,
+        visited: set[str] | None = None,
+        path: list[str] | None = None,
+    ) -> list[str] | None:
+        """Detect circular dependencies starting from the given task.
+
+        Args:
+            task_id: Starting task ID
+            visited: Set of visited task IDs (for recursion)
+            path: Current dependency path (for recursion)
+
+        Returns:
+            List of task IDs forming a circular dependency chain, or None if no circular dependency is found
+
+        """
+        if visited is None:
+            visited = set()
+        if path is None:
+            path = []
+
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return None
+
+        task_id_str = str(task_id)
+
+        # If we've seen this task before in the current path, we have a circular dependency
+        if task_id_str in path:
+            # Return the circular path (from the first occurrence of this task to the end)
+            return path[path.index(task_id_str) :] + [task_id_str]
+
+        # If we've visited this task before but it's not in the current path, no need to check again
+        if task_id_str in visited:
+            return None
+
+        # Add this task to visited and path
+        visited.add(task_id_str)
+        path.append(task_id_str)
+
+        # Check all dependencies
+        for dependency in task.dependencies:
+            if dependency.is_blocking:
+                circular_path = self._detect_circular_dependencies(dependency.task_id, visited, path.copy())
+                if circular_path:
+                    return circular_path
+
+        return None
+
+    def _is_task_on_critical_path(self, task_id: uuid.UUID) -> bool:
+        """Determine if a task is on the critical path.
+
+        A task is on the critical path if it has dependents that are blocked by it,
+        and those dependents are either:
+        1. Root tasks (tasks with no parent)
+        2. Tasks with high priority
+        3. Tasks that themselves have many dependents
+
+        Args:
+            task_id: Task ID to check
+
+        Returns:
+            True if the task is on the critical path, False otherwise
+
+        """
+        tasks = self.get_tasks()
+        task_id_str = str(task_id)
+
+        # Find all tasks that depend on this task
+        dependent_tasks = []
+        for task_dict in tasks:
+            for dep in task_dict.get("dependencies", []):
+                if dep.get("task_id") == task_id_str and dep.get("is_blocking", True):
+                    dependent_tasks.append(task_dict)
+
+        if not dependent_tasks:
+            return False  # No dependents, not on critical path
+
+        # Check if any dependent is a root task (no parent)
+        for dependent in dependent_tasks:
+            if not dependent.get("parent_task_id"):
+                return True  # Dependent is a root task, so this task is on critical path
+
+        # Check if any dependent has high priority
+        for dependent in dependent_tasks:
+            priority = dependent.get("priority")
+            if priority in [TaskPriority.HIGH.value, TaskPriority.CRITICAL.value]:
+                return True  # Dependent has high priority, so this task is on critical path
+
+        # Check if any dependent has many dependents itself (recursive check with depth limit)
+        for dependent in dependent_tasks:
+            dependent_id = uuid.UUID(dependent["task_id"])
+            if self._count_recursive_dependents(dependent_id, depth=0, max_depth=2) >= 3:
+                return True  # Dependent has many dependents, so this task is on critical path
+
+        return False
+
+    def _count_recursive_dependents(self, task_id: uuid.UUID, depth: int = 0, max_depth: int = 2) -> int:
+        """Count the number of tasks that depend on this task, recursively.
+
+        Args:
+            task_id: Task ID to check
+            depth: Current recursion depth
+            max_depth: Maximum recursion depth
+
+        Returns:
+            Number of dependent tasks
+
+        """
+        if depth >= max_depth:
+            return 0
+
+        tasks = self.get_tasks()
+        task_id_str = str(task_id)
+
+        # Find all tasks that depend on this task
+        dependent_tasks = []
+        for task_dict in tasks:
+            for dep in task_dict.get("dependencies", []):
+                if dep.get("task_id") == task_id_str and dep.get("is_blocking", True):
+                    dependent_tasks.append(task_dict)
+
+        # Count direct dependents
+        count = len(dependent_tasks)
+
+        # Add recursive dependents
+        for dependent in dependent_tasks:
+            dependent_id = uuid.UUID(dependent["task_id"])
+            count += self._count_recursive_dependents(dependent_id, depth + 1, max_depth)
+
+        return count
+
     def recalculate_all_task_progress(self) -> None:
         """Recalculate progress for all tasks in the hierarchy.
 
@@ -1444,9 +1858,7 @@ class InMemoryStateManager(StateManager):
 
         # Generate path if not provided
         if path is None:
-            state_dir = Path("./state")
-            state_dir.mkdir(exist_ok=True)
-            path = str(state_dir / f"{self._state.agent_id}.json")
+            path = str(Path("./state") / f"{self._state.agent_id}.json")
 
         # Convert state to dict
         state_dict = self._state.to_dict()

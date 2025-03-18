@@ -170,7 +170,7 @@
     - [x] Add synchronization mechanisms for dependent tasks
   - [ ] Update task progress tracking
     - [x] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
-    - [ ] Add blocking task detection and resolution
+    - [x] Add blocking task detection and resolution
     - [ ] Implement deadlock prevention mechanisms
   - [ ] Add logging and observability
     - [ ] Create detailed delegation logging in `src/utils/log_utils.py`

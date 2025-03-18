@@ -424,12 +424,20 @@ class TestPlannerAgent:
     async def test_delegate_to_child(self, planner_agent: PlannerAgent) -> None:
         """Test delegate_to_child method."""
         # Add a child
-        planner_agent.add_child("executor1")
+        child_id = "executor1"
+        planner_agent.add_child(child_id)
+
+        # Create a mock for the child agent
+        mock_child_agent = MagicMock()
+        mock_child_agent.process = AsyncMock(return_value=Result.success("Task completed by executor1"))
+
+        # Register the mock child agent in the state
+        planner_agent.state.register_agent(child_id, mock_child_agent)
 
         # Delegate to existing child
-        result = await planner_agent.delegate_to_child("executor1", "Implement this function")
+        result = await planner_agent.delegate_to_child(child_id, "Implement this function")
         assert result.success is True
-        assert "Task delegated to executor1" in result.data
+        assert "Task completed by executor1" in result.data
 
     @pytest.mark.asyncio
     async def test_collect_results_from_children(self, planner_agent: PlannerAgent) -> None:
@@ -463,8 +471,33 @@ class TestPlannerAgent:
             result = await planner_agent.delegate_to_planner("Complex sub-component task")
 
             # Verify the result
-            assert result.success
+            assert result.success is True
             assert "Task delegated to sub-planner" in result.data
+
+    @pytest.mark.asyncio
+    async def test_process_tasks_parallel(self, planner_agent: PlannerAgent) -> None:
+        """Test processing tasks in parallel."""
+        # Create test tasks
+        tasks = [
+            Task(description="Task 1: Implement login functionality"),
+            Task(description="Task 2: Create user profile page"),
+            Task(description="Task 3: Add password reset feature"),
+        ]
+
+        # Mock the _delegate_single_task method to return success
+        with patch.object(
+            planner_agent,
+            "_delegate_single_task",
+            new_callable=AsyncMock,
+            return_value=("Task delegated successfully", False, ""),
+        ):
+            # Test parallel processing
+            result = await planner_agent.delegate_tasks_parallel(tasks)
+
+            # Verify the result
+            assert result.success is True
+            # Task data should be in the result
+            assert "Task delegated successfully" in str(result.data)
 
     def test_validate_provider(self) -> None:
         """Test provider validation."""
