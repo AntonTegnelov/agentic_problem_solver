@@ -52,7 +52,6 @@ class GeminiProvider(BaseLLMProvider):
     """
 
     _model: Any | None = None
-    _config: GeminiConfig | None = None
     _default_model: ClassVar[str] = "gemini-2.0-flash-lite"
     is_initialized: bool = False
 
@@ -63,9 +62,8 @@ class GeminiProvider(BaseLLMProvider):
             config: Provider configuration.
 
         """
-        # Store the config directly
+        # Store the config
         self.config = config
-        self._config = config
         # Validate the config
         self._validate_config()
         # Initialize the provider
@@ -108,16 +106,16 @@ class GeminiProvider(BaseLLMProvider):
 
     def _initialize(self) -> None:
         """Initialize provider."""
-        if not self._config:
+        if not self.config:
             msg = "Provider not configured"
             raise ConfigError(msg)
 
-        if not self._config.api_key:
+        if not self.config.api_key:
             msg = "API key not found"
             raise ConfigError(msg)
 
-        genai.configure(api_key=self._config.api_key)
-        model_name = self._config.model or self._default_model
+        genai.configure(api_key=self.config.api_key)
+        model_name = self.config.model or self._default_model
 
         # Validate model name against the models in the provider version
         valid_models = list(ProviderVersion.GEMINI_V1.supported_models.keys())

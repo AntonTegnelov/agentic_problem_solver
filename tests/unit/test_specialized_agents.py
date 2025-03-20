@@ -10,7 +10,7 @@ from langchain_core.messages.base import BaseMessage
 from src.agent.agent_types.architect import ArchitectAgent
 from src.agent.agent_types.executor import ExecutorAgent
 from src.agent.agent_types.planner import PlannerAgent
-from src.agent.state.base import AgentState
+from src.agent.state.base import AgentState, StateManager
 from src.common_types.enums import ExecutionStage, VerificationStatus
 from src.common_types.message_types import HumanMessage
 from src.common_types.result_types import Result
@@ -328,13 +328,15 @@ class TestPlannerAgent:
         # Test with custom state
         custom_state = AgentState(agent_id="custom_agent")
         agent = PlannerAgent(state_manager=custom_state)
-        assert agent.state == custom_state
+        assert agent.state.get_state() == custom_state
 
         # Test with state manager
-        state_manager = MagicMock()
-        state_manager.get_state.return_value = AgentState(agent_id="managed_agent")
+        state_manager = MagicMock(spec=StateManager)
+        state_manager.register_agent = MagicMock()
+        mock_state = AgentState(agent_id="managed_agent")
+        state_manager.get_state.return_value = mock_state
         agent = PlannerAgent(state_manager=state_manager)
-        assert agent.state == state_manager.get_state.return_value
+        assert agent.state.get_state() == mock_state
 
     def test_get_agent_id(self, planner_agent: PlannerAgent) -> None:
         """Test get_agent_id method."""
@@ -503,6 +505,9 @@ class TestPlannerAgent:
         """Test provider validation."""
         # Create a new agent with no provider for testing
         agent = PlannerAgent()
+
+        # Explicitly set provider to None to ensure the test works
+        agent.provider = None
 
         # Should raise ValueError
         with pytest.raises(ValueError, match="Provider not initialized"):

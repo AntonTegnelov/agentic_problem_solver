@@ -1,9 +1,10 @@
 """LLM provider interface definitions."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import AsyncGenerator
 
     from src.agent.agent_types.agent_types import Message
@@ -30,7 +31,7 @@ class LLMProvider(Protocol):
             Generated response.
 
         """
-        ...
+        ...  # pragma: no cover
 
     async def generate_stream(
         self,
@@ -64,7 +65,7 @@ class LLMProvider(Protocol):
             Token count.
 
         """
-        ...
+        ...  # pragma: no cover
 
     def validate_config(self, config: GenerationConfig) -> None:
         """Validate configuration.
@@ -76,7 +77,7 @@ class LLMProvider(Protocol):
             ValueError: If configuration is invalid.
 
         """
-        ...
+        ...  # pragma: no cover
 
     def get_config(self) -> GenerationConfig:
         """Get current configuration.
@@ -85,7 +86,7 @@ class LLMProvider(Protocol):
             Current configuration.
 
         """
-        ...
+        ...  # pragma: no cover
 
     def update_config(self, config: GenerationConfig) -> None:
         """Update configuration.
@@ -94,4 +95,4 @@ class LLMProvider(Protocol):
             config: Configuration updates.
 
         """
-        ...
+        ...  # pragma: no cover

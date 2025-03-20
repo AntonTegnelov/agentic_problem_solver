@@ -39,7 +39,7 @@ def planner_agent() -> PlannerAgent:
 
 
 @pytest.mark.asyncio
-async def test_architect_configure_parallel_delegation_basic(architect_agent) -> None:
+async def test_architect_configure_parallel_delegation_basic(architect_agent: ArchitectAgent) -> None:
     """Test basic configuration of parallel delegation in ArchitectAgent."""
     # Create test tasks
     tasks = [
@@ -62,7 +62,7 @@ async def test_architect_configure_parallel_delegation_basic(architect_agent) ->
 
 
 @pytest.mark.asyncio
-async def test_planner_configure_parallel_delegation_basic(planner_agent) -> None:
+async def test_planner_configure_parallel_delegation_basic(planner_agent: PlannerAgent) -> None:
     """Test basic configuration of parallel delegation in PlannerAgent."""
     # Create test tasks
     tasks = [
@@ -85,7 +85,7 @@ async def test_planner_configure_parallel_delegation_basic(planner_agent) -> Non
 
 
 @pytest.mark.asyncio
-async def test_architect_configure_parallel_delegation_with_parent_task(architect_agent) -> None:
+async def test_architect_configure_parallel_delegation_with_parent_task(architect_agent: ArchitectAgent) -> None:
     """Test configuration of parallel delegation with parent task in ArchitectAgent."""
     # Create parent task
     parent_task_id = uuid4()
@@ -111,7 +111,7 @@ async def test_architect_configure_parallel_delegation_with_parent_task(architec
 
 
 @pytest.mark.asyncio
-async def test_planner_configure_parallel_delegation_with_parent_task(planner_agent) -> None:
+async def test_planner_configure_parallel_delegation_with_parent_task(planner_agent: PlannerAgent) -> None:
     """Test configuration of parallel delegation with parent task in PlannerAgent."""
     # Create parent task
     parent_task_id = uuid4()
@@ -139,7 +139,7 @@ async def test_planner_configure_parallel_delegation_with_parent_task(planner_ag
 
 
 @pytest.mark.asyncio
-async def test_architect_configure_parallel_delegation_with_groups(architect_agent) -> None:
+async def test_architect_configure_parallel_delegation_with_groups(architect_agent: ArchitectAgent) -> None:
     """Test configuration of parallel delegation with groups in ArchitectAgent."""
     # Create test tasks
     tasks = [
@@ -173,7 +173,7 @@ async def test_architect_configure_parallel_delegation_with_groups(architect_age
 
 
 @pytest.mark.asyncio
-async def test_planner_configure_parallel_delegation_with_groups(planner_agent) -> None:
+async def test_planner_configure_parallel_delegation_with_groups(planner_agent: PlannerAgent) -> None:
     """Test configuration of parallel delegation with groups in PlannerAgent."""
     # Create test tasks
     tasks = [
@@ -207,7 +207,7 @@ async def test_planner_configure_parallel_delegation_with_groups(planner_agent) 
 
 
 @pytest.mark.asyncio
-async def test_architect_configure_parallel_delegation_empty_tasks(architect_agent) -> None:
+async def test_architect_configure_parallel_delegation_empty_tasks(architect_agent: ArchitectAgent) -> None:
     """Test configuring parallel delegation with empty tasks in ArchitectAgent."""
     # Test with empty tasks
     tasks = []
@@ -223,7 +223,7 @@ async def test_architect_configure_parallel_delegation_empty_tasks(architect_age
 
 
 @pytest.mark.asyncio
-async def test_planner_configure_parallel_delegation_empty_tasks(planner_agent) -> None:
+async def test_planner_configure_parallel_delegation_empty_tasks(planner_agent: PlannerAgent) -> None:
     """Test configuring parallel delegation with empty tasks in PlannerAgent."""
     # Test with empty tasks
     tasks = []
@@ -240,7 +240,7 @@ async def test_planner_configure_parallel_delegation_empty_tasks(planner_agent) 
 
 
 @pytest.mark.asyncio
-async def test_architect_configure_parallel_delegation_default_groups(architect_agent) -> None:
+async def test_architect_configure_parallel_delegation_default_groups(architect_agent: ArchitectAgent) -> None:
     """Test configuration of parallel delegation with default groups in ArchitectAgent."""
     # Create test tasks
     tasks = [
@@ -265,7 +265,7 @@ async def test_architect_configure_parallel_delegation_default_groups(architect_
 
 
 @pytest.mark.asyncio
-async def test_planner_configure_parallel_delegation_default_groups(planner_agent) -> None:
+async def test_planner_configure_parallel_delegation_default_groups(planner_agent: PlannerAgent) -> None:
     """Test configuration of parallel delegation with default groups in PlannerAgent."""
     # Create test tasks
     tasks = [
@@ -290,11 +290,11 @@ async def test_planner_configure_parallel_delegation_default_groups(planner_agen
 
 
 @pytest.mark.asyncio
-async def test_planner_process_tasks_parallel_success(planner_agent) -> None:
+async def test_planner_process_tasks_parallel_success(planner_agent: PlannerAgent) -> None:
     """Test successful parallel task processing in PlannerAgent."""
 
     # Mock the _delegate_single_task method to return successful results
-    async def mock_delegate_success(task):
+    async def mock_delegate_success(task: Task) -> Result:
         return Result.success(f"Result for {task}")
 
     planner_agent._delegate_single_task = MagicMock(side_effect=mock_delegate_success)
@@ -314,11 +314,11 @@ async def test_planner_process_tasks_parallel_success(planner_agent) -> None:
 
 
 @pytest.mark.asyncio
-async def test_planner_process_tasks_parallel_mixed_results(planner_agent) -> None:
+async def test_planner_process_tasks_parallel_mixed_results(planner_agent: PlannerAgent) -> None:
     """Test parallel task processing with mixed success/failure results in PlannerAgent."""
 
     # Mock the _delegate_single_task method to return mixed results
-    async def mock_delegate_mixed(task):
+    async def mock_delegate_mixed(task: Task) -> tuple[str | None, bool, str]:
         if task.description == "Task 2":
             return None, True, f"Failed to process {task.description}"
         return f"Result for {task.description}", False, ""
@@ -339,11 +339,11 @@ async def test_planner_process_tasks_parallel_mixed_results(planner_agent) -> No
 
 
 @pytest.mark.asyncio
-async def test_planner_process_tasks_parallel_all_fail(planner_agent) -> None:
+async def test_planner_process_tasks_parallel_all_fail(planner_agent: PlannerAgent) -> None:
     """Test parallel task processing with all tasks failing in PlannerAgent."""
 
     # Mock the _delegate_single_task method to return failure results
-    async def mock_delegate_failure(task):
+    async def mock_delegate_failure(task: Task) -> Result:
         return Result.failure(f"Failed to process {task.description}")
 
     planner_agent._delegate_single_task = MagicMock(side_effect=mock_delegate_failure)
@@ -362,7 +362,7 @@ async def test_planner_process_tasks_parallel_all_fail(planner_agent) -> None:
 
 
 @pytest.mark.asyncio
-async def test_planner_process_tasks_parallel_empty(planner_agent) -> None:
+async def test_planner_process_tasks_parallel_empty(planner_agent: PlannerAgent) -> None:
     """Test parallel task processing with empty task list in PlannerAgent."""
     # Call the method with empty list
     result = await planner_agent.delegate_tasks_parallel([])
@@ -373,11 +373,11 @@ async def test_planner_process_tasks_parallel_empty(planner_agent) -> None:
 
 
 @pytest.mark.asyncio
-async def test_planner_process_tasks_parallel_exception(planner_agent) -> None:
+async def test_planner_process_tasks_parallel_exception(planner_agent: PlannerAgent) -> None:
     """Test parallel task processing with exception in PlannerAgent."""
 
     # Mock the _delegate_single_task method to raise an exception
-    async def mock_delegate_exception(task) -> Never:
+    async def mock_delegate_exception(_: Task) -> Never:
         msg = "Test exception"
         raise ValueError(msg)
 
@@ -395,7 +395,7 @@ async def test_planner_process_tasks_parallel_exception(planner_agent) -> None:
 
 
 @pytest.mark.asyncio
-async def test_architect_process_tasks_with_retry_parallel_all(architect_agent) -> None:
+async def test_architect_process_tasks_with_retry_parallel_all(architect_agent: ArchitectAgent) -> None:
     """Test processing tasks with retry using PARALLEL_ALL strategy."""
     # Create test tasks
     task1 = Task(description="Task 1")
@@ -421,12 +421,12 @@ async def test_architect_process_tasks_with_retry_parallel_all(architect_agent) 
     # First call fails for task1, second succeeds
     call_count = 0
 
-    async def mock_delegate_task(task):
+    async def mock_delegate_task(task: Task) -> tuple[str | None, bool, str]:
         nonlocal call_count
         if task == task1 and call_count == 0:
             call_count += 1
             return None, True, "Temporary error"
-        return "Success", False, ""
+        return f"Result for {task.description}", False, ""
 
     architect_agent._delegate_single_task = MagicMock(side_effect=mock_delegate_task)
 
@@ -444,7 +444,7 @@ async def test_architect_process_tasks_with_retry_parallel_all(architect_agent) 
 
 
 @pytest.mark.asyncio
-async def test_architect_process_tasks_with_retry_parallel_groups(architect_agent) -> None:
+async def test_architect_process_tasks_with_retry_parallel_groups(architect_agent: ArchitectAgent) -> None:
     """Test processing tasks with retry using PARALLEL_GROUPS strategy."""
     # Create test tasks
     task1 = Task(description="Task 1")
@@ -472,7 +472,7 @@ async def test_architect_process_tasks_with_retry_parallel_groups(architect_agen
     architect_agent.state.get_task_by_id.return_value = parent_task
 
     # Mock the _delegate_single_task method to return a coroutine
-    async def mock_delegate_single_task(task):
+    async def mock_delegate_single_task(_: Task) -> tuple[str, bool, str]:
         return "Success", False, ""
 
     original_delegate_single_task = architect_agent._delegate_single_task
@@ -491,7 +491,7 @@ async def test_architect_process_tasks_with_retry_parallel_groups(architect_agen
 
 
 @pytest.mark.asyncio
-async def test_architect_process_tasks_with_retry_parallel_independent(architect_agent) -> None:
+async def test_architect_process_tasks_with_retry_parallel_independent(architect_agent: ArchitectAgent) -> None:
     """Test processing tasks with retry using PARALLEL_INDEPENDENT strategy."""
     # Create test tasks
     task1 = Task(description="Task 1")
@@ -514,7 +514,7 @@ async def test_architect_process_tasks_with_retry_parallel_independent(architect
     architect_agent.state.get_task_by_id.return_value = parent_task
 
     # Mock the _delegate_single_task method to return a coroutine
-    async def mock_delegate_single_task(task):
+    async def mock_delegate_single_task(_: Task) -> tuple[str, bool, str]:
         return "Success", False, ""
 
     original_delegate_single_task = architect_agent._delegate_single_task
@@ -533,7 +533,7 @@ async def test_architect_process_tasks_with_retry_parallel_independent(architect
 
 
 @pytest.mark.asyncio
-async def test_architect_process_tasks_with_retry_with_errors(architect_agent) -> None:
+async def test_architect_process_tasks_with_retry_with_errors(architect_agent: ArchitectAgent) -> None:
     """Test processing tasks with retry with persistent errors."""
     # Create test tasks
     task1 = Task(description="Task 1")
@@ -543,10 +543,10 @@ async def test_architect_process_tasks_with_retry_with_errors(architect_agent) -
     # Mock the _delegate_single_task method to always fail for task2
     original_delegate_single_task = architect_agent._delegate_single_task
 
-    async def mock_delegate_task(task):
+    async def mock_delegate_task(task: Task) -> tuple[str | None, bool, str]:
         if task == task2:
             return None, True, "Persistent error"
-        return "Success", False, ""
+        return f"Result for {task.description}", False, ""
 
     architect_agent._delegate_single_task = MagicMock(side_effect=mock_delegate_task)
 
@@ -564,7 +564,7 @@ async def test_architect_process_tasks_with_retry_with_errors(architect_agent) -
 
 
 @pytest.mark.asyncio
-async def test_architect_process_tasks_with_retry_with_exception(architect_agent) -> None:
+async def test_architect_process_tasks_with_retry_with_exception(architect_agent: ArchitectAgent) -> None:
     """Test processing tasks with retry with an exception."""
     # Create test tasks
     task1 = Task(description="Task 1")
@@ -584,32 +584,32 @@ async def test_architect_process_tasks_with_retry_with_exception(architect_agent
     # Mock the state to return the parent task
     architect_agent.state.get_task_by_id.return_value = parent_task
 
-    # Mock the _handle_task_result method to capture errors
+    # Mock the _handle_task_result method
     original_handle_task_result = architect_agent._handle_task_result
 
     def mock_handle_task_result(
-        task,
-        task_result,
-        should_retry,
-        error,
-        results,
-        tasks_to_process,
-        errors,
-        retry_count,
-        max_retries,
+        task: Task,
+        _task_result: str | None,
+        _should_retry: bool,
+        error: str,
+        results: dict[str, str],
+        _tasks_to_process: list[Task],
+        errors: list[str],
+        _retry_count: int,
+        _max_retries: int,
     ) -> None:
         if task == task1:
-            results[str(task.task_id)] = task_result
+            results["Task 1"] = "Success"
         elif task == task2 and error:
             errors.append(error)
 
     architect_agent._handle_task_result = mock_handle_task_result
 
     # Mock the _delegate_single_task method to raise an exception for task2
-    async def mock_delegate_single_task(task):
+    async def mock_delegate_single_task(task: Task) -> tuple[str | None, bool, str]:
         if task == task2:
             return None, False, "Test exception"
-        return "Success", False, ""
+        return f"Result for {task.description}", False, ""
 
     original_delegate_single_task = architect_agent._delegate_single_task
     architect_agent._delegate_single_task = mock_delegate_single_task
@@ -620,9 +620,9 @@ async def test_architect_process_tasks_with_retry_with_exception(architect_agent
     # Verify results
     assert len(results) == 1
     assert len(errors) == 1
-    assert str(task1.task_id) in results
+    assert "Task 1" in results
     assert "Test exception" in errors[0]
 
-    # Restore original methods
-    architect_agent._delegate_single_task = original_delegate_single_task
+    # Restore the original methods
     architect_agent._handle_task_result = original_handle_task_result
+    architect_agent._delegate_single_task = original_delegate_single_task

@@ -94,37 +94,96 @@ def test_mock_agent_process() -> None:
 def test_mock_agent_process_stream() -> None:
     """Test MockAgent process_stream method."""
     agent = MockAgent(agent_id="test-agent", capabilities=["test"])
-    message = HumanMessage(content="test message")
+    message = create_human_message("test message")
 
-    # Test the async generator
-    async def test_stream() -> list[str]:
-        return [chunk async for chunk in agent.process_stream(message)]
+    # Test async stream processing
+    async def test_stream() -> None:
+        chunks = [chunk async for chunk in agent.process_stream(message)]
+        assert chunks == ["Mock result"]
+        assert message in agent.processed_messages
 
-    chunks = asyncio.run(test_stream())
-    assert chunks == ["Mock result"]
-    assert message in agent.processed_messages
+    asyncio.run(test_stream())
 
 
-def test_mock_agent_send_message() -> None:
-    """Test MockAgent send_message method."""
+def test_mock_agent_send_receive_message() -> None:
+    """Test MockAgent send_message and receive_message methods."""
     agent = MockAgent(agent_id="test-agent", capabilities=["test"])
-    message = HumanMessage(content="test message")
+    message = create_human_message("test message")
+
+    # Test send_message
     result = agent.send_message(message)
-    assert isinstance(result, Result)
     assert result.success
     assert result.data == "Mock result"
     assert message in agent.processed_messages
 
-
-def test_mock_agent_receive_message() -> None:
-    """Test MockAgent receive_message method."""
-    agent = MockAgent(agent_id="test-agent", capabilities=["test"])
-    message = HumanMessage(content="test message")
+    # Test receive_message
     result = agent.receive_message(message)
-    assert isinstance(result, Result)
     assert result.success
     assert result.data == "Mock result"
-    assert message in agent.processed_messages
+    assert len(agent.processed_messages) == 2  # Both send and receive add to processed_messages
+
+
+def test_mock_agent_hierarchy_operations() -> None:
+    """Test MockAgent hierarchy operations."""
+    parent = MockAgent(agent_id="parent", capabilities=["test"])
+    child1 = MockAgent(agent_id="child1", capabilities=["test"])
+    child2 = MockAgent(agent_id="child2", capabilities=["test"])
+
+    # Test parent-child relationships
+    child1.set_parent(parent.get_agent_id())
+    child2.set_parent(parent.get_agent_id())
+    parent.add_child(child1.get_agent_id())
+    parent.add_child(child2.get_agent_id())
+
+    assert child1.get_parent_id() == parent.get_agent_id()
+    assert child2.get_parent_id() == parent.get_agent_id()
+    assert set(parent.get_child_ids()) == {child1.get_agent_id(), child2.get_agent_id()}
+
+    # Test removing child
+    parent.remove_child(child1.get_agent_id())
+    assert parent.get_child_ids() == [child2.get_agent_id()]
+
+    # Test clearing parent
+    child2.clear_parent()
+    assert child2.get_parent_id() is None
+
+
+def test_mock_agent_delegation() -> None:
+    """Test MockAgent delegation operations."""
+    parent = MockAgent(agent_id="parent", capabilities=["test"])
+    child1 = MockAgent(agent_id="child1", capabilities=["test"])
+    child2 = MockAgent(agent_id="child2", capabilities=["test"])
+
+    # Setup parent-child relationships
+    parent.add_child(child1.get_agent_id())
+    parent.add_child(child2.get_agent_id())
+
+    # Test delegating to child
+    result = parent.delegate_to_child(child1.get_agent_id(), "test task")
+    assert result.success
+    assert result.data == "Mock result"
+
+    # Test collecting results from children
+    results = parent.collect_results_from_children()
+    assert isinstance(results, dict)
+    assert len(results) == 2  # Results from both children
+    for result in results.values():
+        assert result.success
+        assert result.data == "Mock result"
+
+
+def test_mock_agent_error_handling() -> None:
+    """Test MockAgent error handling."""
+    agent = MockAgent(agent_id="test-agent", capabilities=["test"])
+
+    # Test delegating to non-existent child
+    with pytest.raises(Exception):  # Should raise some form of error
+        agent.delegate_to_child("non-existent", "test task")
+
+    # Test collecting results with no children
+    results = agent.collect_results_from_children()
+    assert isinstance(results, dict)
+    assert len(results) == 0
 
 
 def test_simple_agent_coordinator_initialization() -> None:

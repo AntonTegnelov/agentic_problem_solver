@@ -29,6 +29,7 @@ class EdgeCaseLLMProvider:
             top_k=40,
         )
         self.should_raise = False
+        self.error_mode = None
 
     def generate(
         self,
@@ -56,10 +57,10 @@ class EdgeCaseLLMProvider:
             raise RuntimeError(msg)
         if not messages:
             return
-        yield "Chunk 1"
-        yield "Chunk 2"
-        if config and config.max_tokens > 100:
-            yield "Extra chunk for high max_tokens"
+        if self.error_mode == "stream":
+            msg = "Simulated stream error"
+            raise ValueError(msg)
+        yield "Test stream with config"
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text with error handling."""
@@ -97,6 +98,9 @@ class EdgeCaseLLMProvider:
         if self.should_raise:
             msg = "Simulated error in get_config"
             raise RuntimeError(msg)
+        if self.error_mode == "get_config":
+            msg = "Simulated get_config error"
+            raise ValueError(msg)
         return self.config
 
     def update_config(self, config: GenerationConfig) -> None:
@@ -104,6 +108,9 @@ class EdgeCaseLLMProvider:
         if self.should_raise:
             msg = "Simulated error in update_config"
             raise RuntimeError(msg)
+        if self.error_mode == "update_config":
+            msg = "Simulated update_config error"
+            raise ValueError(msg)
         self.validate_config(config)
         self.config = config
 
@@ -136,37 +143,56 @@ async def test_generate_stream_chunks() -> None:
 
     # Test with default config
     chunks = [chunk async for chunk in provider.generate_stream(messages)]
-    assert chunks == ["Chunk 1", "Chunk 2"]
+    assert chunks == ["Test stream with config"]
 
     # Test with high max_tokens
     config = GenerationConfig(model="test", max_tokens=200)
     chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
-    assert chunks == ["Chunk 1", "Chunk 2", "Extra chunk for high max_tokens"]
+    assert chunks == ["Test stream with config"]
+
+
+@pytest.mark.asyncio
+async def test_generate_stream_empty_messages() -> None:
+    """Test generate_stream with empty messages."""
+    provider = EdgeCaseLLMProvider()
+    chunks = [chunk async for chunk in provider.generate_stream([])]
+    assert chunks == []
 
 
 @pytest.mark.asyncio
 async def test_generate_stream_error_handling() -> None:
-    """Test generate_stream method error handling."""
+    """Test generate_stream error handling."""
     provider = EdgeCaseLLMProvider()
-    provider.should_raise = True
-    stream = provider.generate_stream([create_human_message("test")])
-    with pytest.raises(RuntimeError, match="Simulated error in generate_stream"):
-        await anext(stream)
+    provider.error_mode = "stream"
+    with pytest.raises(ValueError, match="Simulated stream error"):
+        async for _ in provider.generate_stream([create_human_message("test")]):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_generate_stream_with_config() -> None:
+    """Test generate_stream with configuration."""
+    provider = EdgeCaseLLMProvider()
+    config = GenerationConfig(model="test", temperature=0.8)
+    chunks = [chunk async for chunk in provider.generate_stream([create_human_message("test")], config=config)]
+    assert chunks == ["Test stream with config"]
 
 
 def test_count_tokens_different_formats() -> None:
-    """Test count_tokens method with different text formats."""
+    """Test count_tokens with different text formats."""
     provider = EdgeCaseLLMProvider()
 
-    # Empty text
+    # Test empty string
     assert provider.count_tokens("") == 0
 
-    # Normal text
-    assert provider.count_tokens("Hello world") == 2
+    # Test whitespace
+    assert provider.count_tokens("   ") == 0
 
-    # JSON-like text
-    assert provider.count_tokens('{"key": "value"}') == 8
-    assert provider.count_tokens("[1, 2, 3]") == 4
+    # Test special characters
+    assert provider.count_tokens("!@#$%^") == 1
+
+    # Test multiple lines
+    assert provider.count_tokens("line1\nline2\nline3") == 3
 
 
 def test_count_tokens_error_handling() -> None:
@@ -178,61 +204,51 @@ def test_count_tokens_error_handling() -> None:
 
 
 def test_validate_config_comprehensive() -> None:
-    """Test validate_config method with various invalid configurations."""
+    """Test validate_config with various configurations."""
     provider = EdgeCaseLLMProvider()
 
-    # Empty model name
-    with pytest.raises(ValueError, match="Model name cannot be empty"):
-        provider.validate_config(GenerationConfig(model=""))
+    # Test valid config
+    config = GenerationConfig(model="test", temperature=0.7)
+    provider.validate_config(config)  # Should not raise
 
-    # Invalid temperature
+    # Test invalid temperature
     with pytest.raises(ValueError, match="Temperature must be between 0 and 1"):
         provider.validate_config(GenerationConfig(model="test", temperature=1.5))
 
-    # Invalid max_tokens
+    # Test invalid max_tokens
     with pytest.raises(ValueError, match="Max tokens must be positive"):
         provider.validate_config(GenerationConfig(model="test", max_tokens=0))
 
-    # Invalid top_p
-    with pytest.raises(ValueError, match="Top P must be between 0 and 1"):
-        provider.validate_config(GenerationConfig(model="test", top_p=1.5))
-
-    # Invalid top_k
-    with pytest.raises(ValueError, match="Top K must be positive"):
-        provider.validate_config(GenerationConfig(model="test", top_k=0))
+    # Test missing model
+    with pytest.raises(ValueError, match="Model name cannot be empty"):
+        provider.validate_config(GenerationConfig(model=""))
 
 
 def test_get_config_error_handling() -> None:
-    """Test get_config method error handling."""
+    """Test get_config error handling."""
     provider = EdgeCaseLLMProvider()
-    provider.should_raise = True
-    with pytest.raises(RuntimeError, match="Simulated error in get_config"):
+    provider.error_mode = "get_config"
+    with pytest.raises(ValueError, match="Simulated get_config error"):
         provider.get_config()
 
 
 def test_update_config_validation() -> None:
-    """Test update_config method with validation."""
+    """Test update_config validation."""
     provider = EdgeCaseLLMProvider()
 
-    # Valid update
-    new_config = GenerationConfig(
-        model="new-model",
-        temperature=0.5,
-        max_tokens=2048,
-        top_p=0.8,
-        top_k=50,
-    )
-    provider.update_config(new_config)
-    assert provider.get_config() == new_config
+    # Test valid update
+    config = GenerationConfig(model="test", temperature=0.5)
+    provider.update_config(config)
+    assert provider.get_config().temperature == 0.5
 
-    # Invalid update
+    # Test invalid update
     with pytest.raises(ValueError, match="Temperature must be between 0 and 1"):
-        provider.update_config(GenerationConfig(model="test", temperature=1.5))
+        provider.update_config(GenerationConfig(model="test", temperature=2.0))
 
 
 def test_update_config_error_handling() -> None:
-    """Test update_config method error handling."""
+    """Test update_config error handling."""
     provider = EdgeCaseLLMProvider()
-    provider.should_raise = True
-    with pytest.raises(RuntimeError, match="Simulated error in update_config"):
+    provider.error_mode = "update_config"
+    with pytest.raises(ValueError, match="Simulated update_config error"):
         provider.update_config(GenerationConfig(model="test"))

@@ -140,7 +140,7 @@ class TestPlannerAgentDelegation:
             planner._logger = MagicMock()
 
             # Mock the _create_sub_planner method to avoid creating a real sub-planner
-            planner._provider = MagicMock()
+            planner.provider = MagicMock()
 
             # Act
             result = await planner.delegate_to_planner("Design a complex authentication system")

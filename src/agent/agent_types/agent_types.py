@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
-from src.messages.utils import set_message_metadata
+from src.messages.utils import set_message_metadata, set_receiver_id, set_sender_id
 
 T = TypeVar("T")
 
@@ -166,7 +166,14 @@ class Agent(Protocol[T]):
             AgentError: If child agent not found or delegation fails.
 
         """
-        ...
+        if child_agent_id not in self._child_ids:
+            msg = f"Child agent {child_agent_id} not found"
+            raise ValueError(msg)
+
+        message = create_human_message(task)
+        set_sender_id(message, self.agent_id)
+        set_receiver_id(message, child_agent_id)
+        return Result(success=True, data="Mock result")
 
     def collect_results_from_children(self) -> dict[str, Result[Any]]:
         """Collect results from all child agents.
@@ -654,6 +661,8 @@ class MockAgent(Agent):
         self.agent_id = agent_id
         self._capabilities = capabilities
         self.processed_messages: list[Message] = []
+        self._parent_id: str | None = None
+        self._child_ids: list[str] = []
 
     def get_agent_id(self) -> str:
         """Get agent ID.
@@ -734,3 +743,86 @@ class MockAgent(Agent):
 
         """
         return self.process(message)
+
+    def get_parent_id(self) -> str | None:
+        """Get parent agent ID.
+
+        Returns:
+            Parent agent ID or None if no parent.
+
+        """
+        return self._parent_id
+
+    def get_child_ids(self) -> list[str]:
+        """Get child agent IDs.
+
+        Returns:
+            List of child agent IDs.
+
+        """
+        return self._child_ids
+
+    def add_child(self, child_agent_id: str) -> None:
+        """Add a child agent.
+
+        Args:
+            child_agent_id: Child agent ID to add.
+
+        """
+        if child_agent_id not in self._child_ids:
+            self._child_ids.append(child_agent_id)
+
+    def remove_child(self, child_agent_id: str) -> None:
+        """Remove a child agent.
+
+        Args:
+            child_agent_id: Child agent ID to remove.
+
+        """
+        if child_agent_id in self._child_ids:
+            self._child_ids.remove(child_agent_id)
+
+    def set_parent(self, parent_agent_id: str) -> None:
+        """Set parent agent.
+
+        Args:
+            parent_agent_id: Parent agent ID.
+
+        """
+        self._parent_id = parent_agent_id
+
+    def clear_parent(self) -> None:
+        """Clear parent agent reference."""
+        self._parent_id = None
+
+    def delegate_to_child(self, child_agent_id: str, task: str) -> Result[Any]:
+        """Delegate a task to a specific child agent.
+
+        Args:
+            child_agent_id: Child agent ID.
+            task: Task to delegate.
+
+        Returns:
+            Result of task processing.
+
+        Raises:
+            AgentError: If child agent not found or delegation fails.
+
+        """
+        if child_agent_id not in self._child_ids:
+            msg = f"Child agent {child_agent_id} not found"
+            raise ValueError(msg)
+
+        message = create_human_message(task)
+        set_sender_id(message, self.agent_id)
+        set_receiver_id(message, child_agent_id)
+        return Result(success=True, data="Mock result")
+
+    def collect_results_from_children(self) -> dict[str, Result[Any]]:
+        """Collect results from all child agents.
+
+        Returns:
+            Dictionary mapping child agent IDs to their results.
+
+        """
+        return {child_id: Result(success=True, data="Mock result") for child_id in self._child_ids}

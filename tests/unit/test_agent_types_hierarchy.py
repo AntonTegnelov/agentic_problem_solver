@@ -245,7 +245,14 @@ class MockAgentRegistry:
         Returns:
             Dictionary mapping agent IDs to their child IDs.
 
+        Raises:
+            KeyError: If root agent not found.
+
         """
+        if root_agent_id not in self.agent_info:
+            msg = f"Agent not found: {root_agent_id}"
+            raise KeyError(msg)
+
         hierarchy: dict[str, list[str]] = {}
         queue = [root_agent_id]
         visited = set()
@@ -412,8 +419,180 @@ def test_mock_agent_registry_edge_cases() -> None:
     assert not registry.get_sibling_agents("non-existent")
 
     # Test empty hierarchy
-    assert registry.get_agent_hierarchy("non-existent") == {}
+    with pytest.raises(KeyError):
+        registry.get_agent_hierarchy("non-existent")
 
     # Test relationship operations with non-existent agents
     registry.register_parent_child_relationship("non-existent", "also-non-existent")
     registry.remove_parent_child_relationship("non-existent", "also-non-existent")
+
+
+def test_mock_agent_registry_get_agent_hierarchy() -> None:
+    """Test MockAgentRegistry get_agent_hierarchy method."""
+    registry = MockAgentRegistry()
+
+    # Create a hierarchy of agents
+    root = HierarchicalMockAgent(agent_id="root", capabilities=["test"])
+    child1 = HierarchicalMockAgent(agent_id="child1", capabilities=["test"])
+    child2 = HierarchicalMockAgent(agent_id="child2", capabilities=["test"])
+    grandchild1 = HierarchicalMockAgent(agent_id="grandchild1", capabilities=["test"])
+    grandchild2 = HierarchicalMockAgent(agent_id="grandchild2", capabilities=["test"])
+
+    # Set up relationships
+    child1.set_parent(root.get_agent_id())
+    child2.set_parent(root.get_agent_id())
+    grandchild1.set_parent(child1.get_agent_id())
+    grandchild2.set_parent(child1.get_agent_id())
+
+    root.add_child(child1.get_agent_id())
+    root.add_child(child2.get_agent_id())
+    child1.add_child(grandchild1.get_agent_id())
+    child1.add_child(grandchild2.get_agent_id())
+
+    # Register all agents
+    registry.register_agent(
+        root,
+        AgentInfo(
+            agent_id="root",
+            name="Root Agent",
+            description="Root test agent",
+            capabilities=["test"],
+            child_ids=["child1", "child2"],
+        ),
+    )
+
+    registry.register_agent(
+        child1,
+        AgentInfo(
+            agent_id="child1",
+            name="Child Agent 1",
+            description="First child test agent",
+            capabilities=["test"],
+            parent_id="root",
+            child_ids=["grandchild1", "grandchild2"],
+        ),
+    )
+
+    registry.register_agent(
+        child2,
+        AgentInfo(
+            agent_id="child2",
+            name="Child Agent 2",
+            description="Second child test agent",
+            capabilities=["test"],
+            parent_id="root",
+        ),
+    )
+
+    registry.register_agent(
+        grandchild1,
+        AgentInfo(
+            agent_id="grandchild1",
+            name="Grandchild Agent 1",
+            description="First grandchild test agent",
+            capabilities=["test"],
+            parent_id="child1",
+        ),
+    )
+
+    registry.register_agent(
+        grandchild2,
+        AgentInfo(
+            agent_id="grandchild2",
+            name="Grandchild Agent 2",
+            description="Second grandchild test agent",
+            capabilities=["test"],
+            parent_id="child1",
+        ),
+    )
+
+    # Test getting hierarchy from root
+    hierarchy = registry.get_agent_hierarchy("root")
+    assert "root" in hierarchy
+    assert set(hierarchy["root"]) == {"child1", "child2"}
+    assert set(hierarchy["child1"]) == {"grandchild1", "grandchild2"}
+    assert hierarchy["child2"] == []
+    assert hierarchy["grandchild1"] == []
+    assert hierarchy["grandchild2"] == []
+
+    # Test getting hierarchy from middle of tree
+    hierarchy = registry.get_agent_hierarchy("child1")
+    assert "child1" in hierarchy
+    assert set(hierarchy["child1"]) == {"grandchild1", "grandchild2"}
+    assert hierarchy["grandchild1"] == []
+    assert hierarchy["grandchild2"] == []
+    assert "root" not in hierarchy
+    assert "child2" not in hierarchy
+
+    # Test getting hierarchy from leaf
+    hierarchy = registry.get_agent_hierarchy("grandchild1")
+    assert "grandchild1" in hierarchy
+    assert hierarchy["grandchild1"] == []
+
+    # Test getting hierarchy for non-existent agent
+    with pytest.raises(KeyError):
+        registry.get_agent_hierarchy("non-existent")
+
+
+def test_mock_agent_registry_parent_child_relationships() -> None:
+    """Test MockAgentRegistry parent-child relationship methods."""
+    registry = MockAgentRegistry()
+
+    # Create and register parent agent
+    parent = HierarchicalMockAgent(agent_id="parent", capabilities=["test"])
+    registry.register_agent(
+        parent,
+        AgentInfo(
+            agent_id="parent",
+            name="Parent Agent",
+            description="Parent test agent",
+            capabilities=["test"],
+            child_ids=["child1", "child2"],
+        ),
+    )
+
+    # Create and register child agents
+    child1 = HierarchicalMockAgent(agent_id="child1", capabilities=["test"])
+    registry.register_agent(
+        child1,
+        AgentInfo(
+            agent_id="child1",
+            name="Child Agent 1",
+            description="First child test agent",
+            capabilities=["test"],
+            parent_id="parent",
+        ),
+    )
+
+    child2 = HierarchicalMockAgent(agent_id="child2", capabilities=["test"])
+    registry.register_agent(
+        child2,
+        AgentInfo(
+            agent_id="child2",
+            name="Child Agent 2",
+            description="Second child test agent",
+            capabilities=["test"],
+            parent_id="parent",
+        ),
+    )
+
+    # Test getting parent agent
+    parent_agent = registry.get_parent_agent("child1")
+    assert parent_agent is not None
+    assert parent_agent.get_agent_id() == "parent"
+
+    # Test getting child agents
+    child_agents = registry.get_child_agents("parent")
+    assert len(child_agents) == 2
+    child_ids = {agent.get_agent_id() for agent in child_agents}
+    assert child_ids == {"child1", "child2"}
+
+    # Test getting parent of root agent
+    assert registry.get_parent_agent("parent") is None
+
+    # Test getting children of leaf agent
+    assert registry.get_child_agents("child1") == []
+
+    # Test with non-existent agents
+    assert registry.get_parent_agent("non-existent") is None
+    assert registry.get_child_agents("non-existent") == []

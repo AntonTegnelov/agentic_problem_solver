@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from src.agent.agent_types.agent_types import Agent
 from src.common_types import AgentNotFoundError, ConfigError
 from src.common_types.enums import AgentStep, ExecutionStage, VerificationStatus
-from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 from src.common_types.result_types import Result as StepResult
 from src.common_types.task_types import Task, TaskComplexity, TaskDependency, TaskPriority, TaskStatus
-from src.messages.creation import create_structured_message
 from src.messages.utils import (
     get_message_at_index,
     get_metadata_at_index,
@@ -26,7 +24,8 @@ from src.messages.utils import (
 )
 
 if TYPE_CHECKING:
-    from src.agent.agent_types.agent_types import Agent, Message, Result, StepResult
+    from src.agent.agent_types.agent_types import Agent
+    from src.common_types.message_types import Message
 
 T = TypeVar("T")
 
@@ -40,6 +39,21 @@ class Context:
 
     data: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __eq__(self, other: object) -> bool:
+        """Compare context instances.
+
+        Args:
+            other: Other context instance to compare with.
+
+        Returns:
+            True if contexts are equal.
+
+        """
+        if not isinstance(other, Context):
+            return NotImplemented
+
+        return self.data == other.data and self.metadata == other.metadata
 
     def validate(self) -> bool:
         """Validate context data.
@@ -66,55 +80,48 @@ class Context:
         self.metadata["change_count"] = self.metadata.get("change_count", 0) + 1
 
 
+@runtime_checkable
 class StateManager(Protocol):
     """State manager protocol."""
 
     def get_state(self) -> AgentState:
-        """Get current state.
+        """Get the current state.
 
         Returns:
-            Current state.
+            The current state.
 
         """
+        ...
 
     def set_state(self, state: AgentState) -> None:
-        """Set current state.
+        """Set the current state.
 
         Args:
-            state: New state.
+            state: The state to set.
 
         """
+        ...
 
     def clear_state(self) -> None:
-        """Clear current state."""
+        """Clear the current state."""
+        ...
 
     def save_state(self, path: str | None = None) -> str:
-        """Save state to file.
+        """Save the current state to a file.
 
         Args:
-            path: Optional file path to save state to.
+            path: The path to save the state to. If None, a default path is used.
 
         Returns:
-            Path where state was saved.
+            The path the state was saved to.
+
+        Raises:
+            FileNotFoundError: If the path does not exist.
+            PermissionError: If the path is not writable.
+            ConfigError: If the state is invalid.
 
         """
-        if not self.state:
-            msg = "No state to save"
-            raise ConfigError(msg)
-
-        # Generate path if not provided
-        if path is None:
-            path = str(Path(self.base_dir) / f"{self.state.agent_id}.json")
-
-        # Convert state to dict
-        state_dict = self.state.to_dict()
-
-        # Save to file
-        path_obj = Path(path)
-        path_obj.parent.mkdir(parents=True, exist_ok=True)
-        path_obj.write_text(json.dumps(state_dict, indent=2), encoding="utf-8")
-
-        return path
+        ...
 
     def load_state(self, path: str) -> AgentState:
         """Load state from file.
@@ -175,23 +182,69 @@ class AgentState:
     step_results: dict[str, StepResult[Any]] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-    agent_id: str = field(default="")
-    parent_agent_id: str | None = field(default=None)
+    agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    parent_id: str | None = field(default=None)
+    child_ids: list[str] = field(default_factory=list)
     _agents: dict[str, Agent] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Initialize state with default values."""
-        # Initialize context metadata if empty
+        """Initialize context metadata if empty."""
         if not self.context.metadata:
             self.context.metadata = {
-                "created_at": self.created_at,
-                "updated_at": self.updated_at,
+                "created_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
                 "change_count": 0,
             }
 
-        # Generate agent_id if not provided
-        if not self.agent_id:
-            self.agent_id = str(uuid.uuid4())
+    def __eq__(self, other: object) -> bool:
+        """Check if two instances are equal.
+
+        Args:
+            other: The object to compare with.
+
+        Returns:
+            True if the objects are equal, False otherwise.
+
+        """
+        if not isinstance(other, AgentState):
+            return False
+        return (
+            self.messages == other.messages
+            and self.context == other.context
+            and self.execution_result == other.execution_result
+            and self.current_step == other.current_step
+            and self.step_count == other.step_count
+            and self.task_completed == other.task_completed
+            and self.error == other.error
+            and self.step_results == other.step_results
+            and self.created_at == other.created_at
+            and self.updated_at == other.updated_at
+            and self.agent_id == other.agent_id
+            and self.parent_id == other.parent_id
+            and self.child_ids == other.child_ids
+        )
+
+    def clear(self) -> None:
+        """Clear the state."""
+        self.messages.clear()
+        self.context = Context()
+        self.context.metadata = {
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
+            "change_count": 0,
+        }
+        self.execution_result = ""
+        self.step_count = 0
+        self.task_completed = False
+        self.error = None
+        self.current_step = AgentStep.UNDERSTAND
+        self.step_results.clear()
+        self.updated_at = datetime.now(UTC).isoformat()
+        # Generate a new agent_id when clearing the state
+        self.agent_id = str(uuid.uuid4())
+        self.parent_id = None
+        self.child_ids.clear()
+        self._agents.clear()
 
     def get_messages(self) -> list[Message]:
         """Get all messages in the state.
@@ -287,26 +340,6 @@ class AgentState:
         self.context.data[key] = value
         self.context.track_changes()
         self.updated_at = datetime.now(UTC).isoformat()
-
-    def clear(self) -> None:
-        """Clear state."""
-        self.messages.clear()
-        self.context.data.clear()
-        self.context.metadata = {
-            "created_at": self.created_at,
-            "updated_at": datetime.now(UTC).isoformat(),
-            "change_count": 0,
-        }
-        self.execution_result = ""
-        self.step_count = 0
-        self.task_completed = False
-        self.error = None
-        self.current_step = AgentStep.UNDERSTAND
-        self.step_results.clear()
-        self.updated_at = datetime.now(UTC).isoformat()
-        # Generate a new agent_id when clearing the state
-        self.agent_id = str(uuid.uuid4())
-        self._agents.clear()
 
     def validate(self) -> bool:
         """Validate state.
@@ -405,71 +438,71 @@ class AgentState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AgentState:
-        """Create state from dictionary.
+        """Create AgentState from dictionary.
 
         Args:
-            data: State dictionary.
+            data: Dictionary data.
 
         Returns:
-            State instance.
-
-        Raises:
-            ConfigError: If state creation fails.
+            AgentState instance.
 
         """
-        try:
-            # Handle message deserialization
-            messages = []
-            for msg in data.get("messages", []):
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                msg.get("metadata", {})
+        # Handle message conversion
+        messages = []
+        for msg_data in data.get("messages", []):
+            role = msg_data.get("role", "")
+            content = msg_data.get("content", "")
 
-                # Map role to standard types
-                if role == "unknown":
-                    role = "system"  # Default to system for unknown roles
+            # Convert to appropriate message type
+            if role == "human":
+                msg = HumanMessage(content=content)
+            elif role == "ai":
+                msg = AIMessage(content=content)
+            elif role == "system":
+                msg = SystemMessage(content=content)
+            elif role == "tool":
+                msg = ToolMessage(content=content)
+            else:
+                # Default to system message
+                msg = SystemMessage(content=content)
+            messages.append(msg)
 
-                messages.append(create_structured_message(role, content))
+        # Convert context
+        context_data = data.get("context", {})
+        context = Context(
+            data=context_data.get("data", {}),
+            metadata=context_data.get("metadata", {}),
+        )
 
-            # Handle step results deserialization
-            from src.common_types.result_types import Result
+        # Convert step results
+        step_results = {}
+        for step_key, result_data in data.get("step_results", {}).items():
+            success = result_data.get("success", False)
+            error = result_data.get("error", "")
+            data_value = result_data.get("data", "")
+            message = result_data.get("message", "")
 
-            step_results = {
-                step: Result(
-                    success=result["success"],
-                    error=result["error"],
-                    data=result["data"],  # Keep as string
-                )
-                for step, result in data.get("step_results", {}).items()
-            }
+            result = StepResult.success(data_value, message) if success else StepResult.failure(error, message)
+            step_results[step_key] = result
 
-            # Create context
-            context = Context(
-                data=data.get("context", {}).get("data", {}),
-                metadata=data.get("context", {}).get("metadata", {}),
-            )
-
-            # Create state
-            return cls(
-                messages=messages,
-                context=context,
-                execution_result=data.get("execution_result", ""),
-                current_step=AgentStep(
-                    data.get("current_step", AgentStep.UNDERSTAND.value),
-                ),
-                step_count=data.get("step_count", 0),
-                task_completed=data.get("task_completed", False),
-                error=data.get("error"),
-                step_results=step_results,
-                created_at=data.get("created_at", datetime.now(UTC).isoformat()),
-                updated_at=data.get("updated_at", datetime.now(UTC).isoformat()),
-                agent_id=data.get("agent_id", ""),
-                parent_agent_id=data.get("parent_agent_id"),
-            )
-
-        except Exception as e:
-            msg = f"Failed to create state from dictionary: {e}"
-            raise ConfigError(msg) from e
+        # Create the AgentState
+        return cls(
+            messages=messages,
+            context=context,
+            execution_result=data.get("execution_result", ""),
+            current_step=AgentStep(
+                data.get("current_step", AgentStep.UNDERSTAND.value),
+            ),
+            step_count=data.get("step_count", 0),
+            task_completed=data.get("task_completed", False),
+            error=data.get("error"),
+            step_results=step_results,
+            created_at=data.get("created_at", datetime.now(UTC).isoformat()),
+            updated_at=data.get("updated_at", datetime.now(UTC).isoformat()),
+            agent_id=data.get("agent_id", ""),
+            parent_id=data.get("parent_id"),
+            child_ids=data.get("child_ids", []),
+        )
 
     def get_agent_for_step(self, step: AgentStep | str) -> Agent:
         """Get agent for step.
@@ -1810,14 +1843,138 @@ class AgentState:
         )
 
 
-class InMemoryStateManager(StateManager):
-    """In-memory state manager."""
+class InMemoryStateManager(Protocol):
+    """State manager implementation that stores agent state in memory."""
 
-    def __init__(self) -> None:
-        """Initialize in-memory state manager."""
-        super().__init__()
-        self._state = AgentState()
-        self._states: dict[str, AgentState] = {}
+    def __init__(self, state: AgentState | None = None) -> None:
+        """Initialize the in-memory state manager.
+
+        Args:
+            state: Optional initial state.
+
+        """
+        self._state = state or AgentState()
+        self._saved_states = {}  # Store saved states for listing
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to the underlying state object.
+
+        Args:
+            name: Attribute name.
+
+        Returns:
+            Attribute value from the state object.
+
+        Raises:
+            AttributeError: If attribute not found.
+
+        """
+        # Check if this is a state manager method that should be handled separately
+        if name in dir(self.__class__):
+            msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            raise AttributeError(msg)
+
+        # Forward to the underlying state
+        try:
+            return getattr(self._state, name)
+        except AttributeError:
+            msg = f"Neither '{self.__class__.__name__}' nor 'AgentState' has attribute '{name}'"
+            raise AttributeError(msg)
+
+    def register_agent(self, agent_id: str, agent: Agent) -> None:
+        """Register agent.
+
+        Args:
+            agent_id: Agent ID.
+            agent: Agent instance.
+
+        """
+        self._state.register_agent(agent_id, agent)
+
+    def get_agent(self, agent_id: str) -> Agent | None:
+        """Get agent by ID.
+
+        Args:
+            agent_id: Agent ID.
+
+        Returns:
+            Agent instance or None if not found.
+
+        """
+        try:
+            return self._state._agents.get(agent_id)
+        except (KeyError, AttributeError):
+            return None
+
+    def get_agent_for_step(self, step: AgentStep) -> Agent:
+        """Get agent for step.
+
+        Args:
+            step: Step to get agent for.
+
+        Returns:
+            Agent for step.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+
+        """
+        return self._state.get_agent_for_step(step)
+
+    def add_task(self, task: Task) -> None:
+        """Add task.
+
+        Args:
+            task: Task to add.
+
+        """
+        self._state.add_task(task)
+
+    def get_tasks(self) -> list[Task]:
+        """Get tasks.
+
+        Returns:
+            List of tasks.
+
+        """
+        return self._state.get_tasks()
+
+    def get_task_by_id(self, task_id: uuid.UUID) -> Task:
+        """Get task by ID.
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            Task.
+
+        Raises:
+            ValueError: If task not found.
+
+        """
+        task = self._state.get_task_by_id(task_id)
+        if not task:
+            msg = f"Task not found: {task_id}"
+            raise ValueError(msg)
+        return task
+
+    def add_message(self, message: Message) -> None:
+        """Add message.
+
+        Args:
+            message: Message to add.
+
+        """
+        self._state.add_message(message)
+
+    def get_messages(self) -> list[Message]:
+        """Get messages.
+
+        Returns:
+            List of messages.
+
+        """
+        return self._state.messages
 
     def get_state(self) -> AgentState:
         """Get current state.
@@ -1836,128 +1993,180 @@ class InMemoryStateManager(StateManager):
 
         """
         self._state = state
-        if state.agent_id:
-            self._states[state.agent_id] = state
 
     def clear_state(self) -> None:
         """Clear current state."""
-        self._state.clear()
+        self._state = AgentState()
 
-    def save_state(self, path: str | None = None) -> str:
-        """Save state to file.
+    def delete_state(self, state_id: str | None = None) -> None:
+        """Delete the state.
 
-        Args:
-            path: Optional file path to save state to.
-
-        Returns:
-            Path where state was saved.
-
-        """
-        # Validate state before saving
-        self._state.validate()
-
-        # Generate path if not provided
-        if path is None:
-            path = str(Path("./state") / f"{self._state.agent_id}.json")
-
-        # Convert state to dict
-        state_dict = self._state.to_dict()
-
-        # Save to file
-        path_obj = Path(path)
-        path_obj.parent.mkdir(parents=True, exist_ok=True)
-        path_obj.write_text(json.dumps(state_dict, indent=2), encoding="utf-8")
-
-        # Store state in memory
-        self._states[self._state.agent_id] = self._state
-
-        return path
-
-    def load_state(self, path: str) -> AgentState:
-        """Load state from file.
+        For in-memory state manager, this simply clears the current state.
+        The state_id argument is ignored.
 
         Args:
-            path: Path to state file.
-
-        Returns:
-            Loaded state.
-
-        Raises:
-            ConfigError: If state loading fails.
+            state_id: Optional state ID (ignored for in-memory state manager).
 
         """
-        try:
-            # Check if file exists
-            if not Path(path).exists():
-                self._raise_file_not_found(path)
-
-            # Load from file
-            state_dict = json.loads(Path(path).read_text(encoding="utf-8"))
-
-            # Create state from dict
-            state = AgentState.from_dict(state_dict)
-
-            # Validate loaded state
-            state.validate()
-
-            # Set as current state
-            self._state = state
-            self._states[state.agent_id] = state
-        except Exception as e:
-            msg = f"Failed to load state: {e}"
-            raise ConfigError(msg) from e
-        else:
-            return state
-
-    def _raise_file_not_found(self, path: str) -> None:
-        """Raise ConfigError for file not found.
-
-        Args:
-            path: Path to state file.
-
-        Raises:
-            ConfigError: Always raised.
-
-        """
-        msg = f"State file not found: {path}"
-        raise ConfigError(msg)
+        self.clear_state()
 
     def list_states(self) -> list[str]:
         """List available states.
+
+        For in-memory state manager, this returns a list of saved state IDs.
 
         Returns:
             List of state IDs.
 
         """
-        return list(self._states.keys())
+        if not self._saved_states:
+            # If we've saved a state via save_state but not tracked it yet
+            if hasattr(self, "_saved_path") and self._saved_path:
+                agent_id = self._state.agent_id if self._state else "unknown"
+                self._saved_states[agent_id] = self._saved_path
 
-    def delete_state(self, agent_id: str) -> None:
-        """Delete state.
+        return list(self._saved_states.keys())
+
+    def save_state(self, state_path: str | None = None) -> str:
+        """Save the current state to a file.
+
+        Args:
+            state_path: Optional path to save the state to. If not provided,
+                a path will be generated based on the agent ID.
+
+        Returns:
+            Path to the saved state file.
+
+        """
+        if not self._state:
+            msg = "No state to save"
+            raise ConfigError(msg)
+
+        # Generate a path if one was not provided
+        if state_path is None:
+            agent_id = self._state.agent_id
+            state_path = self.get_state_path(agent_id)
+
+        # Create directory if it doesn't exist
+        state_dir = os.path.dirname(state_path)
+        os.makedirs(state_dir, exist_ok=True)
+
+        # Write state to file
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(self._state.to_dict(), f, indent=2)
+
+        # Save the path for reference
+        self._saved_path = state_path
+        # Track this state for listing
+        self._saved_states[self._state.agent_id] = state_path
+
+        return state_path
+
+    def load_state(self, path: str) -> AgentState:
+        """Load state from file.
+
+        Args:
+            path: Path to load state from.
+
+        Returns:
+            Loaded state.
+
+        Raises:
+            ConfigError: If state file not found.
+
+        """
+        try:
+            with open(path, encoding="utf-8") as f:
+                state_dict = json.load(f)
+            self._state = AgentState.from_dict(state_dict)
+            return self._state
+        except FileNotFoundError:
+            msg = f"State file not found: {path}"
+            raise ConfigError(msg)
+
+    def get_state_path(self, agent_id: str) -> str:
+        """Get path for state file.
 
         Args:
             agent_id: Agent ID.
 
+        Returns:
+            Path for state file.
+
         """
-        if agent_id in self._states:
-            del self._states[agent_id]
-            state_path = Path("./state") / f"{agent_id}.json"
-            if state_path.exists():
-                state_path.unlink()
+        # Create states directory if it doesn't exist
+        states_dir = os.path.join(os.getcwd(), "states")
+        os.makedirs(states_dir, exist_ok=True)
+        return os.path.join(states_dir, f"{agent_id}.json")
+
+    def _raise_file_not_found(self, path: str) -> None:
+        """Raise ConfigError for file not found.
+
+        Args:
+            path: File path.
+
+        Raises:
+            ConfigError: File not found error.
+
+        """
+        msg = f"State file not found: {path}"
+        raise ConfigError(msg)
 
 
-class FileStateManager(StateManager):
-    """File-based state manager."""
+class FileStateManager:
+    """File-based state manager.
 
-    def __init__(self, base_dir: str | None = None) -> None:
+    This class provides file-based state management for agents.
+    It persists agent state to disk in JSON format.
+    """
+
+    def __init__(self, base_dir: str, state: AgentState | None = None) -> None:
         """Initialize state manager.
 
         Args:
             base_dir: Base directory for state files.
+            state: Initial state.
 
         """
-        self.base_dir = Path(base_dir) if base_dir else Path.cwd() / "state"
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        self.state = None
+        self.base_dir = base_dir
+        self._state = state or AgentState()
+
+        # Create base directory if it doesn't exist
+        os.makedirs(self.base_dir, exist_ok=True)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to the underlying state object.
+
+        Args:
+            name: Attribute name.
+
+        Returns:
+            Attribute value from the state object.
+
+        Raises:
+            AttributeError: If attribute not found.
+
+        """
+        # Check if this is a state manager method that should be handled separately
+        if name in dir(self.__class__):
+            msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            raise AttributeError(msg)
+
+        # Forward to the underlying state
+        try:
+            return getattr(self._state, name)
+        except AttributeError:
+            msg = f"Neither '{self.__class__.__name__}' nor 'AgentState' has attribute '{name}'"
+            raise AttributeError(msg)
+
+    def get_state(self) -> AgentState:
+        """Get current state.
+
+        Returns:
+            Current state.
+
+        """
+        return self._state
 
     def set_state(self, state: AgentState) -> None:
         """Set current state.
@@ -1966,97 +2175,171 @@ class FileStateManager(StateManager):
             state: State to set.
 
         """
-        self.state = state
+        self._state = state
 
-    def get_state(self) -> AgentState | None:
-        """Get current state.
+    def clear_state(self) -> None:
+        """Clear current state."""
+        self._state = AgentState()
 
-        Returns:
-            Current state or None if no state exists.
-
-        """
-        if not self.state:
-            self.state = AgentState()
-        return self.state
-
-    def save_state(self) -> str:
-        """Save current state.
-
-        Returns:
-            Path to saved state file.
-
-        Raises:
-            ConfigError: If no state to save.
-
-        """
-        if not self.state:
-            msg = "No state to save"
-            raise ConfigError(msg)
-
-        # Create base directory if it doesn't exist
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-
-        # Get path for state file
-        state_path = self.get_state_path()
-
-        # Save state to file
-        Path(state_path).write_text(json.dumps(self.state.to_dict()), encoding="utf-8")
-
-        return state_path
-
-    def load_state(self, path: str) -> None:
-        """Load state from file.
+    def update_task(self, task: Task) -> None:
+        """Update task.
 
         Args:
-            path: Path to state file.
+            task: Task to update.
 
         """
-        state_path = Path(path)
-        if not state_path.exists():
-            msg = f"State file not found: {path}"
-            raise ConfigError(msg)
+        self._state.update_task(task)
 
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-        self.state = AgentState.from_dict(data)
+    def add_task(self, task: Task) -> None:
+        """Add task.
 
-    def list_states(self) -> list[str]:
-        """List available states.
+        Args:
+            task: Task to add.
+
+        """
+        self._state.add_task(task)
+
+    def get_tasks(self) -> list[Task]:
+        """Get tasks.
 
         Returns:
-            List of state IDs.
+            List of tasks.
 
         """
-        if not self.base_dir.exists():
-            return []
+        return self._state.get_tasks()
 
-        return [file.stem for file in self.base_dir.glob("*.json")]
+    def get_task_by_id(self, task_id: uuid.UUID) -> Task:
+        """Get task by ID.
 
-    def delete_state(self, agent_id: str) -> None:
-        """Delete state file.
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            Task.
+
+        Raises:
+            ValueError: If task not found.
+
+        """
+        task = self._state.get_task_by_id(task_id)
+        if not task:
+            msg = f"Task not found: {task_id}"
+            raise ValueError(msg)
+        return task
+
+    def register_agent(self, agent_id: str, agent: Agent) -> None:
+        """Register agent.
+
+        Args:
+            agent_id: Agent ID.
+            agent: Agent instance.
+
+        """
+        self._state.register_agent(agent_id, agent)
+
+    def get_agent(self, agent_id: str) -> Agent | None:
+        """Get agent by ID.
 
         Args:
             agent_id: Agent ID.
 
-        """
-        path = Path(self.get_state_path(agent_id))
-        if path.exists():
-            path.unlink()
+        Returns:
+            Agent instance or None if not found.
 
-    def get_state_path(self) -> str:
-        """Get path for state file.
+        """
+        try:
+            return self._state._agents.get(agent_id)
+        except (KeyError, AttributeError):
+            return None
+
+    def get_agent_for_step(self, step: AgentStep) -> Agent:
+        """Get agent for step.
+
+        Args:
+            step: Step to get agent for.
 
         Returns:
-            Path to state file.
+            Agent for step.
 
         Raises:
-            ConfigError: If no state to save.
+            AgentNotFoundError: If agent not found.
 
         """
-        if not self.state:
-            msg = "No state to save"
+        return self._state.get_agent_for_step(step)
+
+    def add_message(self, message: Message) -> None:
+        """Add message.
+
+        Args:
+            message: Message to add.
+
+        """
+        self._state.add_message(message)
+
+    def get_messages(self) -> list[Message]:
+        """Get messages.
+
+        Returns:
+            List of messages.
+
+        """
+        return self._state.messages
+
+    def save_state(self, path: str | None = None) -> str:
+        """Save state to file.
+
+        Args:
+            path: Path to save state to. If None, a path is generated based on agent_id.
+
+        Returns:
+            Path to saved state file.
+
+        """
+        if path is None:
+            path = os.path.join(self.base_dir, f"{self._state.agent_id}.json")
+
+        state_dict = self._state.to_dict()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state_dict, f, indent=2)
+
+        return path
+
+    def load_state(self, path: str) -> AgentState:
+        """Load state from file.
+
+        Args:
+            path: Path to load state from.
+
+        Returns:
+            Loaded state.
+
+        Raises:
+            ConfigError: If state file not found.
+
+        """
+        try:
+            with open(path, encoding="utf-8") as f:
+                state_dict = json.load(f)
+            self._state = AgentState.from_dict(state_dict)
+            return self._state
+        except FileNotFoundError:
+            msg = f"State file not found: {path}"
             raise ConfigError(msg)
 
-        return str(self.base_dir / f"{self.state.agent_id}.json")
+    def list_states(self) -> list[str]:
+        """List available state files.
+
+        Returns:
+            List of agent IDs.
+
+        """
+        result = []
+        for filename in os.listdir(self.base_dir):
+            if filename.endswith(".json"):
+                # Extract agent ID from filename (remove .json extension)
+                agent_id = filename[:-5]
+                result.append(agent_id)
+        return result
 
     def get_state_by_id(self, agent_id: str) -> AgentState:
         """Get state by agent ID.
@@ -2065,16 +2348,103 @@ class FileStateManager(StateManager):
             agent_id: Agent ID.
 
         Returns:
-            State if found.
+            Agent state.
 
         Raises:
-            ConfigError: If state not found.
+            ConfigError: If state file not found.
 
         """
-        state_path = self.base_dir / f"{agent_id}.json"
-        if not state_path.exists():
-            msg = f"State not found: {agent_id}"
+        path = os.path.join(self.base_dir, f"{agent_id}.json")
+        if not os.path.exists(path):
+            msg = f"State file not found for agent: {agent_id}"
             raise ConfigError(msg)
 
-        state_dict = json.loads(state_path.read_text(encoding="utf-8"))
-        return AgentState.from_dict(state_dict)
+        return self.load_state(path)
+
+    def delete_state(self, agent_id: str) -> None:
+        """Delete state file.
+
+        Args:
+            agent_id: Agent ID.
+
+        Raises:
+            ConfigError: If state file not found.
+
+        """
+        path = os.path.join(self.base_dir, f"{agent_id}.json")
+        if not os.path.exists(path):
+            msg = f"State file not found for agent: {agent_id}"
+            raise ConfigError(msg)
+
+        os.remove(path)
+
+    def track_delegated_task_progress(
+        self,
+        task_id: uuid.UUID,
+        progress: float,
+        status_message: str | None = None,
+    ) -> None:
+        """Track progress of a delegated task.
+
+        Args:
+            task_id: Task ID.
+            progress: Progress percentage (0.0 to 1.0).
+            status_message: Optional status message.
+
+        """
+        self._state.track_delegated_task_progress(task_id, progress, status_message)
+
+    def update_parent_task_progress(self, parent_task_id: uuid.UUID) -> None:
+        """Update progress of a parent task based on its subtasks.
+
+        Args:
+            parent_task_id: Parent task ID.
+
+        """
+        self._state.update_parent_task_progress(parent_task_id)
+
+    def calculate_rollup_progress(self, task_id: uuid.UUID) -> dict[str, Any]:
+        """Calculate rollup progress for a task based on its subtasks.
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            Dictionary with rollup progress information.
+
+        """
+        return self._state.calculate_rollup_progress(task_id)
+
+    def is_task_blocked_by_dependencies(self, task_id: uuid.UUID) -> bool:
+        """Check if a task is blocked by dependencies.
+
+        Args:
+            task_id: Task ID.
+
+        Returns:
+            True if task is blocked by dependencies.
+
+        """
+        return self._state.is_task_blocked_by_dependencies(task_id)
+
+    def update_task_status_based_on_dependencies(self, task_id: uuid.UUID) -> None:
+        """Update task status based on dependencies.
+
+        Args:
+            task_id: Task ID.
+
+        """
+        self._state.update_task_status_based_on_dependencies(task_id)
+
+    def update_dependent_tasks(self, task_id: uuid.UUID) -> None:
+        """Update status of tasks that depend on the given task.
+
+        Args:
+            task_id: Task ID.
+
+        """
+        self._state.update_dependent_tasks(task_id)
+
+    def recalculate_all_task_progress(self) -> None:
+        """Recalculate progress for all tasks in the hierarchy."""
+        self._state.recalculate_all_task_progress()

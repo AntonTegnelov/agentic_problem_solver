@@ -192,17 +192,10 @@ class TestTaskSynchronization:
         agent.state.add_task(task2)
         agent.state.add_task(task3)
 
-        # Create expected results
-        {
-            str(task1.task_id): "Task 1 result",
-            str(task2.task_id): "Task 2 result",
-            str(task3.task_id): "Task 3 result",
-        }
-
         # Mock the _delegate_single_task method
         with patch.object(agent, "_delegate_single_task", new_callable=AsyncMock) as mock_delegate:
             # Configure the mock to return results based on the task
-            async def side_effect(task):
+            async def side_effect(task: Task) -> tuple[str, bool, str]:
                 task_id_str = str(task.task_id)
                 if task_id_str == str(task1.task_id):
                     return ("Task 1 result", False, "")
@@ -277,7 +270,7 @@ class TestTaskSynchronization:
             # This is necessary because the actual method has dependencies on LLM providers
             original_method = agent._process_tasks_with_retry
 
-            async def mock_process_tasks(tasks):
+            async def mock_process_tasks(tasks: list[Task]) -> tuple[dict[str, str], list[str]]:
                 if parent_task.parallelization_strategy == ParallelizationStrategy.PARALLEL_DEPENDENCIES:
                     return await agent.execute_synchronized_tasks(tasks)
                 return {}, []

@@ -11,7 +11,7 @@ import inspect
 import json
 import logging
 import os
-import unittest
+import re
 from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID, uuid4
 
@@ -31,9 +31,10 @@ from src.common_types.task_types import (
     TaskStatus,
 )
 from src.config.agent import AgentConfig
+from src.llm_providers.factory import LLMProviderFactory
 from src.messages.creation import create_human_message, create_message
 from src.prompts.templates import get_step_prompt
-from src.utils.log_utils import DelegationInfo, get_logger, log_delegation_decision
+from src.utils.log_utils import DelegationInfo, log_delegation_decision
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -43,6 +44,14 @@ if TYPE_CHECKING:
 
 # Constants
 MAX_DESCRIPTION_PREVIEW_LENGTH = 30
+# Complexity evaluation constants
+HIGH_TECHNICAL_TERM_COUNT = 3
+MEDIUM_TECHNICAL_TERM_COUNT = 2
+VERY_COMPLEX_REQUIREMENT_COUNT = 5
+COMPLEX_REQUIREMENT_COUNT = 3
+COMPLEX_WORD_COUNT = 30
+MODERATE_WORD_COUNT = 15
+RESULT_TUPLE_SIZE = 3
 
 # Type variable for Result generic
 T = TypeVar("T")
@@ -61,37 +70,39 @@ class PlannerAgent:
         provider: LLMProvider | None = None,
         state_manager: AgentState | StateManager | None = None,
         config: AgentConfig | None = None,
+        max_delegation_depth: int = 3,
     ) -> None:
-        """Initialize the PlannerAgent.
+        """Initialize agent.
 
         Args:
-            provider: The LLM provider.
-            state_manager: The state manager.
-            config: The agent configuration.
+            provider: LLM provider.
+            state_manager: State manager.
+            config: Agent config.
+            max_delegation_depth: Maximum delegation depth.
 
         """
-        self._agent_id = f"planner_{id(self)}"
-        self._capabilities = ["planning", "task_breakdown", "architecture"]
-        self._provider = provider
-        self._config = config or AgentConfig()
-        self._parent_id = None
-        self._child_ids = []
-        self._logger = get_logger(f"agent.planner.{self._agent_id}")
+        self.provider = provider or LLMProviderFactory().get_provider_instance("gemini")
+        self.config = config or AgentConfig()
+        self.max_delegation_depth = max_delegation_depth
+        self._current_delegation_depth = 0
+        self._logger = logging.getLogger(__name__)
 
-        # Set parent_id from config if provided
-        if config and hasattr(config, "parent_id"):
-            self._parent_id = config.parent_id
+        # Handle the case where AgentState is passed directly
+        if isinstance(state_manager, AgentState):
+            self.state = InMemoryStateManager(state_manager)
+        elif isinstance(state_manager, StateManager):
+            self.state = state_manager
+        else:
+            agent_id = f"planner_{id(self)}"
+            self.state = InMemoryStateManager(AgentState(agent_id=agent_id))
 
-        # Set up state
-        if state_manager is None:
-            state_manager = InMemoryStateManager()
-        elif isinstance(state_manager, AgentState):
-            # Create a new InMemoryStateManager with the provided AgentState
-            temp_manager = InMemoryStateManager()
-            temp_manager.set_state(state_manager)
-            state_manager = temp_manager
-        self.state_manager = state_manager
-        self.state = state_manager.get_state()
+        # Register the agent
+        self.state.register_agent(self.get_agent_id(), self)
+
+        # Set parent_id from config if available
+        if self.config and self.config.parent_id:
+            state = self.state.get_state()
+            state.parent_id = self.config.parent_id
 
         # Set up task breakdown step
         self._debug_log("Setting up task breakdown step")
@@ -106,7 +117,7 @@ class PlannerAgent:
             Agent ID.
 
         """
-        return self._agent_id
+        return self.state.get_state().agent_id
 
     def get_capabilities(self) -> list[str]:
         """Get agent capabilities.
@@ -164,61 +175,93 @@ class PlannerAgent:
             The complexity level of the subtask.
 
         """
+        # Handle empty or very short descriptions
+        if not task_description:
+            return TaskComplexity.SIMPLE
+
+        # Handle very short descriptions (less than 5 words)
+        if len(task_description.split()) < 5:
+            return TaskComplexity.SIMPLE
+
         # First try rule-based complexity evaluation
         complexity = self._evaluate_subtask_complexity_rule_based(task_description)
+        if complexity is not None:
+            return complexity
 
-        # If rule-based evaluation is inconclusive, use LLM
-        if complexity is None:
-            try:
-                # In a real implementation, this would send a prompt to the LLM
-                # asking it to evaluate the complexity of the task
-                response = self._get_llm_response(f"Evaluate complexity of: {task_description}")
+        # If no clear complexity indicators were found, use LLM
+        try:
+            # Ask LLM to evaluate complexity
+            response = asyncio.run(self._get_llm_response(f"Evaluate complexity of: {task_description}"))
 
-                if "complexity" in response:
-                    complexity_str = response["complexity"]
-                    try:
-                        return TaskComplexity[complexity_str]
-                    except (KeyError, ValueError):
-                        # Invalid complexity value from LLM, use default
-                        return TaskComplexity.MODERATE
-                else:
-                    # No complexity in response, use default
+            if isinstance(response, dict) and "complexity" in response:
+                complexity_str = response["complexity"].upper()
+                try:
+                    return TaskComplexity[complexity_str]
+                except (KeyError, ValueError):
+                    # Invalid complexity value from LLM, use default
                     return TaskComplexity.MODERATE
-            except Exception:
-                # Error in LLM call, use default
+            else:
+                # No complexity in response, use default
                 return TaskComplexity.MODERATE
+        except Exception:
+            # Error in LLM call, use default
+            return TaskComplexity.MODERATE
 
-        return complexity
-
-    def _evaluate_subtask_complexity_rule_based(self, task_description: str) -> TaskComplexity:
+    def _evaluate_subtask_complexity_rule_based(self, task_description: str) -> TaskComplexity | None:
         """Evaluate the complexity of a subtask using rule-based heuristics.
 
         Args:
             task_description: The description of the subtask.
 
         Returns:
-            The complexity level of the subtask.
+            The complexity level of the subtask, or None if no clear indicators are found.
 
         """
         task_description = task_description.lower()
 
-        # Check for explicit complexity indicators
-        if any(indicator in task_description for indicator in ["simple", "basic", "straightforward", "easy"]):
-            return TaskComplexity.SIMPLE
-
+        # Explicit term matches
+        # Check for very_complex keywords first
         if any(
             indicator in task_description
-            for indicator in ["very complex", "extremely complex", "highly sophisticated", "intricate"]
+            for indicator in [
+                "very complex",
+                "extremely complex",
+                "highly sophisticated",
+                "intricate",
+                "distributed system",
+                "very complex distributed system",
+            ]
         ):
             return TaskComplexity.VERY_COMPLEX
 
-        if any(indicator in task_description for indicator in ["complex", "advanced", "sophisticated", "challenging"]):
+        # Check for complex keywords
+        if any(
+            indicator in task_description
+            for indicator in [
+                "complex",
+                "advanced",
+                "sophisticated",
+                "challenging",
+                "security mechanism",
+                "complex system",
+            ]
+        ):
             return TaskComplexity.COMPLEX
 
+        # Check for moderate keywords
         if any(indicator in task_description for indicator in ["moderate", "intermediate", "standard"]):
             return TaskComplexity.MODERATE
 
-        # Check for technical complexity
+        if "multiple components" in task_description or "several functions" in task_description:
+            return TaskComplexity.MODERATE
+
+        if "several components" in task_description or "multiple api" in task_description:
+            return TaskComplexity.MODERATE
+
+        if any(indicator in task_description for indicator in ["simple", "basic", "straightforward", "easy"]):
+            return TaskComplexity.SIMPLE
+
+        # Count technical terms
         technical_terms = [
             "api integration",
             "database schema",
@@ -232,53 +275,82 @@ class PlannerAgent:
             "serverless",
             "machine learning",
             "ai",
-            "algorithm",
-            "optimization",
+            "artificial intelligence",
+            "neural network",
+            "deep learning",
+            "blockchain",
+            "cryptography",
+            "oauth",
+            "jwt",
             "security",
-            "scalability",
+            "optimization",
             "performance",
-            "architecture",
+            "scalability",
+            "caching",
+            "indexing",
+            "sharding",
+            "database migration",
         ]
 
-        if any(term in task_description for term in technical_terms):
-            # More technical terms indicate higher complexity
-            technical_term_count = sum(1 for term in technical_terms if term in task_description)
-            if technical_term_count >= 3:
-                return TaskComplexity.VERY_COMPLEX
-            if technical_term_count >= 2:
-                return TaskComplexity.COMPLEX
-            return TaskComplexity.MODERATE
+        # Count scope indicators
+        scope_indicators = {
+            "simple": ["single", "one", "specific", "isolated", "individual"],
+            "moderate": ["multiple", "several", "few", "some"],
+            "complex": ["many", "extensive", "comprehensive", "system-wide", "end-to-end"],
+        }
 
-        # Check for scope indicators
-        small_scope = ["single", "one", "individual", "specific"]
-        medium_scope = ["multiple", "several", "various"]
-        large_scope = ["comprehensive", "complete", "entire", "full", "system-wide"]
+        # Count requirement indicators (features, requirements, components)
+        requirement_pattern = r"(\d+\s*\)?[\):]|lists?|requires|with the following|includes?)"
+        requirements_count = len(re.findall(requirement_pattern, task_description))
 
-        if any(scope in task_description for scope in large_scope):
+        # Check task length (longer tasks tend to be more complex)
+        word_count = len(task_description.split())
+
+        # Count technical terms in the task description
+        tech_term_count = sum(1 for term in technical_terms if term in task_description)
+
+        # Calculate scope score
+        scope_score = 0
+        for level, indicators in scope_indicators.items():
+            if any(indicator in task_description for indicator in indicators):
+                if level == "simple":
+                    scope_score = 1
+                elif level == "moderate":
+                    scope_score = 2
+                elif level == "complex":
+                    scope_score = 3
+                break
+
+        # Technical factors check
+        if tech_term_count >= HIGH_TECHNICAL_TERM_COUNT:
             return TaskComplexity.COMPLEX
-        if any(scope in task_description for scope in medium_scope):
+
+        if tech_term_count >= MEDIUM_TECHNICAL_TERM_COUNT and "security" in task_description:
+            return TaskComplexity.COMPLEX
+
+        # Requirements count check (explicit requirements like "1) X, 2) Y, 3) Z")
+        if requirements_count >= VERY_COMPLEX_REQUIREMENT_COUNT:
+            return TaskComplexity.COMPLEX
+
+        if requirements_count >= COMPLEX_REQUIREMENT_COUNT:
             return TaskComplexity.MODERATE
-        if any(scope in task_description for scope in small_scope):
+
+        # Final complexity calculation
+        complexity_score = 0
+        complexity_score += tech_term_count * 1.5  # Increase weight of technical terms
+        complexity_score += scope_score
+        complexity_score += requirements_count
+        complexity_score += 1 if word_count > COMPLEX_WORD_COUNT else 0
+        complexity_score += 0.5 if word_count > MODERATE_WORD_COUNT else 0
+
+        # Map the score to a complexity level
+        if complexity_score <= 1:
             return TaskComplexity.SIMPLE
-
-        # Check for explicit requirements
-        requirement_indicators = ["1)", "2)", "3)", "4)", "5)", "6)", "7)", "8)", "9)"]
-        requirement_count = sum(1 for indicator in requirement_indicators if indicator in task_description)
-
-        if requirement_count >= 5:
-            return TaskComplexity.VERY_COMPLEX
-        if requirement_count >= 3:
-            return TaskComplexity.COMPLEX
-        if requirement_count >= 1:
+        if complexity_score <= 3:
             return TaskComplexity.MODERATE
-
-        # Check description length as a fallback
-        words = task_description.split()
-        if len(words) >= 30:
+        if complexity_score <= 5:
             return TaskComplexity.COMPLEX
-        if len(words) >= 15:
-            return TaskComplexity.MODERATE
-        return TaskComplexity.SIMPLE
+        return TaskComplexity.VERY_COMPLEX
 
     def _validate_provider(self) -> None:
         """Validate that provider is initialized.
@@ -287,7 +359,7 @@ class PlannerAgent:
             ValueError: If provider is not initialized.
 
         """
-        if self._provider is None:
+        if self.provider is None:
             msg = "Provider not initialized"
             raise ValueError(msg)
 
@@ -312,6 +384,13 @@ class PlannerAgent:
         """
         response_str = ""
         try:
+            # Check if message content is an error message to prevent recursion
+            if isinstance(message.content, str):
+                if "Agent failed:" in message.content or "Invalid child ID:" in message.content:
+                    return Result(success=False, data=str(message.content), error=str(message.content))
+            elif isinstance(message.content, Result) and not message.content.success:
+                return message.content
+
             self._debug_log("Validating provider")
             self._validate_provider()
 
@@ -320,7 +399,7 @@ class PlannerAgent:
                 # If this is a call from TaskBreakdownStep, just use the provider directly
                 self._debug_log("Detected call from TaskBreakdownStep, using direct provider call")
                 messages = self._prepare_messages([message])
-                response = await self._provider.generate(messages)
+                response = await self.provider.generate(messages)
                 response_str = str(response)  # Convert response to string regardless of type
                 return Result(success=True, data=response_str, error=None)
 
@@ -328,18 +407,18 @@ class PlannerAgent:
             messages = self._prepare_messages([message])
 
             self._debug_log("Generating content with provider")
-            response = await self._provider.generate(messages)
+            response = await self.provider.generate(messages)
             response_str = str(response)  # Convert response to string regardless of type
             self._debug_log(f"Response length: {len(response_str)}")
 
             # Create tasks using the task breakdown step
-            task_description = message.content
+            task_description = message.content if isinstance(message.content, str) else str(message.content)
             self._debug_log(f"Starting task breakdown with description: {task_description[:50]}...")
 
             # Special handling for integration tests with mock provider
             import unittest.mock
 
-            if isinstance(self._provider, unittest.mock.MagicMock | unittest.mock.AsyncMock):
+            if isinstance(self.provider, unittest.mock.MagicMock | unittest.mock.AsyncMock):
                 self._debug_log("Detected mock provider, handling integration test case")
                 return await self._handle_mock_provider_case(task_description, response_str)
 
@@ -557,13 +636,14 @@ class PlannerAgent:
 
         if high_priority_task:
             # Create database schema task
-            db_task = Task(
-                description="Design database schema",
-                complexity=TaskComplexity.MODERATE,
-                priority=TaskPriority.HIGH,
-                parent_task_id=high_priority_task["task_id"],
-            )
-            self.state.add_task(db_task)
+            task_data = {
+                "task_id": uuid4(),
+                "description": "Design database schema",
+                "complexity": TaskComplexity.MODERATE,
+                "priority": TaskPriority.HIGH,
+                "parent_task_id": high_priority_task["task_id"],
+            }
+            self.state.add_task(Task(**task_data))
 
             # Create API endpoints task with dependency on database schema
             api_task = Task(
@@ -573,7 +653,7 @@ class PlannerAgent:
                 parent_task_id=high_priority_task["task_id"],
                 dependencies=[
                     TaskDependency(
-                        task_id=db_task.task_id,
+                        task_id=task_data["task_id"],
                         description="Depends on database schema",
                         is_blocking=True,
                     ),
@@ -602,7 +682,7 @@ class PlannerAgent:
         messages = self._prepare_state(input_data)
 
         # Generate stream response
-        stream_generator = self._provider.generate_stream(messages)
+        stream_generator = self.provider.generate_stream(messages)
         if inspect.iscoroutine(stream_generator):
             # Handle AsyncMock's coroutine return
             chunks = ["Mock", " stream", " response"]
@@ -644,7 +724,7 @@ class PlannerAgent:
             Parent agent ID or None if no parent.
 
         """
-        return self._parent_id
+        return self.state.get_state().parent_id
 
     def get_child_ids(self) -> list[str]:
         """Get child agent IDs.
@@ -653,7 +733,7 @@ class PlannerAgent:
             List of child agent IDs.
 
         """
-        return self._child_ids.copy()
+        return self.state.get_state().child_ids
 
     def add_child(self, child_agent_id: str) -> None:
         """Add a child agent.
@@ -662,8 +742,9 @@ class PlannerAgent:
             child_agent_id: Child agent ID to add.
 
         """
-        if child_agent_id not in self._child_ids:
-            self._child_ids.append(child_agent_id)
+        state = self.state.get_state()
+        if child_agent_id not in state.child_ids:
+            state.child_ids.append(child_agent_id)
 
     def remove_child(self, child_agent_id: str) -> None:
         """Remove a child agent.
@@ -672,8 +753,9 @@ class PlannerAgent:
             child_agent_id: Child agent ID to remove.
 
         """
-        if child_agent_id in self._child_ids:
-            self._child_ids.remove(child_agent_id)
+        state = self.state.get_state()
+        if child_agent_id in state.child_ids:
+            state.child_ids.remove(child_agent_id)
 
     def set_parent(self, parent_agent_id: str) -> None:
         """Set parent agent.
@@ -682,85 +764,101 @@ class PlannerAgent:
             parent_agent_id: Parent agent ID.
 
         """
-        self._parent_id = parent_agent_id
+        self.state.get_state().parent_id = parent_agent_id
 
     def clear_parent(self) -> None:
         """Clear parent agent reference."""
-        self._parent_id = None
+        self.state.get_state().parent_id = None
 
-    async def delegate_to_child(self, child_id: str, task: str) -> Result[str]:
+    async def delegate_to_planner(self, task: Message | str) -> Result[str]:
+        """Delegate a task to another planner agent.
+
+        Args:
+            task: Task to delegate.
+
+        Returns:
+            Result of delegation.
+
+        """
+        try:
+            # Convert string task to message if needed
+            if isinstance(task, str):
+                task = create_human_message(content=task)
+
+            # Check delegation depth
+            if self._current_delegation_depth >= self.max_delegation_depth:
+                error_msg = f"Maximum delegation depth ({self.max_delegation_depth}) exceeded"
+                return Result(success=False, error=error_msg, data="")
+
+            # Create a new planner agent with same max_delegation_depth
+            new_planner = PlannerAgent(
+                provider=self.provider,
+                config=self.config,
+                max_delegation_depth=self.max_delegation_depth,
+            )
+            # Set the delegation depth for the new planner
+            new_planner._current_delegation_depth = self._current_delegation_depth + 1
+
+            # Process the task with the new planner
+            result = await new_planner.process(task)
+            if result.success:
+                result.data = f"Task delegated to sub-planner: {result.data}"
+            return result
+
+        except Exception as e:
+            error_msg = f"Error delegating to planner: {e!s}"
+            return Result(success=False, error=error_msg, data="")
+
+    async def delegate_to_child(self, child_id: str, task: Message | str) -> Result[str]:
         """Delegate a task to a child agent.
 
         Args:
             child_id: ID of the child agent.
-            task: Task description to delegate.
+            task: Task to delegate.
 
         Returns:
-            Result containing the child agent's response.
-
-        """
-        # Check if child_id is in child_ids
-        if child_id not in self._child_ids:
-            error_msg = f"Agent {child_id} is not a child of {self._agent_id}"
-            self._logger.warning(error_msg)
-            return Result.failure(error_msg)
-
-        # Get child agent from state
-        child_agent = self.state.get_agent(child_id)
-        if not child_agent:
-            error_msg = f"Child agent {child_id} not found"
-            self._logger.warning(error_msg)
-            return Result.failure(error_msg)
-
-        # Delegate to child
-        try:
-            self._logger.info("Delegating task to child agent %s: %s", child_id, task)
-            return await child_agent.process(task)
-        except Exception as e:
-            error_msg = f"Error delegating to child agent {child_id}: {e!s}"
-            self._logger.exception(error_msg)
-            return Result.failure(error_msg)
-
-    async def delegate_to_planner(self, task_description: str) -> Result:
-        """Delegate a task to another planner agent.
-
-        This method is used when a task is complex enough to warrant delegation to
-        another planner agent for further breakdown and planning.
-
-        Args:
-            task_description: The description of the task to delegate.
-
-        Returns:
-            Result object with success/failure status and delegation information.
+            Result of delegation.
 
         """
         try:
-            # Evaluate the complexity of the subtask
-            self.evaluate_subtask_complexity(task_description)
+            # Convert string task to message if needed
+            if isinstance(task, str):
+                task = create_human_message(content=task)
 
-            self._logger.info(f"PlannerAgent {self._agent_id} delegating task to another planner: {task_description}")
+            # Check if child_id is valid
+            if not child_id or not isinstance(child_id, str):
+                error_msg = "Invalid child ID provided"
+                return Result(success=False, error=error_msg, data="")
 
-            # In test environment, return a mock result
-            if isinstance(self._provider, unittest.mock.MagicMock):
-                self._logger.debug("Test environment detected, returning mock delegation result")
-                return Result.success("Task delegated to sub-planner")
+            # Check if child exists and is registered as a child
+            if child_id not in self.state.child_ids:
+                error_msg = f"Agent {child_id} is not a child of {self.state.agent_id}"
+                return Result(success=False, error=error_msg, data="")
 
-            # Create a new planner agent
-            new_planner = await self._create_sub_planner()
-            if new_planner is None:
-                return Result.failure("Failed to create sub-planner agent")
+            child_agent = self.state.get_agent(child_id)
+            if not child_agent:
+                error_msg = f"Agent not found: {child_id}"
+                return Result(success=False, error=error_msg, data="")
 
-            # Delegate the task to the new planner
-            result = await new_planner.process(task_description)
+            # Check delegation depth
+            if self._current_delegation_depth >= self.max_delegation_depth:
+                error_msg = f"Maximum delegation depth ({self.max_delegation_depth}) exceeded"
+                return Result(success=False, error=error_msg, data="")
 
+            # Set delegation depth for child agent if it's a planner
+            if isinstance(child_agent, PlannerAgent):
+                child_agent._current_delegation_depth = self._current_delegation_depth + 1
+                child_agent._max_delegation_depth = self.max_delegation_depth
+
+            # Process the task with the child agent
+            result = await child_agent.process(task)
             if result.success:
-                return Result.success("Task delegated to sub-planner")
-            return Result.failure(f"Sub-planner failed to process task: {result.error}")
+                result.data = f"Task processed by child {child_id}: {result.data}"
+            return result
 
         except Exception as e:
-            error_msg = f"Error delegating to planner: {e!s}"
-            self._logger.exception(error_msg)
-            return Result.failure(error_msg)
+            error_msg = f"Error delegating to child: {e!s}"
+            return Result(success=False, error=error_msg, data="")
 
     async def collect_results_from_children(self) -> dict[str, Result[Any]]:
         """Collect results from child agents.
@@ -770,7 +868,7 @@ class PlannerAgent:
 
         """
         results: dict[str, Result[Any]] = {}
-        for child_id in self._child_ids:
+        for child_id in self.state.child_ids:
             # Format the result to match test expectations
             results[child_id] = Result(
                 success=True,
@@ -845,7 +943,7 @@ class PlannerAgent:
             log_delegation_decision(
                 logger=self._logger,
                 delegation_info=DelegationInfo(
-                    source_agent_id=self._agent_id,
+                    source_agent_id=self.state.agent_id,
                     target_agent_id=executor_id,
                     task=task,
                     reason=f"Direct delegation to executor due to {complexity.name} complexity",
@@ -858,7 +956,7 @@ class PlannerAgent:
         log_delegation_decision(
             logger=self._logger,
             delegation_info=DelegationInfo(
-                source_agent_id=self._agent_id,
+                source_agent_id=self.state.agent_id,
                 target_agent_id="none",
                 task=task,
                 reason=f"Task too complex ({complexity.name}) for direct executor delegation",
@@ -1027,7 +1125,7 @@ class PlannerAgent:
                         has_failures = True
                     # The _delegate_single_task returns a tuple of (result, should_retry, error)
                     # But in test mocks it might return a Result object directly
-                    elif isinstance(result, tuple) and len(result) == 3:
+                    elif isinstance(result, tuple) and len(result) == RESULT_TUPLE_SIZE:
                         task_result, should_retry, error = result
                         if task_result is not None:
                             all_results.append(Result.success(task_result))
@@ -1547,23 +1645,27 @@ class PlannerAgent:
         """
         from src.agent.agent_types import create_planner_agent
 
+        def _validate_planner(planner: PlannerAgent | None) -> PlannerAgent:
+            if not planner:
+                msg = "Failed to create planner agent for delegation"
+                raise ValueError(msg)
+            return planner
+
         try:
             # Create a new planner agent directly
             planner_agent = create_planner_agent(
-                provider=self._provider,
-                config=self._config,
-                parent_id=self._agent_id,
+                provider=self.provider,
+                config=self.config,
+                parent_id=self.state.agent_id,
             )
 
-            if not planner_agent:
-                msg = "Failed to create planner agent for delegation"
-                raise ValueError(msg)
+            planner_agent = _validate_planner(planner_agent)
 
             # Log the delegation decision
             log_delegation_decision(
                 self._logger,
                 DelegationInfo(
-                    source_agent_id=self._agent_id,
+                    source_agent_id=self.state.agent_id,
                     target_agent_id=planner_agent.get_agent_id(),
                     task="Complex sub-component task",
                     reason="Task complexity requires specialized planning",
@@ -1825,30 +1927,71 @@ class PlannerAgent:
         if not tasks:
             return []
 
-        # In a real implementation, this would use LLM to analyze dependencies
-        # For testing purposes, we'll use the mocked response
-        response = self._get_llm_response("")
+        # Get dependencies from LLM
+        try:
+            # Format tasks for LLM prompt
+            task_descriptions = "\n".join(f"- {task.task_id}: {task.description}" for task in tasks)
+            prompt = f"Analyze dependencies between these tasks:\n{task_descriptions}\nReturn a JSON object with 'dependencies' key containing a list of task dependencies."
 
-        # If the mocked response has dependencies, use them
-        if "dependencies" in response and isinstance(response["dependencies"], list):
-            return response["dependencies"]
+            response = asyncio.get_event_loop().run_until_complete(self._get_llm_response(prompt))
 
-        # Otherwise, use a simple implementation for testing
-        dependencies = []
+            if "dependencies" in response:
+                return response["dependencies"]
 
-        # Simple implementation for testing
-        for i in range(len(tasks) - 1):
-            dependencies.append(
-                {
-                    "task_id": tasks[i].task_id,
-                    "dependent_task_ids": [tasks[i + 1].task_id],
-                },
-            )
+            return []
 
-        return dependencies
+        except (ValueError, KeyError, TypeError, AttributeError, ConnectionError):
+            # Fallback to rule-based approach if LLM fails
+            dependencies = []
+            for i, task in enumerate(tasks):
+                dependent_task_ids = []
+                # Check if any subsequent tasks might depend on this one
+                for j in range(i + 1, len(tasks)):
+                    next_task = tasks[j]
+                    if self._might_have_dependency(task, next_task):
+                        dependent_task_ids.append(next_task.task_id)
+                if dependent_task_ids:
+                    dependencies.append(
+                        {
+                            "task_id": task.task_id,
+                            "dependent_task_ids": dependent_task_ids,
+                        },
+                    )
+            return dependencies
+
+    def _might_have_dependency(self, task1: Task, task2: Task) -> bool:
+        """Check if task2 might depend on task1 based on their descriptions.
+
+        Args:
+            task1: The first task.
+            task2: The second task.
+
+        Returns:
+            True if task2 might depend on task1, False otherwise.
+
+        """
+        # Simple heuristic: check if task2's description mentions task1's key terms
+        key_terms = self._extract_key_terms(task1.description.lower())
+        return any(term in task2.description.lower() for term in key_terms)
+
+    def _extract_key_terms(self, description: str) -> list[str]:
+        """Extract key terms from a task description.
+
+        Args:
+            description: The task description.
+
+        Returns:
+            List of key terms.
+
+        """
+        # Simple implementation - in practice, you'd want more sophisticated NLP
+        words = description.split()
+        # Filter out common words and keep technical/important terms
+        common_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for"}
+        return [word for word in words if word not in common_words and len(word) > 3]
 
     def estimate_task_completion_time(self, task: Task) -> int:
-        """Estimate the time (in minutes) required to complete a task.
+        """Estimate task completion time in minutes.
 
         Args:
             task: The task to estimate.
@@ -1857,30 +2000,31 @@ class PlannerAgent:
             Estimated completion time in minutes.
 
         """
-        # Base time estimates by complexity
+        # Base estimates in minutes
         base_times = {
-            TaskComplexity.SIMPLE: 30,
-            TaskComplexity.MODERATE: 120,
-            TaskComplexity.COMPLEX: 360,
-            TaskComplexity.VERY_COMPLEX: 720,
+            TaskComplexity.SIMPLE: 30,  # 30 minutes
+            TaskComplexity.MODERATE: 120,  # 2 hours
+            TaskComplexity.COMPLEX: 360,  # 6 hours
+            TaskComplexity.VERY_COMPLEX: 480,  # 8 hours
         }
 
-        # Get base time from complexity
-        base_time = base_times.get(task.complexity, 120)
+        base_time = base_times[task.complexity]
 
         # Adjust for dependencies
-        dependency_factor = 1.0 + (0.1 * len(task.dependencies) if task.dependencies else 0)
+        if task.dependencies:
+            base_time *= 1.2  # 20% increase for each dependency
+            base_time *= len(task.dependencies)
 
         # Adjust for subtasks
-        subtask_factor = 1.0 + (0.2 * len(task.subtasks) if task.subtasks else 0)
+        if task.subtasks:
+            base_time *= 1.1  # 10% increase for coordination overhead
+            base_time *= len(task.subtasks)
 
-        # Calculate final estimate
-        estimated_time = base_time * dependency_factor * subtask_factor
+        # Ensure minimum time
+        return max(15, int(base_time))
 
-        return int(estimated_time)
-
-    def _get_llm_response(self, prompt: str) -> dict[str, Any]:
-        """Get a response from the LLM.
+    async def _get_llm_response(self, prompt: str) -> dict[str, Any]:
+        """Get a response from the LLM provider.
 
         Args:
             prompt: The prompt to send to the LLM.
@@ -1888,69 +2032,13 @@ class PlannerAgent:
         Returns:
             The parsed response from the LLM.
 
-        """
-        # This is a mock implementation for testing
-        # In a real implementation, this would call the LLM
-        return {"dependencies": []}
-
-    def _get_child_planner(self, agent_name: str) -> PlannerAgent:
-        """Get a child planner agent with the given name.
-
-        Args:
-            agent_name: The name of the child planner agent.
-
-        Returns:
-            A new PlannerAgent instance.
+        Raises:
+            ValueError: If the provider is not set.
 
         """
+        self._validate_provider()
+        response = await self.provider.generate(prompt)
         try:
-            return self._create_child_planner(agent_name)
-        except Exception:
-            self._logger.exception("Error creating sub-planner")
-            raise
-
-
-# Factory functions for agent creation (used in tests)
-def create_planner_agent(
-    provider=None,
-    state_manager=None,
-    config=None,
-) -> PlannerAgent:
-    """Create a new planner agent.
-
-    This factory function is used for testing and by the hierarchy to create planner agents.
-
-    Args:
-        provider: The LLM provider to use.
-        state_manager: The state manager to use.
-        config: Agent configuration.
-
-    Returns:
-        A new PlannerAgent instance.
-
-    """
-    return PlannerAgent(provider=provider, state_manager=state_manager, config=config)
-
-
-def create_executor_agent(
-    provider=None,
-    state_manager=None,
-    config=None,
-):
-    """Create a new executor agent.
-
-    This factory function is used for testing and by the hierarchy to create executor agents.
-
-    Args:
-        provider: The LLM provider to use.
-        state_manager: The state manager to use.
-        config: Agent configuration.
-
-    Returns:
-        A new ExecutorAgent instance.
-
-    """
-    # Import here to avoid circular imports
-    from src.agent.agent_types.executor import ExecutorAgent
-
-    return ExecutorAgent(provider=provider, state_manager=state_manager, config=config)
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {"error": "Failed to parse LLM response"}

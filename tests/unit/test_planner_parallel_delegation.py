@@ -11,6 +11,8 @@ from src.common_types.task_types import (
     ParallelizationGroup,
     ParallelizationStrategy,
     Task,
+    TaskComplexity,
+    TaskPriority,
 )
 
 
@@ -156,8 +158,14 @@ class TestPlannerParallelDelegation:
             "Task 2: Create user profile page",
         ]
 
-        # Create a parent task
-        parent_task_id = uuid.uuid4()
+        # Create a parent task in the state manager
+        parent_task = Task(
+            description="Parent task: Implement authentication system",
+            complexity=TaskComplexity.COMPLEX,
+            priority=TaskPriority.HIGH,
+        )
+        planner_agent.state.get_state().add_task(parent_task)
+        parent_task_id = parent_task.task_id
 
         # Configure parallel delegation
         result = planner_agent.configure_parallel_delegation(

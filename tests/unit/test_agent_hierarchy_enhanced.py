@@ -141,7 +141,7 @@ class TestEnhancedAgentHierarchy:
 
         # Create an inconsistency by manually breaking a relationship
         planner1 = registry.get_agent(agent_hierarchy["planner1"])
-        planner1._parent_id = "non-existent-id"  # type: ignore[attr-defined]
+        planner1.set_parent("non-existent-id")
 
         # Verify the inconsistency exists
         inconsistencies = registry.validate_hierarchy()
@@ -152,7 +152,7 @@ class TestEnhancedAgentHierarchy:
         """Test repair_hierarchy method."""
         # Create an inconsistency by manually breaking a relationship
         planner1 = registry.get_agent(agent_hierarchy["planner1"])
-        planner1._parent_id = "non-existent-id"  # type: ignore[attr-defined]
+        planner1.set_parent("non-existent-id")
 
         # Verify the inconsistency exists
         inconsistencies = registry.validate_hierarchy()

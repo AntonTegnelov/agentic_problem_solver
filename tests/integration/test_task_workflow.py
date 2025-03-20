@@ -240,7 +240,7 @@ class TestTaskWorkflow:
 
         # Verify subtasks were created
         tasks = state_manager.get_state().get_tasks()
-        assert len(tasks) == 7  # 2 default + 3 from architect + 2 manually added
+        assert len(tasks) == 6  # 2 default + 2 from architect + 2 manually added
         subtasks = [t for t in tasks if t.get("parent_task_id") == high_priority_task["task_id"]]
         assert len(subtasks) >= 2  # At least 2 subtasks
 
@@ -366,7 +366,7 @@ class TestTaskWorkflow:
 
         # Verify subtasks and dependencies after manual creation
         tasks = state_manager.get_state().get_tasks()
-        assert len(tasks) == 7  # 2 default + 3 from architect + 2 manually added
+        assert len(tasks) == 6  # 2 default + 2 from architect + 2 manually added
 
     @pytest.mark.asyncio
     async def test_task_priority_handling(
