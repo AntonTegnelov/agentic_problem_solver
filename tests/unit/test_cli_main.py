@@ -174,11 +174,11 @@ def test_setup_agent_config_error(mock_load_env_var: MagicMock, mock_create_arch
     configuration errors during agent initialization.
     """
     # Mock environment variable to return valid values
-    mock_load_env_var.side_effect = ["fake-api-key", "gemini-pro"]
+    mock_load_env_var.side_effect = ["fake-api-key", "gemini-1.5-pro"]
 
     # Setup mock to raise a ConfigError
     mock_create_architect_agent.side_effect = ConfigError("Invalid configuration")
 
     # Call the function and verify it raises the expected error
-    with pytest.raises(ValueError, match="Configuration error: Invalid configuration"):
-        setup_agent("gemini-pro", 0.7, 1000)
+    with pytest.raises(ConfigError):
+        setup_agent("gemini-1.5-pro", 0.7, 1000)

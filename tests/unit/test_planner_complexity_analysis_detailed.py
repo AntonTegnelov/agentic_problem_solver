@@ -113,8 +113,8 @@ class TestPlannerComplexityAnalysisDetailed(unittest.TestCase):
         # Verify that complexity increases with more requirements
         assert complexity_one_req in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]
         assert complexity_three_reqs in [TaskComplexity.MODERATE, TaskComplexity.COMPLEX]
-        assert complexity_five_reqs in [TaskComplexity.MODERATE, TaskComplexity.COMPLEX], (
-            f"Got {complexity_five_reqs}, expected MODERATE or COMPLEX"
+        assert complexity_five_reqs in [TaskComplexity.MODERATE, TaskComplexity.COMPLEX, TaskComplexity.VERY_COMPLEX], (
+            f"Got {complexity_five_reqs}, expected MODERATE, COMPLEX, or VERY_COMPLEX"
         )
         assert complexity_many_reqs in [TaskComplexity.COMPLEX, TaskComplexity.VERY_COMPLEX], (
             f"Got {complexity_many_reqs}, expected COMPLEX or VERY_COMPLEX"

@@ -89,9 +89,24 @@ def test_evaluate_subtask_complexity_llm_fallback(planner_agent: PlannerAgent, m
 
 async def test_delegate_to_planner(planner_agent: PlannerAgent) -> None:
     """Test delegation to another planner."""
-    # Set up mock provider to return a successful response
-    mock_response = {"success": True, "message": "Task delegated to sub-planner"}
-    planner_agent.provider.set_response("Complex task to delegate", mock_response)
+    # Create a mock sub-planner
+    sub_planner = PlannerAgent(
+        provider=planner_agent.provider,
+        config=planner_agent.config,
+        max_delegation_depth=planner_agent.max_delegation_depth - 1,
+    )
+
+    # Mock the process method to return a successful result
+    async def mock_process(task):
+        return type("Result", (), {"success": True, "data": "Task processed by sub-planner", "error": None})
+
+    sub_planner.process = mock_process
+
+    # Mock the _create_sub_planner method to return our mock sub-planner
+    async def mock_create_sub_planner():
+        return sub_planner
+
+    planner_agent._create_sub_planner = mock_create_sub_planner
 
     # Create a properly structured message
     task_message = create_human_message(content="Complex task to delegate")
@@ -113,18 +128,24 @@ async def test_delegate_to_child(planner_agent: PlannerAgent) -> None:
     child_id = "test_child"
     planner_agent.add_child(child_id)
 
-    # Create and register a mock child agent in the state
+    # Create a mock child agent
     child_agent = PlannerAgent(
         provider=planner_agent.provider,
-        config=AgentConfig(),
-        max_delegation_depth=3,
+        config=planner_agent.config,
+        max_delegation_depth=planner_agent.max_delegation_depth - 1,
     )
-    child_agent._agent_id = child_id
-    planner_agent.state._agents[child_id] = child_agent
 
-    # Set up mock response for the child agent
-    mock_response = {"success": True, "message": "Task processed by child"}
-    planner_agent.provider.set_response("Test task", mock_response)
+    # Set the agent ID
+    child_agent.get_agent_id = lambda: child_id
+
+    # Mock the process method to return a successful result
+    async def mock_process(task):
+        return type("Result", (), {"success": True, "data": "Task processed by child", "error": None})
+
+    child_agent.process = mock_process
+
+    # Register the child agent in the state
+    planner_agent.state._agents[child_id] = child_agent
 
     # Create a properly structured message
     task_message = create_human_message(content="Test task")
@@ -137,6 +158,7 @@ async def test_delegate_to_child(planner_agent: PlannerAgent) -> None:
     # Test with existing child
     result = await planner_agent.delegate_to_child(child_id, task_message)
     assert result.success
+    assert "Task processed by child" in str(result.data)
 
     # Test delegation depth limit
     planner_agent._current_delegation_depth = planner_agent.max_delegation_depth

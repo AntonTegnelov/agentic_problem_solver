@@ -221,14 +221,16 @@ class TestGeminiProvider:
         # Should not raise an exception
         provider.validate_response(response)
 
-    def test_generate_not_initialized(self) -> None:
+    @pytest.mark.asyncio
+    async def test_generate_not_initialized(self) -> None:
         """Test generate method when provider is not initialized."""
         provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = None
         with pytest.raises(ConfigError, match="Provider not initialized"):
-            provider.generate([])
+            await provider.generate([])
 
-    def test_generate_success(self) -> None:
+    @pytest.mark.asyncio
+    async def test_generate_success(self) -> None:
         """Test generate method success."""
         provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = MagicMock()
@@ -243,18 +245,19 @@ class TestGeminiProvider:
             ToolMessage(content="Tool message", tool_call_id="test_id"),
         ]
 
-        result = provider.generate(messages)
+        result = await provider.generate(messages)
         assert result == "Test response"
         provider.model.generate_content.assert_called_once()
 
-    def test_generate_exception(self) -> None:
+    @pytest.mark.asyncio
+    async def test_generate_exception(self) -> None:
         """Test generate method with exception."""
         provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = MagicMock()
         provider.model.generate_content.side_effect = Exception("Test exception")
 
         with pytest.raises(RetryError):
-            provider.generate([HumanMessage(content="Hello")])
+            await provider.generate([HumanMessage(content="Hello")])
 
     @pytest.mark.asyncio
     async def test_generate_stream_not_initialized(self) -> None:
@@ -346,13 +349,14 @@ class TestGeminiProvider:
         # Should not raise an exception
         provider.validate_config(config)
 
-    def test_count_tokens_not_initialized(self) -> None:
+    @pytest.mark.asyncio
+    async def test_count_tokens_not_initialized(self) -> None:
         """Test count_tokens method when provider is not initialized."""
         provider = GeminiProviderTestHelper.__new__(GeminiProviderTestHelper)
         provider.model = None
 
         with pytest.raises(ConfigError, match="Provider not initialized"):
-            provider.count_tokens("Test text")
+            provider.count_tokens("test")
 
     def test_count_tokens_success(self) -> None:
         """Test count_tokens method success."""

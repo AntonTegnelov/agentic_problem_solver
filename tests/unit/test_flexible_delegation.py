@@ -139,7 +139,20 @@ class TestPlannerAgentDelegation:
             planner.evaluate_subtask_complexity = MagicMock(return_value=TaskComplexity.COMPLEX)
             planner._logger = MagicMock()
 
-            # Mock the _create_sub_planner method to avoid creating a real sub-planner
+            # Create a mock sub-planner that will be returned by _create_sub_planner
+            mock_sub_planner = MagicMock(spec=PlannerAgent)
+            mock_sub_planner._current_delegation_depth = 1
+            mock_sub_planner.max_delegation_depth = 3
+
+            # Set up the process method to return a Result object
+            mock_process_result = Result(success=True, data="Sub-planner processed task", error=None)
+            mock_sub_planner.process = AsyncMock(return_value=mock_process_result)
+
+            # Mock the _create_sub_planner method to return our mock sub-planner
+            async def mock_create_sub_planner():
+                return mock_sub_planner
+
+            planner._create_sub_planner = mock_create_sub_planner
             planner.provider = MagicMock()
 
             # Act
@@ -148,6 +161,7 @@ class TestPlannerAgentDelegation:
             # Assert
             assert result.success is True
             assert "Task delegated to sub-planner" in result.data
+            mock_sub_planner.process.assert_called_once()
 
 
 class TestAgentCoordinatorDelegation:

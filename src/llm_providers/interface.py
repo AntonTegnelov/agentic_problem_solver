@@ -15,7 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover
 class LLMProvider(Protocol):
     """Protocol defining the interface for LLM providers."""
 
-    def generate(
+    async def generate(
         self,
         messages: list[Message],
         *,

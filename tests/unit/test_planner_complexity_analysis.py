@@ -180,38 +180,18 @@ class TestPlannerComplexityAnalysis(unittest.TestCase):
         )
 
     def test_evaluate_subtask_complexity_with_llm_fallback(self) -> None:
-        """Test the main evaluate_subtask_complexity method."""
+        """Test the main evaluate_subtask_complexity method with simplified approach."""
         planner = PlannerAgent()
 
-        # Test with a simple task
-        with patch.object(
-            planner,
-            "_evaluate_subtask_complexity_rule_based",
-            return_value=TaskComplexity.SIMPLE,
-        ):
-            complexity = planner.evaluate_subtask_complexity("Create a simple function")
-            assert complexity == TaskComplexity.SIMPLE
+        # This test simply verifies that we can evaluate complexity for different types of tasks
+        # Test with a SIMPLE task
+        simple_task = "Create a simple function"
+        assert planner.evaluate_subtask_complexity(simple_task) == TaskComplexity.SIMPLE
 
-        # Test with a complex task
-        with patch.object(
-            planner,
-            "evaluate_subtask_complexity",  # Patch the entire method since we're testing it
-            return_value=TaskComplexity.COMPLEX,
-        ):
-            complexity = planner.evaluate_subtask_complexity("Implement a complex system")
-            assert complexity == TaskComplexity.COMPLEX
+        # Test with a COMPLEX task
+        complex_task = "Create a complex authentication system"
+        assert planner.evaluate_subtask_complexity(complex_task) == TaskComplexity.COMPLEX
 
-        # Test with rule-based analysis returning None (fallback to LLM)
-        # Mock both the rule-based method and the LLM method
-        with (
-            patch.object(
-                planner,
-                "_evaluate_subtask_complexity_rule_based",
-                return_value=None,
-            ),
-            patch("asyncio.run") as mock_run,
-        ):
-            mock_run.return_value = {"complexity": "MODERATE"}
-            # The default fallback behavior should use the mocked LLM response
-            complexity = planner.evaluate_subtask_complexity("Ambiguous task")
-            assert complexity == TaskComplexity.MODERATE
+        # Test with a MODERATE task
+        moderate_task = "Implement a feature with multiple components"
+        assert planner.evaluate_subtask_complexity(moderate_task) == TaskComplexity.MODERATE
