@@ -10,6 +10,7 @@ import inspect
 import json
 import logging
 import os
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import uuid4
 
@@ -17,13 +18,14 @@ from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
 from src.agent.steps import TaskBreakdownStep
 from src.common_types.enums import (
     AgentRole,
+    TaskComplexity,
+    TaskPriority,
 )
+from src.common_types.message_types import Message
 from src.common_types.result_types import Result
 from src.common_types.task_types import (
     Task,
-    TaskComplexity,
     TaskDependency,
-    TaskPriority,
 )
 from src.config.agent import AgentConfig
 from src.llm_providers.factory import LLMProviderFactory
@@ -32,7 +34,7 @@ from src.messages.creation import create_human_message
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from src.common_types.message_types import Message
+    from src.agent.agent_types.agent_types import Agent
     from src.llm_providers.interface import LLMProvider
 
 # Constants
@@ -1098,3 +1100,719 @@ class PlannerAgent:
             if hasattr(self, "_logger"):
                 self._logger.exception(error_msg)
             return Result(success=False, error=error_msg, data=None)
+
+    def _prepare_child_task_message(self, task: Message | str) -> Message:
+        """Prepare a task message for sending to a child agent.
+
+        Args:
+            task: Task to delegate.
+
+        Returns:
+            Message object ready for delegation.
+
+        """
+        # If the task is already a Message, just return it
+        if isinstance(task, Message):
+            return task
+
+        # Otherwise, create a new Message
+        from src.messages import HumanMessage
+
+        return HumanMessage(content=str(task))
+
+    async def _create_sub_planner(self) -> PlannerAgent:
+        """Create a sub-planner agent.
+
+        Returns:
+            Newly created planner agent.
+
+        """
+        # Increment the delegation depth to prevent excessive nesting
+        delegation_depth = getattr(self, "_delegation_depth", 0) + 1
+
+        # Create a new planner agent with the current one as parent
+        from src.agent.agent_types import create_planner_agent
+
+        sub_planner = await create_planner_agent(
+            provider=self._provider,
+            config=self._config,
+            state_manager=self.state,
+            max_delegation_depth=self._max_delegation_depth,
+        )
+
+        # Set delegation depth
+        sub_planner._delegation_depth = delegation_depth
+
+        # Set parent-child relationship
+        sub_planner.set_parent(self.get_agent_id())
+        self.add_child(sub_planner.get_agent_id())
+
+        return sub_planner
+
+    def _prepare_state(self, input_data: str) -> list[Message]:
+        """Prepare the state for processing a message.
+
+        Args:
+            input_data: Input data to process.
+
+        Returns:
+            List of messages representing the conversation history.
+
+        """
+        # Get current conversation state
+        messages = self.state.get_messages().copy()
+
+        # If no messages or the last message wasn't from the user, add the new one
+        from src.messages import HumanMessage
+
+        if not messages or not messages[-1].message_type.is_human():
+            messages.append(HumanMessage(content=input_data))
+
+        return messages
+
+    async def delegate_to_executor(self, task: Message | str) -> Result[str]:
+        """Delegate a task to an executor agent.
+
+        Args:
+            task: Task to delegate.
+
+        Returns:
+            Result of delegation.
+
+        """
+        try:
+            # Prepare task message
+            task_message = self._prepare_child_task_message(task)
+
+            # Get or create a child executor agent
+            executor_id = await self._get_or_create_executor()
+            if not isinstance(executor_id, str):
+                return Result(
+                    success=False,
+                    error=f"Failed to get or create executor agent: {executor_id.error}",
+                    data="",
+                )
+
+            # Delegate to the executor
+            return await self.delegate_to_child(executor_id, task_message)
+
+        except Exception as e:
+            error_msg = f"Error delegating to executor: {e!s}"
+            if hasattr(self, "_logger"):
+                self._logger.exception(error_msg)
+            return Result(success=False, error=error_msg, data="")
+
+    async def _get_or_create_executor(self) -> str | Result:
+        """Get or create an executor agent for delegation.
+
+        Returns:
+            Executor agent ID if successful, Result with error otherwise.
+
+        """
+        # Check for existing child executors
+        executor_ids = [child_id for child_id in self.get_child_ids() if self._get_agent_role(child_id) == "executor"]
+
+        if executor_ids:
+            # Use the first available executor
+            return executor_ids[0]
+
+        # No executor found, create a new one
+        try:
+            from src.agent.agent_types import create_executor_agent
+
+            executor = await create_executor_agent(
+                provider=self._provider,
+                config=self._config,
+                state_manager=self.state,
+            )
+
+            # Set parent-child relationship
+            executor.set_parent(self.get_agent_id())
+            self.add_child(executor.get_agent_id())
+
+            return executor.get_agent_id()
+
+        except Exception as e:
+            error_msg = f"Failed to create executor agent: {e!s}"
+            if hasattr(self, "_logger"):
+                self._logger.exception(error_msg)
+            return Result(success=False, error=error_msg, data=None)
+
+    def _get_agent_role(self, agent_id: str) -> str:
+        """Get the role of an agent by ID.
+
+        Args:
+            agent_id: Agent ID to check.
+
+        Returns:
+            Role of the agent or empty string if not found.
+
+        """
+        if not hasattr(self, "_agent_registry") or self._agent_registry is None:
+            return ""
+
+        try:
+            agent = self._agent_registry.get_agent(agent_id)
+            return agent.get_role().lower()
+        except Exception:
+            return ""
+
+    def evaluate_task_priority(self, task_description: str) -> TaskPriority:
+        """Evaluate the priority of a task based on its description.
+
+        Args:
+            task_description: Description of the task.
+
+        Returns:
+            Priority level of the task.
+
+        """
+        from src.common_types.enums import TaskPriority
+
+        # Convert to lowercase for case-insensitive matching
+        task_lower = task_description.lower()
+
+        # Check for explicit priority markers
+        if "[high]" in task_lower or "(high priority)" in task_lower:
+            return TaskPriority.HIGH
+        if "[medium]" in task_lower or "(medium priority)" in task_lower:
+            return TaskPriority.MEDIUM
+        if "[low]" in task_lower or "(low priority)" in task_lower:
+            return TaskPriority.LOW
+
+        # Check for high priority keywords
+        high_priority_keywords = [
+            "urgent",
+            "critical",
+            "immediate",
+            "security",
+            "vulnerability",
+            "crash",
+            "bug",
+            "fix",
+            "emergency",
+            "severe",
+            "outage",
+            "down",
+        ]
+        for keyword in high_priority_keywords:
+            if keyword in task_lower:
+                return TaskPriority.HIGH
+
+        # Check for low priority keywords
+        low_priority_keywords = [
+            "minor",
+            "cosmetic",
+            "enhancement",
+            "optimize",
+            "improve",
+            "refactor",
+            "cleanup",
+            "nice to have",
+            "when possible",
+        ]
+        for keyword in low_priority_keywords:
+            if keyword in task_lower:
+                return TaskPriority.LOW
+
+        # Default to medium priority
+        return TaskPriority.MEDIUM
+
+    def analyze_task_dependencies(self, tasks: list[Task]) -> list[dict]:
+        """Analyze dependencies between tasks.
+
+        Args:
+            tasks: List of tasks to analyze.
+
+        Returns:
+            List of dependency information dictionaries.
+
+        """
+        if not tasks:
+            return []
+
+        # Simple implementation - in a real system, we might use LLM for this
+        dependencies = []
+
+        for i, task in enumerate(tasks):
+            # Skip the first task (nothing depends on it)
+            if i == 0:
+                dependencies.append({"task_id": task.task_id, "dependent_task_ids": []})
+                continue
+
+            # Each task depends on the previous task in the list
+            previous_task = tasks[i - 1]
+            dependencies.append(
+                {
+                    "task_id": task.task_id,
+                    "dependent_task_ids": [previous_task.task_id],
+                },
+            )
+
+        return dependencies
+
+    def estimate_task_completion_time(self, task: Task) -> float:
+        """Estimate the time required to complete a task in minutes.
+
+        Args:
+            task: Task to estimate.
+
+        Returns:
+            Estimated completion time in minutes.
+
+        """
+        from src.common_types.enums import TaskComplexity
+
+        # Base estimates in minutes based on complexity
+        base_times = {
+            TaskComplexity.SIMPLE: 30,  # 30 minutes
+            TaskComplexity.MODERATE: 90,  # 1.5 hours
+            TaskComplexity.COMPLEX: 240,  # 4 hours
+            TaskComplexity.VERY_COMPLEX: 480,  # 8 hours
+        }
+
+        # Get base time from complexity
+        complexity = task.complexity or TaskComplexity.MODERATE
+        base_time = base_times[complexity]
+
+        # Apply modifiers based on task properties
+        total_time = base_time
+
+        # Add time for dependencies
+        if hasattr(task, "dependencies") and task.dependencies:
+            total_time += len(task.dependencies) * 15  # 15 minutes per dependency
+
+        # Add time for subtasks
+        if hasattr(task, "subtasks") and task.subtasks:
+            total_time += len(task.subtasks) * 30  # 30 minutes per subtask
+
+        return total_time
+
+    def configure_parallel_delegation(
+        self,
+        tasks: list[Task],
+        parent_task_id: str | None = None,
+        strategy: str = "all",
+    ) -> dict:
+        """Configure how tasks should be delegated in parallel.
+
+        Args:
+            tasks: List of tasks to delegate.
+            parent_task_id: ID of the parent task.
+            strategy: Delegation strategy ("all", "independent", "groups").
+
+        Returns:
+            Configuration dictionary for parallel delegation.
+
+        """
+        if not tasks:
+            return {"tasks": [], "strategy": strategy, "parent_task_id": parent_task_id, "groups": []}
+
+        # Analyze dependencies to determine execution groups
+        dependencies = self.analyze_task_dependencies(tasks)
+
+        # Create a mapping of task_id to its index in the tasks list
+        {task.task_id: i for i, task in enumerate(tasks)}
+
+        # Create a mapping of which tasks depend on each task
+        dependency_map = {}
+        for dep in dependencies:
+            task_id = dep["task_id"]
+            dependency_map[task_id] = dep["dependent_task_ids"]
+
+        # Configure based on strategy
+        if strategy == "all":
+            # Execute all tasks in parallel
+            return {
+                "tasks": tasks,
+                "strategy": "all",
+                "parent_task_id": parent_task_id,
+                "groups": [{"task_ids": [task.task_id for task in tasks]}],
+            }
+        if strategy == "independent":
+            # Group tasks by dependencies
+            independent_tasks = []
+            dependent_tasks = []
+
+            for task in tasks:
+                # If this task has no dependencies, it's independent
+                if not dependency_map.get(task.task_id, []):
+                    independent_tasks.append(task.task_id)
+                else:
+                    dependent_tasks.append(task.task_id)
+
+            return {
+                "tasks": tasks,
+                "strategy": "independent",
+                "parent_task_id": parent_task_id,
+                "groups": [
+                    {"task_ids": independent_tasks},
+                    {"task_ids": dependent_tasks},
+                ],
+            }
+        # strategy == "groups"
+        # Use dependency analysis to create execution groups
+        # This is a simple implementation - in a real system, we might use
+        # more sophisticated graph analysis
+
+        # Start with all tasks in separate groups
+        groups = [
+            {
+                "task_ids": [task.task_id],
+                "dependencies": dependency_map.get(task.task_id, []),
+            }
+            for task in tasks
+        ]
+
+        # Combine groups that can be executed in parallel
+        final_groups = []
+        while groups:
+            current_group = groups.pop(0)
+
+            # Check if this group depends on any tasks in other groups
+            dependent_on_others = False
+            for group in groups:
+                if any(dep_id in group["task_ids"] for dep_id in current_group["dependencies"]):
+                    dependent_on_others = True
+                    break
+
+            if not dependent_on_others:
+                # This group can be executed in parallel with others
+                final_groups.append({"task_ids": current_group["task_ids"]})
+            else:
+                # This group depends on others, move it to the end
+                groups.append(current_group)
+
+            # Avoid infinite loop if there are circular dependencies
+            if len(final_groups) == 0 and len(groups) <= 1:
+                # Just create a single group with all tasks
+                final_groups.append({"task_ids": [task.task_id for task in tasks]})
+                break
+
+        return {
+            "tasks": tasks,
+            "strategy": "groups",
+            "parent_task_id": parent_task_id,
+            "groups": final_groups,
+        }
+
+    async def delegate_tasks_parallel(self, tasks: list[Task], configuration: dict | None = None) -> dict:
+        """Delegate multiple tasks in parallel.
+
+        Args:
+            tasks: List of tasks to delegate.
+            configuration: Configuration for parallel delegation.
+
+        Returns:
+            Dictionary containing delegation results.
+
+        """
+        if not tasks:
+            return {"success": True, "results": [], "errors": []}
+
+        # Use default configuration if none provided
+        if configuration is None:
+            configuration = self.configure_parallel_delegation(tasks)
+
+        # Extract execution groups from configuration
+        groups = configuration.get("groups", [])
+        if not groups:
+            # No groups specified, create a single group with all tasks
+            groups = [{"task_ids": [task.task_id for task in tasks]}]
+
+        # Create task ID to task mapping
+        task_map = {task.task_id: task for task in tasks}
+
+        # Store results and errors
+        results = {}
+        errors = []
+
+        # Process each group in sequence
+        for group_idx, group in enumerate(groups):
+            group_tasks = [task_map[task_id] for task_id in group["task_ids"] if task_id in task_map]
+
+            if not group_tasks:
+                continue
+
+            # Process tasks in this group in parallel
+            import asyncio
+
+            group_results = await asyncio.gather(
+                *[self._delegate_single_task(task) for task in group_tasks],
+                return_exceptions=True,
+            )
+
+            # Process results
+            for _i, (task, result) in enumerate(zip(group_tasks, group_results, strict=False)):
+                if isinstance(result, Exception):
+                    errors.append(
+                        {
+                            "task_id": task.task_id,
+                            "error": str(result),
+                            "group": group_idx,
+                        },
+                    )
+                    results[task.task_id] = {"success": False, "error": str(result), "data": ""}
+                else:
+                    success, message, data = result
+                    results[task.task_id] = {
+                        "success": success,
+                        "message": message,
+                        "data": data,
+                    }
+
+        return {
+            "success": not errors,
+            "results": results,
+            "errors": errors,
+        }
+
+    async def process_tasks_with_retry_parallel(
+        self,
+        tasks: list[Task],
+        max_retries: int = 2,
+        configuration: dict | None = None,
+    ) -> dict:
+        """Process tasks in parallel with automatic retry for failures.
+
+        Args:
+            tasks: List of tasks to process.
+            max_retries: Maximum number of retry attempts.
+            configuration: Configuration for parallel processing.
+
+        Returns:
+            Dictionary containing processing results.
+
+        """
+        if not tasks:
+            return {"success": True, "results": {}, "errors": []}
+
+        # First attempt
+        result = await self.delegate_tasks_parallel(tasks, configuration)
+
+        # If successful, return the result
+        if result["success"]:
+            return result
+
+        # Extract failed tasks
+        failed_task_ids = [error["task_id"] for error in result["errors"]]
+        failed_tasks = [task for task in tasks if task.task_id in failed_task_ids]
+
+        # Retry failed tasks
+        retry_count = 0
+        while failed_tasks and retry_count < max_retries:
+            retry_count += 1
+
+            # Log retry attempt
+            if hasattr(self, "_logger"):
+                self._logger.info(f"Retrying {len(failed_tasks)} failed tasks (attempt {retry_count}/{max_retries})")
+
+            # Create a new configuration for just the failed tasks
+            retry_config = self.configure_parallel_delegation(
+                failed_tasks,
+                parent_task_id=configuration.get("parent_task_id") if configuration else None,
+                strategy="all",  # Use simpler strategy for retries
+            )
+
+            # Retry the failed tasks
+            retry_result = await self.delegate_tasks_parallel(failed_tasks, retry_config)
+
+            # Update the overall results
+            for task_id, task_result in retry_result["results"].items():
+                result["results"][task_id] = task_result
+
+            # Update the list of failed tasks
+            failed_task_ids = [error["task_id"] for error in retry_result["errors"]]
+            failed_tasks = [task for task in failed_tasks if task.task_id in failed_task_ids]
+
+            # Update the error list
+            result["errors"] = [error for error in result["errors"] if error["task_id"] not in retry_result["results"]]
+
+            # If all retries succeeded, mark the overall result as successful
+            if not failed_tasks:
+                result["success"] = True
+
+        return result
+
+    async def _delegate_single_task(self, task: Task) -> tuple[bool, str, str]:
+        """Delegate a single task based on its complexity.
+
+        Args:
+            task: Task to delegate.
+
+        Returns:
+            Tuple of (success, message, data).
+
+        """
+        try:
+            # Determine delegation target based on complexity
+            complexity = task.complexity or self.evaluate_subtask_complexity(task.description)
+
+            # Delegate based on complexity
+            if complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
+                # Simple and moderate tasks go to executor
+                result = await self.delegate_to_executor(task.description)
+            else:
+                # Complex and very complex tasks go to planner
+                result = await self.delegate_to_planner(task.description)
+
+            return (result.success, result.error, result.data)
+
+        except Exception as e:
+            error_msg = f"Error delegating task: {e!s}"
+            if hasattr(self, "_logger"):
+                self._logger.exception(error_msg)
+            return (False, error_msg, "")
+
+    async def delegate_task(self, task: Task) -> Result[str]:
+        """Delegate a task based on its complexity.
+
+        Args:
+            task: Task to delegate.
+
+        Returns:
+            Result of delegation.
+
+        """
+        try:
+            success, message, data = await self._delegate_single_task(task)
+
+            if success:
+                return Result(success=True, error="", data=data)
+            return Result(success=False, error=message, data=data)
+
+        except Exception as e:
+            error_msg = f"Error in delegate_task: {e!s}"
+            if hasattr(self, "_logger"):
+                self._logger.exception(error_msg)
+            return Result(success=False, error=error_msg, data="")
+
+    async def collect_results_from_children(self) -> dict:
+        """Collect results from all child agents.
+
+        Returns:
+            Dictionary mapping child agent IDs to their results.
+
+        """
+        child_ids = self.get_child_ids()
+
+        if not child_ids:
+            return {}
+
+        results = {}
+
+        for child_id in child_ids:
+            try:
+                # Get child agent
+                child_agent_result = await self._get_child_agent(child_id)
+
+                if not child_agent_result.success:
+                    results[child_id] = {
+                        "success": False,
+                        "error": child_agent_result.error,
+                        "data": None,
+                    }
+                    continue
+
+                child_agent = child_agent_result.data
+
+                # Get state from child agent
+                state_data = child_agent.state.get_data()
+
+                # Extract result information
+                result_data = {
+                    "success": True,
+                    "role": child_agent.get_role(),
+                    "state": state_data,
+                    "messages": [
+                        {"type": msg.message_type.value, "content": msg.content}
+                        for msg in child_agent.state.get_messages()
+                    ],
+                }
+
+                results[child_id] = result_data
+
+            except Exception as e:
+                results[child_id] = {
+                    "success": False,
+                    "error": f"Error collecting results: {e!s}",
+                    "data": None,
+                }
+
+        return results
+
+    async def synchronize_dependent_tasks(self, task_ids: list[str]) -> Result[bool]:
+        """Ensure that dependent tasks are completed before proceeding.
+
+        Args:
+            task_ids: List of task IDs to check.
+
+        Returns:
+            Result indicating whether all dependencies are satisfied.
+
+        """
+        # This is a placeholder implementation
+        # In a real system, we would check task completion status
+        return Result(success=True, error="", data=True)
+
+    async def execute_synchronized_tasks(self, tasks: list[Task]) -> Result[dict]:
+        """Execute tasks in the correct order respecting dependencies.
+
+        Args:
+            tasks: List of tasks to execute.
+
+        Returns:
+            Result containing execution results.
+
+        """
+        if not tasks:
+            return Result(success=True, error="", data={})
+
+        # Analyze dependencies
+        dependencies = self.analyze_task_dependencies(tasks)
+
+        # Create a mapping of task_id to task
+        {task.task_id: task for task in tasks}
+
+        # Track completed tasks
+        completed_tasks = set()
+        results = {}
+
+        # Keep processing until all tasks are completed
+        while len(completed_tasks) < len(tasks):
+            # Find tasks that can be executed now
+            executable_tasks = []
+
+            for task in tasks:
+                if task.task_id in completed_tasks:
+                    continue
+
+                # Find this task's dependencies
+                deps = next(
+                    (item["dependent_task_ids"] for item in dependencies if item["task_id"] == task.task_id),
+                    [],
+                )
+
+                # Check if all dependencies are completed
+                if all(dep_id in completed_tasks for dep_id in deps):
+                    executable_tasks.append(task)
+
+            if not executable_tasks:
+                # No tasks can be executed, might be a circular dependency
+                return Result(
+                    success=False,
+                    error="Cannot make progress: possible circular dependency",
+                    data=results,
+                )
+
+            # Execute tasks that can be run now
+            for task in executable_tasks:
+                result = await self.delegate_task(task)
+                results[task.task_id] = {
+                    "success": result.success,
+                    "error": result.error,
+                    "data": result.data,
+                }
+                completed_tasks.add(task.task_id)
+
+        return Result(success=True, error="", data=results)
