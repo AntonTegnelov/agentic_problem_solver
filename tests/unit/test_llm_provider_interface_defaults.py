@@ -21,7 +21,7 @@ class DefaultLLMProvider:
         self,
         messages: list[Message],
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> str:
         """Generate response from messages."""
         if not messages:
@@ -59,26 +59,26 @@ class DefaultLLMProvider:
 
 
 @pytest.fixture
-def provider():
+def provider() -> DefaultLLMProvider:
     """Fixture providing a DefaultLLMProvider instance."""
     return DefaultLLMProvider()
 
 
 def test_provider_implements_protocol() -> None:
-    """Test that DefaultLLMProvider implements LLMProvider protocol."""
+    """Test that DefaultLLMProvider implements the LLMProvider protocol."""
     provider = DefaultLLMProvider()
     assert isinstance(provider, LLMProvider)
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_default_empty_messages(provider) -> None:
+async def test_generate_stream_default_empty_messages(provider: DefaultLLMProvider) -> None:
     """Test generate_stream with empty messages returns empty string."""
     chunks = [chunk async for chunk in provider.generate_stream([])]
     assert not chunks
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_default_with_config(provider) -> None:
+async def test_generate_stream_default_with_config(provider: DefaultLLMProvider) -> None:
     """Test generate_stream with empty messages and config returns empty string."""
     config = GenerationConfig(model="test-model")
     chunks = [chunk async for chunk in provider.generate_stream([], config=config)]
@@ -86,31 +86,31 @@ async def test_generate_stream_default_with_config(provider) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_default_with_messages(provider) -> None:
+async def test_generate_stream_default_with_messages(provider: DefaultLLMProvider) -> None:
     """Test generate_stream with messages returns empty string."""
     messages = [HumanMessage(content="test")]
-    async for chunk in provider.generate_stream(messages):
-        assert chunk == ""
+    chunks = [chunk async for chunk in provider.generate_stream(messages)]
+    assert chunks == [""]
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_default_with_messages_and_config(provider) -> None:
+async def test_generate_stream_default_with_messages_and_config(provider: DefaultLLMProvider) -> None:
     """Test generate_stream with both messages and config returns empty string."""
     messages = [HumanMessage(content="test")]
     config = GenerationConfig(model="test-model")
-    async for chunk in provider.generate_stream(messages, config=config):
-        assert chunk == ""
+    chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
+    assert chunks == [""]
 
 
 @pytest.mark.asyncio
-async def test_generate_default_empty_messages(provider) -> None:
+async def test_generate_default_empty_messages(provider: DefaultLLMProvider) -> None:
     """Test generate with empty messages returns empty string."""
     result = await provider.generate([])
     assert result == ""
 
 
 @pytest.mark.asyncio
-async def test_generate_default_with_config(provider) -> None:
+async def test_generate_default_with_config(provider: DefaultLLMProvider) -> None:
     """Test generate with config returns empty string."""
     config = GenerationConfig(model="test-model")
     result = await provider.generate([], config=config)
@@ -118,33 +118,33 @@ async def test_generate_default_with_config(provider) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_default_with_messages(provider) -> None:
+async def test_generate_default_with_messages(provider: DefaultLLMProvider) -> None:
     """Test generate with messages returns empty string."""
     messages = [HumanMessage(content="test")]
     result = await provider.generate(messages)
     assert result == ""
 
 
-def test_count_tokens_default(provider) -> None:
+def test_count_tokens_default(provider: DefaultLLMProvider) -> None:
     """Test count_tokens raises NotImplementedError."""
     with pytest.raises(NotImplementedError):
         provider.count_tokens("test")
 
 
-def test_validate_config_default(provider) -> None:
+def test_validate_config_default(provider: DefaultLLMProvider) -> None:
     """Test validate_config raises NotImplementedError."""
     config = GenerationConfig(model="test-model")
     with pytest.raises(NotImplementedError):
         provider.validate_config(config)
 
 
-def test_get_config_default(provider) -> None:
+def test_get_config_default(provider: DefaultLLMProvider) -> None:
     """Test get_config raises NotImplementedError."""
     with pytest.raises(NotImplementedError):
         provider.get_config()
 
 
-def test_update_config_default(provider) -> None:
+def test_update_config_default(provider: DefaultLLMProvider) -> None:
     """Test update_config raises NotImplementedError."""
     config = GenerationConfig(model="test-model")
     with pytest.raises(NotImplementedError):
