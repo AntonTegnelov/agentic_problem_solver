@@ -212,6 +212,52 @@ class GeminiProvider(BaseLLMProvider):
             msg = "Empty response from model"
             raise EmptyResponseError(msg)
 
+    def _format_messages(self, messages: list[Message]) -> list[dict]:
+        """Format messages for Gemini API.
+
+        Args:
+            messages: Messages to format.
+
+        Returns:
+            Formatted messages.
+
+        """
+        formatted_messages = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                role = "user"
+            elif isinstance(msg, AIMessage):
+                role = "model"
+            elif isinstance(msg, SystemMessage):
+                role = "system"
+            elif isinstance(msg, ToolMessage):
+                role = "function"
+            else:
+                role = "user"  # Default fallback
+
+            formatted_messages.append({"role": role, "parts": [msg.content]})
+
+        return formatted_messages
+
+    def _apply_config(self, config: GenerationConfig | None) -> None:
+        """Apply configuration to the model.
+
+        Args:
+            config: Configuration to apply.
+
+        """
+        if config is not None and self.config is not None and self._model is not None:
+            # Update generation parameters if provided in config
+            generation_params = {}
+            if hasattr(config, "temperature") and config.temperature is not None:
+                generation_params["temperature"] = config.temperature
+            if hasattr(config, "max_tokens") and config.max_tokens is not None:
+                generation_params["max_output_tokens"] = config.max_tokens
+
+            # Apply the parameters if any were set
+            if generation_params and hasattr(self._model, "generation_config"):
+                self._model.generation_config.update(generation_params)
+
     async def generate(
         self,
         messages: list[Message],
@@ -237,33 +283,8 @@ class GeminiProvider(BaseLLMProvider):
             raise ConfigError(msg)
 
         try:
-            formatted_messages = []
-            for msg in messages:
-                if isinstance(msg, HumanMessage):
-                    role = "user"
-                elif isinstance(msg, AIMessage):
-                    role = "model"
-                elif isinstance(msg, SystemMessage):
-                    role = "system"
-                elif isinstance(msg, ToolMessage):
-                    role = "function"
-                else:
-                    role = "user"  # Default fallback
-
-                formatted_messages.append({"role": role, "parts": [msg.content]})
-
-            # Apply config if provided
-            if config is not None and self.config is not None:
-                # Update generation parameters if provided in config
-                generation_params = {}
-                if hasattr(config, "temperature") and config.temperature is not None:
-                    generation_params["temperature"] = config.temperature
-                if hasattr(config, "max_tokens") and config.max_tokens is not None:
-                    generation_params["max_output_tokens"] = config.max_tokens
-
-                # Apply the parameters if any were set
-                if generation_params and hasattr(self._model, "generation_config"):
-                    self._model.generation_config.update(generation_params)
+            formatted_messages = self._format_messages(messages)
+            self._apply_config(config)
 
             response = self._model.generate_content(formatted_messages)
             self._validate_response(response)
@@ -298,33 +319,8 @@ class GeminiProvider(BaseLLMProvider):
             raise ConfigError(msg)
 
         try:
-            formatted_messages = []
-            for msg in messages:
-                if isinstance(msg, HumanMessage):
-                    role = "user"
-                elif isinstance(msg, AIMessage):
-                    role = "model"
-                elif isinstance(msg, SystemMessage):
-                    role = "system"
-                elif isinstance(msg, ToolMessage):
-                    role = "function"
-                else:
-                    role = "user"  # Default fallback
-
-                formatted_messages.append({"role": role, "parts": [msg.content]})
-
-            # Apply config if provided
-            if config is not None and self.config is not None:
-                # Update generation parameters if provided in config
-                generation_params = {}
-                if hasattr(config, "temperature") and config.temperature is not None:
-                    generation_params["temperature"] = config.temperature
-                if hasattr(config, "max_tokens") and config.max_tokens is not None:
-                    generation_params["max_output_tokens"] = config.max_tokens
-
-                # Apply the parameters if any were set
-                if generation_params and hasattr(self._model, "generation_config"):
-                    self._model.generation_config.update(generation_params)
+            formatted_messages = self._format_messages(messages)
+            self._apply_config(config)
 
             # Use the async version of generate_content for streaming
             response = await self._model.generate_content_async(formatted_messages, stream=True)
