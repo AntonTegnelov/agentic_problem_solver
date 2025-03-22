@@ -147,7 +147,7 @@ async def test_generate_stream_chunks() -> None:
 
     # Test with high max_tokens
     config = GenerationConfig(model="test", max_tokens=200)
-    chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
+    chunks = [chunk async for chunk in provider.generate_stream(messages, _config=config)]
     assert chunks == ["Test stream with config"]
 
 
@@ -178,7 +178,7 @@ async def test_generate_stream_with_config() -> None:
     """Test generate_stream with configuration."""
     provider = EdgeCaseLLMProvider()
     config = GenerationConfig(model="test", temperature=0.8)
-    chunks = [chunk async for chunk in provider.generate_stream([create_human_message("test")], config=config)]
+    chunks = [chunk async for chunk in provider.generate_stream([create_human_message("test")], _config=config)]
     assert chunks == ["Test stream with config"]
 
 
