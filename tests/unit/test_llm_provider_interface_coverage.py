@@ -14,6 +14,7 @@ class ComprehensiveLLMProvider:
     """A comprehensive implementation of LLMProvider for testing."""
 
     def __init__(self) -> None:
+        """Initialize the provider with default configuration."""
         self._config = GenerationConfig(
             model="test-model",
             temperature=0.7,
@@ -31,9 +32,13 @@ class ComprehensiveLLMProvider:
         """Generate response from messages."""
         if not messages:
             return ""
+
+        message_content = messages[0].content if messages else ""
+
         if config:
-            self.validate_config(config)
-        return "Test response"
+            return f"Response for: {message_content} (with custom config)"
+
+        return f"Response for: {message_content}"
 
     async def generate_stream(
         self,
@@ -44,11 +49,14 @@ class ComprehensiveLLMProvider:
         """Generate response stream from messages."""
         if not messages:
             return
+
         if config:
             self.validate_config(config)
-        for chunk in ["Test", " stream", " response"]:
-            yield chunk
-            await asyncio.sleep(0.1)
+
+        response = "Test response"
+        for char in response:
+            yield char
+            await asyncio.sleep(0.01)
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text."""
@@ -58,17 +66,28 @@ class ComprehensiveLLMProvider:
         return len(text.split())
 
     def validate_config(self, config: GenerationConfig) -> None:
-        """Validate configuration."""
+        """Validate configuration parameters.
+
+        Args:
+            config: Configuration to validate.
+
+        Raises:
+            ValueError: If any configuration parameter is invalid.
+
+        """
         if config.temperature < 0 or config.temperature > 1:
             msg = "Temperature must be between 0 and 1"
             raise ValueError(msg)
-        if config.max_tokens < 1:
+
+        if config.max_tokens <= 0:
             msg = "Max tokens must be positive"
             raise ValueError(msg)
+
         if config.top_p < 0 or config.top_p > 1:
             msg = "Top p must be between 0 and 1"
             raise ValueError(msg)
-        if config.top_k < 1:
+
+        if config.top_k <= 0:
             msg = "Top k must be positive"
             raise ValueError(msg)
 
@@ -83,7 +102,7 @@ class ComprehensiveLLMProvider:
 
 
 @pytest.fixture
-def provider():
+def provider() -> ComprehensiveLLMProvider:
     """Fixture providing a ComprehensiveLLMProvider instance."""
     return ComprehensiveLLMProvider()
 
@@ -94,90 +113,86 @@ def test_provider_implements_protocol() -> None:
     assert isinstance(provider, LLMProvider)
 
 
-def test_generate_empty_messages(provider) -> None:
+def test_generate_empty_messages(provider: ComprehensiveLLMProvider) -> None:
     """Test generate with empty messages."""
     result = provider.generate([])
     assert result == ""
 
 
-def test_generate_with_messages(provider) -> None:
+def test_generate_with_messages(provider: ComprehensiveLLMProvider) -> None:
     """Test generate with messages."""
     messages = [
-        HumanMessage(content="Test message"),
+        HumanMessage(content="Hello, world!"),
     ]
     result = provider.generate(messages)
-    assert result == "Test response"
+    assert result == "Response for: Hello, world!"
 
 
-def test_generate_with_config(provider) -> None:
+def test_generate_with_config(provider: ComprehensiveLLMProvider) -> None:
     """Test generate with custom config."""
     messages = [
-        HumanMessage(content="Test message"),
+        HumanMessage(content="Hello, world!"),
     ]
     config = GenerationConfig(
-        model="test-model",
+        model="custom-model",
         temperature=0.5,
-        max_tokens=50,
-        top_p=0.8,
-        top_k=30,
+        max_tokens=200,
     )
     result = provider.generate(messages, config=config)
-    assert result == "Test response"
+    assert result == "Response for: Hello, world! (with custom config)"
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_empty_messages(provider) -> None:
+async def test_generate_stream_empty_messages(provider: ComprehensiveLLMProvider) -> None:
     """Test generate_stream with empty messages."""
     chunks = [chunk async for chunk in provider.generate_stream([])]
-    assert not chunks
+    assert chunks == []
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_with_messages(provider) -> None:
+async def test_generate_stream_with_messages(provider: ComprehensiveLLMProvider) -> None:
     """Test generate_stream with messages."""
     messages = [
-        HumanMessage(content="Test message"),
+        HumanMessage(content="Hello, world!"),
     ]
     chunks = [chunk async for chunk in provider.generate_stream(messages)]
-    assert chunks == ["Test", " stream", " response"]
+    assert chunks == ["T", "e", "s", "t", " ", "r", "e", "s", "p", "o", "n", "s", "e"]
 
 
 @pytest.mark.asyncio
-async def test_generate_stream_with_config(provider) -> None:
+async def test_generate_stream_with_config(provider: ComprehensiveLLMProvider) -> None:
     """Test generate_stream with custom config."""
     messages = [
-        HumanMessage(content="Test message"),
+        HumanMessage(content="Hello, world!"),
     ]
     config = GenerationConfig(
-        model="test-model",
+        model="custom-model",
         temperature=0.5,
         max_tokens=50,
-        top_p=0.8,
-        top_k=30,
     )
     chunks = [chunk async for chunk in provider.generate_stream(messages, config=config)]
-    assert chunks == ["Test", " stream", " response"]
+    assert chunks == ["T", "e", "s", "t", " ", "r", "e", "s", "p", "o", "n", "s", "e"]
 
 
-def test_count_tokens_empty(provider) -> None:
+def test_count_tokens_empty(provider: ComprehensiveLLMProvider) -> None:
     """Test count_tokens with empty text."""
     count = provider.count_tokens("")
     assert count == 0
 
 
-def test_count_tokens_single_word(provider) -> None:
+def test_count_tokens_single_word(provider: ComprehensiveLLMProvider) -> None:
     """Test count_tokens with single word."""
     count = provider.count_tokens("hello")
     assert count == 1
 
 
-def test_count_tokens_multiple_words(provider) -> None:
+def test_count_tokens_multiple_words(provider: ComprehensiveLLMProvider) -> None:
     """Test count_tokens with multiple words."""
     count = provider.count_tokens("hello world")
     assert count == 2
 
 
-def test_validate_config_valid(provider) -> None:
+def test_validate_config_valid(provider: ComprehensiveLLMProvider) -> None:
     """Test validate_config with valid config."""
     config = GenerationConfig(
         model="test-model",
@@ -186,14 +201,15 @@ def test_validate_config_valid(provider) -> None:
         top_p=0.9,
         top_k=40,
     )
-    provider.validate_config(config)  # Should not raise
+    provider.validate_config(config)
+    # No exception raised means test passed
 
 
-def test_validate_config_invalid_temperature(provider) -> None:
+def test_validate_config_invalid_temperature(provider: ComprehensiveLLMProvider) -> None:
     """Test validate_config with invalid temperature."""
     config = GenerationConfig(
         model="test-model",
-        temperature=1.5,  # Invalid
+        temperature=2.0,  # Invalid: > 1.0
         max_tokens=100,
         top_p=0.9,
         top_k=40,
@@ -202,12 +218,12 @@ def test_validate_config_invalid_temperature(provider) -> None:
         provider.validate_config(config)
 
 
-def test_validate_config_invalid_max_tokens(provider) -> None:
+def test_validate_config_invalid_max_tokens(provider: ComprehensiveLLMProvider) -> None:
     """Test validate_config with invalid max_tokens."""
     config = GenerationConfig(
         model="test-model",
         temperature=0.7,
-        max_tokens=0,  # Invalid
+        max_tokens=-1,  # Invalid: < 0
         top_p=0.9,
         top_k=40,
     )
@@ -215,65 +231,67 @@ def test_validate_config_invalid_max_tokens(provider) -> None:
         provider.validate_config(config)
 
 
-def test_validate_config_invalid_top_p(provider) -> None:
+def test_validate_config_invalid_top_p(provider: ComprehensiveLLMProvider) -> None:
     """Test validate_config with invalid top_p."""
     config = GenerationConfig(
         model="test-model",
         temperature=0.7,
         max_tokens=100,
-        top_p=1.5,  # Invalid
+        top_p=1.5,  # Invalid: > 1.0
         top_k=40,
     )
     with pytest.raises(ValueError, match="Top p must be between 0 and 1"):
         provider.validate_config(config)
 
 
-def test_validate_config_invalid_top_k(provider) -> None:
+def test_validate_config_invalid_top_k(provider: ComprehensiveLLMProvider) -> None:
     """Test validate_config with invalid top_k."""
     config = GenerationConfig(
         model="test-model",
         temperature=0.7,
         max_tokens=100,
         top_p=0.9,
-        top_k=0,  # Invalid
+        top_k=-5,  # Invalid: < 0
     )
     with pytest.raises(ValueError, match="Top k must be positive"):
         provider.validate_config(config)
 
 
-def test_get_config(provider) -> None:
+def test_get_config(provider: ComprehensiveLLMProvider) -> None:
     """Test get_config returns current configuration."""
     config = provider.get_config()
-    assert isinstance(config, GenerationConfig)
+    assert config.model == "test-model"
     assert config.temperature == 0.7
     assert config.max_tokens == 100
     assert config.top_p == 0.9
     assert config.top_k == 40
 
 
-def test_update_config(provider) -> None:
+def test_update_config(provider: ComprehensiveLLMProvider) -> None:
     """Test update_config updates configuration."""
     new_config = GenerationConfig(
-        model="test-model",
+        model="new-model",
         temperature=0.5,
-        max_tokens=50,
+        max_tokens=200,
         top_p=0.8,
         top_k=30,
     )
     provider.update_config(new_config)
-    current_config = provider.get_config()
-    assert current_config.temperature == 0.5
-    assert current_config.max_tokens == 50
-    assert current_config.top_p == 0.8
-    assert current_config.top_k == 30
+
+    updated_config = provider.get_config()
+    assert updated_config.model == "new-model"
+    assert updated_config.temperature == 0.5
+    assert updated_config.max_tokens == 200
+    assert updated_config.top_p == 0.8
+    assert updated_config.top_k == 30
 
 
-def test_update_config_invalid(provider) -> None:
+def test_update_config_invalid(provider: ComprehensiveLLMProvider) -> None:
     """Test update_config with invalid configuration."""
     new_config = GenerationConfig(
-        model="test-model",
-        temperature=1.5,  # Invalid
-        max_tokens=50,
+        model="new-model",
+        temperature=1.5,  # Invalid: > 1.0
+        max_tokens=200,
         top_p=0.8,
         top_k=30,
     )
