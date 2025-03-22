@@ -49,7 +49,7 @@ class EdgeCaseLLMProvider:
         self,
         messages: list[Message],
         *,
-        config: GenerationConfig | None = None,
+        _config: GenerationConfig | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate response stream from messages with error handling."""
         if self.should_raise:
@@ -161,12 +161,16 @@ async def test_generate_stream_empty_messages() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_stream_error_handling() -> None:
-    """Test generate_stream error handling."""
+    """Test error handling during stream generation."""
     provider = EdgeCaseLLMProvider()
     provider.error_mode = "stream"
-    with pytest.raises(ValueError, match="Simulated stream error"):
+
+    async def consume_stream() -> None:
         async for _ in provider.generate_stream([create_human_message("test")]):
             pass
+
+    with pytest.raises(ValueError, match="Simulated stream error"):
+        await consume_stream()
 
 
 @pytest.mark.asyncio
