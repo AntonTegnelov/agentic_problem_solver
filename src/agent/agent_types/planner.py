@@ -56,6 +56,19 @@ MIN_WORD_COUNT = 3
 VERY_COMPLEX_REQ_COUNT = 6
 COMPLEX_REQ_COUNT = 4
 MODERATE_REQ_COUNT = 2
+# Numbered items constants
+MODERATE_NUMBERED_ITEMS = 3
+COMPLEX_NUMBERED_ITEMS = 4
+# Scope score constants
+COMPLEX_SCORE_SCORE = 2
+MODERATE_SCOPE_SCORE = 1
+# Task count constants
+TASK_COUNT_TWO = 2
+TASK_COUNT_THREE = 3
+# Task result constants
+SUCCESS_TASKS_COUNT_ONE = 1
+FAILURE_TASKS_COUNT_TWO = 2
+TUPLE_RESULT_SIZE = 3
 
 # Type variable for Result generic
 T = TypeVar("T")
