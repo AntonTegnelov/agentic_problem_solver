@@ -848,8 +848,7 @@ class PlannerAgent:
                         data="Task delegated to sub-planner: Sub-planner processed task",
                         message="Successfully delegated complex task to sub-planner",
                     )
-                else:
-                    return result
+                return result
             except Exception as e:
                 return Result.failure(
                     error=AgentError(f"Error creating or using sub-planner: {e}"),
@@ -1423,9 +1422,9 @@ class PlannerAgent:
                         result = Result.success(
                             data=data,
                             message=(
-                                f"Successfully processed task: "
-                                f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                            ),
+                            f"Successfully processed task: "
+                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                        ),
                         )
 
                     # Special handling for specific test cases
@@ -1434,9 +1433,9 @@ class PlannerAgent:
                             Result.success(
                                 data=data,
                                 message=(
-                                    f"Successfully processed task: "
-                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                ),
+                            f"Successfully processed task: "
+                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                        ),
                             ),
                         )
                         return
@@ -1819,9 +1818,9 @@ class PlannerAgent:
                                     Result.failure(
                                         error=error_exc,
                                         message=(
-                                            f"Failed to process task: "
-                                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                        ),
+                            f"Failed to process task: "
+                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                        ),
                                     ),
                                 )
                             else:
@@ -1829,9 +1828,9 @@ class PlannerAgent:
                                     Result.success(
                                         data=result_data,
                                         message=(
-                                            f"Successfully processed task: "
-                                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                        ),
+                            f"Successfully processed task: "
+                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                        ),
                                     ),
                                 )
                         else:
@@ -1859,9 +1858,9 @@ class PlannerAgent:
                             Result.failure(
                                 error=AgentError(str(error_msg)),
                                 message=(
-                                    f"Failed to process task: "
-                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                ),
+                            f"Failed to process task: "
+                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                        ),
                                 data=None,
                             ),
                         )
@@ -1870,9 +1869,9 @@ class PlannerAgent:
                             Result.success(
                                 data=data,
                                 message=(
-                                    f"Successfully processed task: "
-                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                ),
+                            f"Successfully processed task: "
+                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                        ),
                             ),
                         )
                     return
