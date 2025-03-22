@@ -132,15 +132,22 @@ class Result(Generic[T]):
         return cls(success=True, data=data, message=message)
 
     @classmethod
-    def failure(cls, error: Exception, message: str | None = None) -> Result[T]:
+    def failure(cls, error: Exception | str, message: str | None = None, data: T | None = None) -> Result[T]:
         """Create failure result.
 
         Args:
-            error: Error that occurred.
+            error: Error that occurred. Can be an Exception or a string.
             message: Optional error message.
+            data: Optional result data.
 
         Returns:
             Failure result.
 
         """
-        return cls(success=False, error=error, message=message)
+        # Convert string error to AgentError
+        if isinstance(error, str):
+            from src.common_types.error_types import AgentError
+
+            error = AgentError(error)
+
+        return cls(success=False, error=error, message=message, data=data)

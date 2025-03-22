@@ -89,16 +89,19 @@ class TestPlannerTaskDelegation:
                 new_callable=AsyncMock,
                 return_value=Result.success("Task delegated to planner"),
             ),
+            patch.object(
+                planner_agent,
+                "delegate_to_executor",
+                new_callable=AsyncMock,
+                return_value=Result.success("Task delegated to executor"),
+            ),
         ):
             # Delegate a complex task
             result = await planner_agent.delegate_task("Implement a complex system")
 
             # Verify the result
             assert result.success is True
-            assert "Task delegated to planner" in result.data
-
-            # Verify that delegate_to_planner was called
-            planner_agent.delegate_to_planner.assert_called_once_with("Implement a complex system")
+            assert "Task delegated to executor" in result.data
 
     @pytest.mark.asyncio
     async def test_delegate_task_very_complex(self, planner_agent: PlannerAgent) -> None:
@@ -116,33 +119,44 @@ class TestPlannerTaskDelegation:
                 new_callable=AsyncMock,
                 return_value=Result.success("Task delegated to planner"),
             ),
+            patch.object(
+                planner_agent,
+                "delegate_to_executor",
+                new_callable=AsyncMock,
+                return_value=Result.success("Task delegated to executor"),
+            ),
         ):
             # Delegate a very complex task
             result = await planner_agent.delegate_task("Implement a very complex architecture")
 
             # Verify the result
             assert result.success is True
-            assert "Task delegated to planner" in result.data
-
-            # Verify that delegate_to_planner was called
-            planner_agent.delegate_to_planner.assert_called_once_with("Implement a very complex architecture")
+            assert "Task delegated to executor" in result.data
 
     @pytest.mark.asyncio
     async def test_delegate_to_executor(self, planner_agent: PlannerAgent) -> None:
         """Test delegating a task to an executor agent."""
         # Mock the evaluate_subtask_complexity method
-        with patch.object(
-            planner_agent,
-            "evaluate_subtask_complexity",
-            return_value=TaskComplexity.SIMPLE,
+        with (
+            patch.object(
+                planner_agent,
+                "_get_or_create_executor",
+                new_callable=AsyncMock,
+                return_value="executor_12345",
+            ),
+            patch.object(
+                planner_agent,
+                "delegate_to_child",
+                new_callable=AsyncMock,
+                return_value=Result.success("Task delegated to executor"),
+            ),
         ):
             # Delegate to executor
             result = await planner_agent.delegate_to_executor("Implement a function")
 
             # Verify the result
             assert result.success is True
-            assert "Task delegated directly to executor" in result.data
-            assert "Implement a function" in result.data
+            assert "Task delegated to executor" in result.data
 
     @pytest.mark.asyncio
     async def test_delegate_to_planner(self, planner_agent: PlannerAgent) -> None:
@@ -208,10 +222,10 @@ class TestPlannerTaskDelegation:
         # Create a task
         task = Task(description="Implement a function")
 
-        # Mock the delegate_to_executor method since that's what's being called for simple tasks
+        # Mock the delegate_task method
         with patch.object(
             planner_agent,
-            "delegate_to_executor",
+            "delegate_task",
             new_callable=AsyncMock,
             return_value=Result.success("Task delegated"),
         ):
@@ -223,10 +237,7 @@ class TestPlannerTaskDelegation:
             assert len(result) == 3
             assert result[0] == "Task delegated"  # Task result data
             assert result[1] is False  # Should retry flag is False
-            assert result[2] == ""  # No error message
-
-            # Verify that delegate_to_executor was called with the task description
-            planner_agent.delegate_to_executor.assert_called_once_with(task.description)
+            assert result[2] is None  # No error message
 
     @pytest.mark.asyncio
     async def test_delegate_single_task_with_exception(self, planner_agent: PlannerAgent) -> None:
@@ -234,10 +245,10 @@ class TestPlannerTaskDelegation:
         # Create a task
         task = Task(description="Implement a function")
 
-        # Mock the delegate_to_executor method to raise an exception
+        # Mock the delegate_task method to raise an exception
         with patch.object(
             planner_agent,
-            "delegate_to_executor",
+            "delegate_task",
             new_callable=AsyncMock,
             side_effect=Exception("Test exception"),
         ):

@@ -1,3 +1,9 @@
+"""Unit tests for PlannerAgent task evaluation features.
+
+This module contains tests for the task evaluation capabilities of the PlannerAgent,
+including prioritization, dependency analysis, and completion time estimation.
+"""
+
 from unittest.mock import patch
 
 import pytest
@@ -67,8 +73,11 @@ class TestPlannerTaskEvaluation:
 
         # Mixed priority signals
         mixed_desc = "Minor update to critical system component"
-        # The actual result may vary based on implementation, but we're testing that it returns a valid priority
-        assert isinstance(planner_agent.evaluate_task_priority(mixed_desc), TaskPriority)
+        # The mixed description contains both "minor" (low) and "critical" (high)
+        # The implementation should prioritize one signal over the other
+        priority = planner_agent.evaluate_task_priority(mixed_desc)
+        # Just verify it's one of the valid priorities (not checking which one specifically)
+        assert priority in (TaskPriority.LOW, TaskPriority.MEDIUM, TaskPriority.HIGH)
 
     def test_analyze_task_dependencies(self, planner_agent: PlannerAgent) -> None:
         """Test analyzing task dependencies."""
@@ -116,7 +125,7 @@ class TestPlannerTaskEvaluation:
             dependencies = planner_agent.analyze_task_dependencies(tasks)
 
             # Verify no dependencies
-            assert len(dependencies) == 0
+            assert dependencies == []
 
     def test_analyze_task_dependencies_empty_tasks(self, planner_agent: PlannerAgent) -> None:
         """Test analyzing task dependencies with empty task list."""
@@ -130,7 +139,8 @@ class TestPlannerTaskEvaluation:
         moderate_task = Task(description="Implement form validation", complexity=TaskComplexity.MODERATE)
         complex_task = Task(description="Create authentication system", complexity=TaskComplexity.COMPLEX)
         very_complex_task = Task(
-            description="Implement real-time collaboration feature", complexity=TaskComplexity.VERY_COMPLEX,
+            description="Implement real-time collaboration feature",
+            complexity=TaskComplexity.VERY_COMPLEX,
         )
 
         # Verify time estimates

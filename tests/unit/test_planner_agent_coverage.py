@@ -5,9 +5,11 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from langchain_core.messages import BaseMessage as Message
 from langchain_core.messages import HumanMessage
 
 from src.agent.agent_types.planner import PlannerAgent
+from src.common_types.result_types import Result
 from src.common_types.task_types import Task, TaskComplexity, TaskDependency
 from src.config.agent import AgentConfig
 from src.llm_providers.interface import LLMProvider
@@ -21,11 +23,11 @@ class MockLLMProvider(LLMProvider):
         """Initialize mock provider."""
         self.responses: dict[str, Any] = {}
 
-    def set_response(self, prompt: str, response: Any) -> None:
+    def set_response(self, prompt: str, response: dict[str, str | list[dict[str, Any]]]) -> None:
         """Set response for a prompt."""
         self.responses[prompt] = response
 
-    async def generate(self, messages: str | list[HumanMessage], config: Any = None) -> str:
+    async def generate(self, messages: str | list[HumanMessage], *, config: None = None) -> str:
         """Generate response."""
         prompt = messages[0].content if isinstance(messages, list) else messages
         if prompt in self.responses:
@@ -97,13 +99,13 @@ async def test_delegate_to_planner(planner_agent: PlannerAgent) -> None:
     )
 
     # Mock the process method to return a successful result
-    async def mock_process(task):
+    async def mock_process(_: Message) -> Result[str]:
         return type("Result", (), {"success": True, "data": "Task processed by sub-planner", "error": None})
 
     sub_planner.process = mock_process
 
     # Mock the _create_sub_planner method to return our mock sub-planner
-    async def mock_create_sub_planner():
+    async def mock_create_sub_planner() -> PlannerAgent:
         return sub_planner
 
     planner_agent._create_sub_planner = mock_create_sub_planner
@@ -139,7 +141,7 @@ async def test_delegate_to_child(planner_agent: PlannerAgent) -> None:
     child_agent.get_agent_id = lambda: child_id
 
     # Mock the process method to return a successful result
-    async def mock_process(task):
+    async def mock_process(_: Message) -> Result[str]:
         return type("Result", (), {"success": True, "data": "Task processed by child", "error": None})
 
     child_agent.process = mock_process
@@ -233,7 +235,7 @@ def test_analyze_task_dependencies(planner_agent: PlannerAgent, mock_provider: M
     # Test with LLM
     dependencies = planner_agent.analyze_task_dependencies([task1, task2])
     assert len(dependencies) == 1
-    assert dependencies[0]["task_id"] == task1.task_id
+    assert dependencies[0]["task_id"] == str(task1.task_id)
 
     # Test fallback to rule-based approach
     mock_provider.set_response(

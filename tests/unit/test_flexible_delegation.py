@@ -149,7 +149,7 @@ class TestPlannerAgentDelegation:
             mock_sub_planner.process = AsyncMock(return_value=mock_process_result)
 
             # Mock the _create_sub_planner method to return our mock sub-planner
-            async def mock_create_sub_planner():
+            async def mock_create_sub_planner() -> PlannerAgent:
                 return mock_sub_planner
 
             planner._create_sub_planner = mock_create_sub_planner

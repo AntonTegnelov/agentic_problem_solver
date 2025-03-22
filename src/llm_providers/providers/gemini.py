@@ -252,12 +252,26 @@ class GeminiProvider(BaseLLMProvider):
 
                 formatted_messages.append({"role": role, "parts": [msg.content]})
 
+            # Apply config if provided
+            if config is not None and self.config is not None:
+                # Update generation parameters if provided in config
+                generation_params = {}
+                if hasattr(config, "temperature") and config.temperature is not None:
+                    generation_params["temperature"] = config.temperature
+                if hasattr(config, "max_tokens") and config.max_tokens is not None:
+                    generation_params["max_output_tokens"] = config.max_tokens
+
+                # Apply the parameters if any were set
+                if generation_params and hasattr(self._model, "generation_config"):
+                    self._model.generation_config.update(generation_params)
+
             response = self._model.generate_content(formatted_messages)
             self._validate_response(response)
-            return response.text
         except Exception as e:
             msg = f"Failed to generate response: {e}"
             raise RetryError(msg) from e
+
+        return response.text
 
     async def generate_stream(
         self,
@@ -299,6 +313,19 @@ class GeminiProvider(BaseLLMProvider):
 
                 formatted_messages.append({"role": role, "parts": [msg.content]})
 
+            # Apply config if provided
+            if config is not None and self.config is not None:
+                # Update generation parameters if provided in config
+                generation_params = {}
+                if hasattr(config, "temperature") and config.temperature is not None:
+                    generation_params["temperature"] = config.temperature
+                if hasattr(config, "max_tokens") and config.max_tokens is not None:
+                    generation_params["max_output_tokens"] = config.max_tokens
+
+                # Apply the parameters if any were set
+                if generation_params and hasattr(self._model, "generation_config"):
+                    self._model.generation_config.update(generation_params)
+
             # Use the async version of generate_content for streaming
             response = await self._model.generate_content_async(formatted_messages, stream=True)
 
@@ -325,10 +352,13 @@ class GeminiProvider(BaseLLMProvider):
             msg = "Model name is required"
             raise InvalidModelError(msg)
 
-        if hasattr(config, "temperature") and config.temperature is not None:
-            if config.temperature < 0.0 or config.temperature > 1.0:
-                msg = f"Invalid temperature: {config.temperature}. Must be between 0.0 and 1.0"
-                raise TemperatureError(msg)
+        if (
+            hasattr(config, "temperature")
+            and config.temperature is not None
+            and (config.temperature < 0.0 or config.temperature > 1.0)
+        ):
+            msg = f"Invalid temperature: {config.temperature}. Must be between 0.0 and 1.0"
+            raise TemperatureError(msg)
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text.

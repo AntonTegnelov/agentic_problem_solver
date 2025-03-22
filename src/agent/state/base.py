@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -896,6 +897,22 @@ class AgentState:
                 "blocking_tasks": [],
             }
 
+        # Process subtasks and collect progress data
+        progress_data = self._collect_subtask_progress_data(task)
+
+        # Calculate final progress metrics
+        return self._calculate_final_progress_metrics(progress_data)
+
+    def _collect_subtask_progress_data(self, task: Task) -> dict[str, Any]:
+        """Collect progress data from all subtasks.
+
+        Args:
+            task: Parent task containing subtasks
+
+        Returns:
+            Dictionary with collected progress data
+
+        """
         # Initialize counters and lists
         total_subtasks = len(task.subtasks)
         completed_subtasks = 0
@@ -903,7 +920,7 @@ class AgentState:
         blocked_subtasks = 0
         failed_subtasks = 0
 
-        # Priority weights - higher priority tasks count more toward progress
+        # Priority and complexity weights
         priority_weights = {
             TaskPriority.LOW.value: 0.5,
             TaskPriority.MEDIUM.value: 1.0,
@@ -911,7 +928,6 @@ class AgentState:
             TaskPriority.CRITICAL.value: 2.0,
         }
 
-        # Complexity weights - more complex tasks count more toward progress
         complexity_weights = {
             TaskComplexity.SIMPLE.value: 0.75,
             TaskComplexity.MODERATE.value: 1.0,
@@ -923,7 +939,7 @@ class AgentState:
         total_weight = 0.0
         weighted_progress = 0.0
 
-        # Track critical path (tasks with dependencies)
+        # Track critical path and blocking tasks
         critical_path_tasks = []
         blocking_tasks = []
 
@@ -969,6 +985,39 @@ class AgentState:
             # Check if task is on critical path (has dependencies or dependents)
             if subtask.dependencies or any(self.is_dependent_on(other_id, subtask_id) for other_id in task.subtasks):
                 critical_path_tasks.append(subtask)
+
+        return {
+            "total_subtasks": total_subtasks,
+            "completed_subtasks": completed_subtasks,
+            "in_progress_subtasks": in_progress_subtasks,
+            "blocked_subtasks": blocked_subtasks,
+            "failed_subtasks": failed_subtasks,
+            "total_weight": total_weight,
+            "weighted_progress": weighted_progress,
+            "critical_path_tasks": critical_path_tasks,
+            "blocking_tasks": blocking_tasks,
+        }
+
+    def _calculate_final_progress_metrics(self, progress_data: dict[str, Any]) -> dict[str, Any]:
+        """Calculate final progress metrics based on collected data.
+
+        Args:
+            progress_data: Dictionary with collected progress data
+
+        Returns:
+            Dictionary with final progress metrics
+
+        """
+        # Extract data from progress_data
+        total_subtasks = progress_data["total_subtasks"]
+        completed_subtasks = progress_data["completed_subtasks"]
+        in_progress_subtasks = progress_data["in_progress_subtasks"]
+        blocked_subtasks = progress_data["blocked_subtasks"]
+        failed_subtasks = progress_data["failed_subtasks"]
+        total_weight = progress_data["total_weight"]
+        weighted_progress = progress_data["weighted_progress"]
+        critical_path_tasks = progress_data["critical_path_tasks"]
+        blocking_tasks = progress_data["blocking_tasks"]
 
         # Calculate normalized weighted progress
         normalized_weighted_progress = weighted_progress / total_weight if total_weight > 0 else 0.0
@@ -1263,234 +1312,32 @@ class AgentState:
                 blocked_tasks.append(str(task_id))
 
                 # Check for circular dependencies
-                circular_deps = self._detect_circular_dependencies(task_id)
-                if circular_deps:
-                    circular_dependencies.append(circular_deps)
-
-                    # Add resolution action for circular dependency
-                    resolution_action = {
-                        "task_id": str(task_id),
-                        "action_type": "BREAK_CIRCULAR_DEPENDENCY",
-                        "description": f"Break circular dependency chain: {' -> '.join(circular_deps)}",
-                        "suggested_changes": [
-                            {
-                                "dependency_to_modify": circular_deps[0],
-                                "action": "MAKE_NON_BLOCKING",
-                                "reason": "Part of circular dependency chain",
-                            },
-                        ],
-                    }
-                    resolution_actions.append(resolution_action)
-
-                    # Update task metadata with circular dependency information
-                    if "resolution_suggestions" not in task.metadata:
-                        task.metadata["resolution_suggestions"] = {}
-
-                    task.metadata["resolution_suggestions"]["circular_dependency"] = {
-                        "detected_at": datetime.now(UTC).isoformat(),
-                        "dependency_chain": circular_deps,
-                        "suggested_action": "Break circular dependency by making one of the dependencies non-blocking",
-                    }
-                    self.update_task(task)
+                circular_result = self._handle_circular_dependencies(task, task_id)
+                if circular_result:
+                    circular_dependencies.append(circular_result["circular_deps"])
+                    resolution_actions.append(circular_result["resolution_action"])
                     continue  # Skip further analysis for tasks with circular dependencies
 
                 # Analyze blockers to determine if they can be resolved
                 blockers = task.metadata.get("blockers", {}).get("blocking_dependencies", [])
                 if not blockers:
-                    # No blockers found despite task being blocked - this is an inconsistency
-                    resolution_action = {
-                        "task_id": str(task_id),
-                        "action_type": "FIX_INCONSISTENCY",
-                        "description": "Task is marked as blocked but no blocking dependencies were found",
-                        "suggested_changes": [
-                            {
-                                "action": "UPDATE_STATUS",
-                                "new_status": "PENDING",
-                                "reason": "No actual blockers found",
-                            },
-                        ],
-                    }
-                    resolution_actions.append(resolution_action)
-
-                    # Update task status to pending
-                    task.status = TaskStatus.PENDING
-                    if "resolution_suggestions" not in task.metadata:
-                        task.metadata["resolution_suggestions"] = {}
-
-                    task.metadata["resolution_suggestions"]["status_inconsistency"] = {
-                        "detected_at": datetime.now(UTC).isoformat(),
-                        "issue": "Task marked as blocked but no blocking dependencies found",
-                        "action_taken": "Updated status to PENDING",
-                    }
-                    self.update_task(task)
+                    # Handle inconsistency (task is blocked but has no blockers)
+                    inconsistency_result = self._handle_blocking_inconsistency(task, task_id)
+                    resolution_actions.append(inconsistency_result["resolution_action"])
                     continue
 
-                # Check if any blockers are failed tasks
-                failed_blockers = []
-                stalled_blockers = []
-                in_progress_blockers = []
-                pending_blockers = []
+                # Analyze and handle different types of blockers
+                blocker_analysis = self._analyze_blockers(task, task_id, blockers)
 
-                for blocker in blockers:
-                    blocker_id = uuid.UUID(blocker["task_id"])
-                    blocker_task = self.get_task_by_id(blocker_id)
+                # Update our tracking collections with the analysis results
+                if blocker_analysis["resolution_actions"]:
+                    resolution_actions.extend(blocker_analysis["resolution_actions"])
 
-                    if not blocker_task:
-                        # Blocker task doesn't exist - this is an error
-                        failed_blockers.append(
-                            {
-                                "task_id": blocker["task_id"],
-                                "description": blocker["description"],
-                                "issue": "Task not found",
-                            },
-                        )
-                    elif blocker_task.status == TaskStatus.FAILED:
-                        failed_blockers.append(
-                            {
-                                "task_id": blocker["task_id"],
-                                "description": blocker["description"],
-                                "error": blocker_task.error,
-                            },
-                        )
-                    elif blocker_task.status == TaskStatus.IN_PROGRESS:
-                        # Check if the blocker is stalled
-                        if blocker_task.metadata.get("stalled", {}).get("is_stalled", False):
-                            stalled_blockers.append(
-                                {
-                                    "task_id": blocker["task_id"],
-                                    "description": blocker["description"],
-                                    "hours_stalled": blocker_task.metadata["stalled"].get("hours_stalled", 0),
-                                },
-                            )
-                        else:
-                            in_progress_blockers.append(
-                                {
-                                    "task_id": blocker["task_id"],
-                                    "description": blocker["description"],
-                                    "progress": blocker_task.metadata.get("progress_tracking", {}).get(
-                                        "progress_percentage",
-                                        0,
-                                    ),
-                                },
-                            )
-                    elif blocker_task.status == TaskStatus.PENDING:
-                        pending_blockers.append(
-                            {
-                                "task_id": blocker["task_id"],
-                                "description": blocker["description"],
-                            },
-                        )
-
-                # Determine if this task is on the critical path
-                is_on_critical_path = self._is_task_on_critical_path(task_id)
-
-                # Create resolution suggestions based on blocker analysis
-                if failed_blockers:
-                    # If there are failed blockers, suggest making them non-blocking or retrying
-                    resolution_action = {
-                        "task_id": str(task_id),
-                        "action_type": "HANDLE_FAILED_BLOCKERS",
-                        "description": f"Task has {len(failed_blockers)} failed blocking dependencies",
-                        "suggested_changes": [
-                            {
-                                "dependency_id": blocker["task_id"],
-                                "action": "MAKE_NON_BLOCKING" if not is_on_critical_path else "RETRY",
-                                "reason": f"Blocker failed: {blocker.get('error', 'Unknown error')}",
-                            }
-                            for blocker in failed_blockers
-                        ],
-                    }
-                    resolution_actions.append(resolution_action)
-
-                    # Update task metadata with failed blocker information
-                    if "resolution_suggestions" not in task.metadata:
-                        task.metadata["resolution_suggestions"] = {}
-
-                    task.metadata["resolution_suggestions"]["failed_blockers"] = {
-                        "detected_at": datetime.now(UTC).isoformat(),
-                        "blockers": failed_blockers,
-                        "suggested_action": "Make failed dependencies non-blocking or retry them",
-                    }
-                    self.update_task(task)
-
-                    # If this task is on the critical path, add it to critical path blockers
-                    if is_on_critical_path:
-                        critical_path_blockers.append(
-                            {
-                                "task_id": str(task_id),
-                                "description": task.description,
-                                "failed_blockers": failed_blockers,
-                            },
-                        )
-
-                if stalled_blockers:
-                    # If there are stalled blockers, suggest intervention
-                    resolution_action = {
-                        "task_id": str(task_id),
-                        "action_type": "HANDLE_STALLED_BLOCKERS",
-                        "description": f"Task has {len(stalled_blockers)} stalled blocking dependencies",
-                        "suggested_changes": [
-                            {
-                                "dependency_id": blocker["task_id"],
-                                "action": "INTERVENTION_NEEDED",
-                                "reason": f"Blocker stalled for {blocker.get('hours_stalled', 0):.1f} hours",
-                            }
-                            for blocker in stalled_blockers
-                        ],
-                    }
-                    resolution_actions.append(resolution_action)
-
-                    # Update task metadata with stalled blocker information
-                    if "resolution_suggestions" not in task.metadata:
-                        task.metadata["resolution_suggestions"] = {}
-
-                    task.metadata["resolution_suggestions"]["stalled_blockers"] = {
-                        "detected_at": datetime.now(UTC).isoformat(),
-                        "blockers": stalled_blockers,
-                        "suggested_action": "Intervention needed for stalled dependencies",
-                    }
-                    self.update_task(task)
-
-                    # If this task is on the critical path, add it to critical path blockers
-                    if is_on_critical_path:
-                        critical_path_blockers.append(
-                            {
-                                "task_id": str(task_id),
-                                "description": task.description,
-                                "stalled_blockers": stalled_blockers,
-                            },
-                        )
-
-                # If all blockers are pending, suggest prioritization
-                if pending_blockers and not failed_blockers and not stalled_blockers and not in_progress_blockers:
-                    resolution_action = {
-                        "task_id": str(task_id),
-                        "action_type": "PRIORITIZE_BLOCKERS",
-                        "description": f"Task has {len(pending_blockers)} pending blocking dependencies",
-                        "suggested_changes": [
-                            {
-                                "dependency_id": blocker["task_id"],
-                                "action": "INCREASE_PRIORITY",
-                                "reason": "Blocking a dependent task",
-                            }
-                            for blocker in pending_blockers
-                        ],
-                    }
-                    resolution_actions.append(resolution_action)
-
-                    # Update task metadata with pending blocker information
-                    if "resolution_suggestions" not in task.metadata:
-                        task.metadata["resolution_suggestions"] = {}
-
-                    task.metadata["resolution_suggestions"]["pending_blockers"] = {
-                        "detected_at": datetime.now(UTC).isoformat(),
-                        "blockers": pending_blockers,
-                        "suggested_action": "Increase priority of pending dependencies",
-                    }
-                    self.update_task(task)
+                if blocker_analysis["critical_path_blockers"]:
+                    critical_path_blockers.extend(blocker_analysis["critical_path_blockers"])
 
                 # If no resolution was found, mark as unresolvable
-                if not resolution_actions:
+                if not blocker_analysis["resolution_actions"]:
                     unresolvable_tasks.append(
                         {
                             "task_id": str(task_id),
@@ -1506,6 +1353,378 @@ class AgentState:
             "resolution_actions": resolution_actions,
             "unresolvable_tasks": unresolvable_tasks,
             "critical_path_blockers": critical_path_blockers,
+        }
+
+    def _handle_circular_dependencies(self, task: Task, task_id: uuid.UUID) -> dict[str, Any] | None:
+        """Handle circular dependencies for a task.
+
+        Args:
+            task: The task to check for circular dependencies
+            task_id: The UUID of the task
+
+        Returns:
+            Dictionary with circular dependency information and resolution action, or None if no circular dependencies
+
+        """
+        circular_deps = self._detect_circular_dependencies(task_id)
+        if not circular_deps:
+            return None
+
+        # Add resolution action for circular dependency
+        resolution_action = {
+            "task_id": str(task_id),
+            "action_type": "BREAK_CIRCULAR_DEPENDENCY",
+            "description": f"Break circular dependency chain: {' -> '.join(circular_deps)}",
+            "suggested_changes": [
+                {
+                    "dependency_to_modify": circular_deps[0],
+                    "action": "MAKE_NON_BLOCKING",
+                    "reason": "Part of circular dependency chain",
+                },
+            ],
+        }
+
+        # Update task metadata with circular dependency information
+        if "resolution_suggestions" not in task.metadata:
+            task.metadata["resolution_suggestions"] = {}
+
+        task.metadata["resolution_suggestions"]["circular_dependency"] = {
+            "detected_at": datetime.now(UTC).isoformat(),
+            "dependency_chain": circular_deps,
+            "suggested_action": "Break circular dependency by making one of the dependencies non-blocking",
+        }
+        self.update_task(task)
+
+        return {
+            "circular_deps": circular_deps,
+            "resolution_action": resolution_action,
+        }
+
+    def _handle_blocking_inconsistency(self, task: Task, task_id: uuid.UUID) -> dict[str, Any]:
+        """Handle inconsistency when a task is marked as blocked but has no blocking dependencies.
+
+        Args:
+            task: The task with inconsistency
+            task_id: The UUID of the task
+
+        Returns:
+            Dictionary with resolution action information
+
+        """
+        resolution_action = {
+            "task_id": str(task_id),
+            "action_type": "FIX_INCONSISTENCY",
+            "description": "Task is marked as blocked but no blocking dependencies were found",
+            "suggested_changes": [
+                {
+                    "action": "UPDATE_STATUS",
+                    "new_status": "PENDING",
+                    "reason": "No actual blockers found",
+                },
+            ],
+        }
+
+        # Update task status to pending
+        task.status = TaskStatus.PENDING
+        if "resolution_suggestions" not in task.metadata:
+            task.metadata["resolution_suggestions"] = {}
+
+        task.metadata["resolution_suggestions"]["status_inconsistency"] = {
+            "detected_at": datetime.now(UTC).isoformat(),
+            "issue": "Task marked as blocked but no blocking dependencies found",
+            "action_taken": "Updated status to PENDING",
+        }
+        self.update_task(task)
+
+        return {
+            "resolution_action": resolution_action,
+        }
+
+    def _analyze_blockers(self, task: Task, task_id: uuid.UUID, blockers: list[dict[str, Any]]) -> dict[str, Any]:
+        """Analyze blockers and suggest resolutions.
+
+        Args:
+            task: The blocked task
+            task_id: The UUID of the task
+            blockers: List of blocking dependencies
+
+        Returns:
+            Dictionary with analysis results and resolution actions
+
+        """
+        # Categorize the blockers by their status
+        categorized_blockers = self._categorize_blockers(blockers)
+
+        resolution_actions = []
+        critical_path_blockers = []
+
+        # Determine if this task is on the critical path
+        is_on_critical_path = self._is_task_on_critical_path(task_id)
+
+        # Handle different blocker categories and create resolution suggestions
+        if categorized_blockers["failed"]:
+            failed_result = self._handle_failed_blockers(
+                task,
+                task_id,
+                categorized_blockers["failed"],
+                is_on_critical_path,
+            )
+            resolution_actions.append(failed_result["resolution_action"])
+            if is_on_critical_path:
+                critical_path_blockers.append(failed_result["critical_path_blocker"])
+
+        if categorized_blockers["stalled"]:
+            stalled_result = self._handle_stalled_blockers(
+                task,
+                task_id,
+                categorized_blockers["stalled"],
+                is_on_critical_path,
+            )
+            resolution_actions.append(stalled_result["resolution_action"])
+            if is_on_critical_path:
+                critical_path_blockers.append(stalled_result["critical_path_blocker"])
+
+        # Handle pending blockers only if there are no other types of blockers
+        if (
+            categorized_blockers["pending"]
+            and not categorized_blockers["failed"]
+            and not categorized_blockers["stalled"]
+            and not categorized_blockers["in_progress"]
+        ):
+            pending_result = self._handle_pending_blockers(task, task_id, categorized_blockers["pending"])
+            resolution_actions.append(pending_result["resolution_action"])
+
+        return {
+            "resolution_actions": resolution_actions,
+            "critical_path_blockers": critical_path_blockers,
+        }
+
+    def _categorize_blockers(self, blockers: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        """Categorize blockers by their status.
+
+        Args:
+            blockers: List of blocking dependencies
+
+        Returns:
+            Dictionary with categorized blockers (failed, stalled, in_progress, pending)
+
+        """
+        failed_blockers = []
+        stalled_blockers = []
+        in_progress_blockers = []
+        pending_blockers = []
+
+        for blocker in blockers:
+            blocker_id = uuid.UUID(blocker["task_id"])
+            blocker_task = self.get_task_by_id(blocker_id)
+
+            if not blocker_task:
+                # Blocker task doesn't exist - this is an error
+                failed_blockers.append(
+                    {
+                        "task_id": blocker["task_id"],
+                        "description": blocker["description"],
+                        "issue": "Task not found",
+                    },
+                )
+            elif blocker_task.status == TaskStatus.FAILED:
+                failed_blockers.append(
+                    {
+                        "task_id": blocker["task_id"],
+                        "description": blocker["description"],
+                        "error": blocker_task.error,
+                    },
+                )
+            elif blocker_task.status == TaskStatus.IN_PROGRESS:
+                # Check if the blocker is stalled
+                if blocker_task.metadata.get("stalled", {}).get("is_stalled", False):
+                    stalled_blockers.append(
+                        {
+                            "task_id": blocker["task_id"],
+                            "description": blocker["description"],
+                            "hours_stalled": blocker_task.metadata["stalled"].get("hours_stalled", 0),
+                        },
+                    )
+                else:
+                    in_progress_blockers.append(
+                        {
+                            "task_id": blocker["task_id"],
+                            "description": blocker["description"],
+                            "progress": blocker_task.metadata.get("progress_tracking", {}).get(
+                                "progress_percentage",
+                                0,
+                            ),
+                        },
+                    )
+            elif blocker_task.status == TaskStatus.PENDING:
+                pending_blockers.append(
+                    {
+                        "task_id": blocker["task_id"],
+                        "description": blocker["description"],
+                    },
+                )
+
+        return {
+            "failed": failed_blockers,
+            "stalled": stalled_blockers,
+            "in_progress": in_progress_blockers,
+            "pending": pending_blockers,
+        }
+
+    def _handle_failed_blockers(
+        self,
+        task: Task,
+        task_id: uuid.UUID,
+        failed_blockers: list[dict[str, Any]],
+        is_on_critical_path: bool,
+    ) -> dict[str, Any]:
+        """Handle failed blockers for a task.
+
+        Args:
+            task: The task with failed blockers
+            task_id: The UUID of the task
+            failed_blockers: List of failed blockers
+            is_on_critical_path: Whether the task is on the critical path
+
+        Returns:
+            Dictionary with resolution action and critical path information
+
+        """
+        resolution_action = {
+            "task_id": str(task_id),
+            "action_type": "HANDLE_FAILED_BLOCKERS",
+            "description": f"Task has {len(failed_blockers)} failed blocking dependencies",
+            "suggested_changes": [
+                {
+                    "dependency_id": blocker["task_id"],
+                    "action": "MAKE_NON_BLOCKING" if not is_on_critical_path else "RETRY",
+                    "reason": f"Blocker failed: {blocker.get('error', 'Unknown error')}",
+                }
+                for blocker in failed_blockers
+            ],
+        }
+
+        # Update task metadata with failed blocker information
+        if "resolution_suggestions" not in task.metadata:
+            task.metadata["resolution_suggestions"] = {}
+
+        task.metadata["resolution_suggestions"]["failed_blockers"] = {
+            "detected_at": datetime.now(UTC).isoformat(),
+            "blockers": failed_blockers,
+            "suggested_action": "Make failed dependencies non-blocking or retry them",
+        }
+        self.update_task(task)
+
+        critical_path_blocker = {
+            "task_id": str(task_id),
+            "description": task.description,
+            "failed_blockers": failed_blockers,
+        }
+
+        return {
+            "resolution_action": resolution_action,
+            "critical_path_blocker": critical_path_blocker,
+        }
+
+    def _handle_stalled_blockers(
+        self,
+        task: Task,
+        task_id: uuid.UUID,
+        stalled_blockers: list[dict[str, Any]],
+        is_on_critical_path: bool,
+    ) -> dict[str, Any]:
+        """Handle stalled blockers for a task.
+
+        Args:
+            task: The task with stalled blockers
+            task_id: The UUID of the task
+            stalled_blockers: List of stalled blockers
+            is_on_critical_path: Whether the task is on the critical path
+
+        Returns:
+            Dictionary with resolution action and critical path information
+
+        """
+        resolution_action = {
+            "task_id": str(task_id),
+            "action_type": "HANDLE_STALLED_BLOCKERS",
+            "description": f"Task has {len(stalled_blockers)} stalled blocking dependencies",
+            "suggested_changes": [
+                {
+                    "dependency_id": blocker["task_id"],
+                    "action": "INTERVENTION_NEEDED",
+                    "reason": f"Blocker stalled for {blocker.get('hours_stalled', 0):.1f} hours",
+                }
+                for blocker in stalled_blockers
+            ],
+        }
+
+        # Update task metadata with stalled blocker information
+        if "resolution_suggestions" not in task.metadata:
+            task.metadata["resolution_suggestions"] = {}
+
+        task.metadata["resolution_suggestions"]["stalled_blockers"] = {
+            "detected_at": datetime.now(UTC).isoformat(),
+            "blockers": stalled_blockers,
+            "suggested_action": "Intervention needed for stalled dependencies",
+        }
+        self.update_task(task)
+
+        critical_path_blocker = {
+            "task_id": str(task_id),
+            "description": task.description,
+            "stalled_blockers": stalled_blockers,
+        }
+
+        return {
+            "resolution_action": resolution_action,
+            "critical_path_blocker": critical_path_blocker,
+        }
+
+    def _handle_pending_blockers(
+        self,
+        task: Task,
+        task_id: uuid.UUID,
+        pending_blockers: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Handle pending blockers for a task.
+
+        Args:
+            task: The task with pending blockers
+            task_id: The UUID of the task
+            pending_blockers: List of pending blockers
+
+        Returns:
+            Dictionary with resolution action information
+
+        """
+        resolution_action = {
+            "task_id": str(task_id),
+            "action_type": "PRIORITIZE_BLOCKERS",
+            "description": f"Task has {len(pending_blockers)} pending blocking dependencies",
+            "suggested_changes": [
+                {
+                    "dependency_id": blocker["task_id"],
+                    "action": "INCREASE_PRIORITY",
+                    "reason": "Blocking a dependent task",
+                }
+                for blocker in pending_blockers
+            ],
+        }
+
+        # Update task metadata with pending blocker information
+        if "resolution_suggestions" not in task.metadata:
+            task.metadata["resolution_suggestions"] = {}
+
+        task.metadata["resolution_suggestions"]["pending_blockers"] = {
+            "detected_at": datetime.now(UTC).isoformat(),
+            "blockers": pending_blockers,
+            "suggested_action": "Increase priority of pending dependencies",
+        }
+        self.update_task(task)
+
+        return {
+            "resolution_action": resolution_action,
         }
 
     def _detect_circular_dependencies(
@@ -1574,15 +1793,19 @@ class AgentState:
             True if the task is on the critical path, False otherwise
 
         """
+        # Define a constant for the threshold of many dependents
+        many_dependents_threshold = 3
+
         tasks = self.get_tasks()
         task_id_str = str(task_id)
 
         # Find all tasks that depend on this task
-        dependent_tasks = []
-        for task_dict in tasks:
-            for dep in task_dict.get("dependencies", []):
-                if dep.get("task_id") == task_id_str and dep.get("is_blocking", True):
-                    dependent_tasks.append(task_dict)
+        dependent_tasks = [
+            task_dict
+            for task_dict in tasks
+            for dep in task_dict.get("dependencies", [])
+            if dep.get("task_id") == task_id_str and dep.get("is_blocking", True)
+        ]
 
         if not dependent_tasks:
             return False  # No dependents, not on critical path
@@ -1601,7 +1824,7 @@ class AgentState:
         # Check if any dependent has many dependents itself (recursive check with depth limit)
         for dependent in dependent_tasks:
             dependent_id = uuid.UUID(dependent["task_id"])
-            if self._count_recursive_dependents(dependent_id, depth=0, max_depth=2) >= 3:
+            if self._count_recursive_dependents(dependent_id, depth=0, max_depth=2) >= many_dependents_threshold:
                 return True  # Dependent has many dependents, so this task is on critical path
 
         return False
@@ -1625,11 +1848,12 @@ class AgentState:
         task_id_str = str(task_id)
 
         # Find all tasks that depend on this task
-        dependent_tasks = []
-        for task_dict in tasks:
-            for dep in task_dict.get("dependencies", []):
-                if dep.get("task_id") == task_id_str and dep.get("is_blocking", True):
-                    dependent_tasks.append(task_dict)
+        dependent_tasks = [
+            task_dict
+            for task_dict in tasks
+            for dep in task_dict.get("dependencies", [])
+            if dep.get("task_id") == task_id_str and dep.get("is_blocking", True)
+        ]
 
         # Count direct dependents
         count = len(dependent_tasks)
@@ -1654,6 +1878,31 @@ class AgentState:
         """
         tasks = self.get_tasks()
 
+        # Step 1: Identify leaf tasks and parent task hierarchy
+        leaf_tasks, parent_tasks_by_level = self._identify_task_hierarchy(tasks)
+
+        # Step 2: Process leaf tasks (check for stalled tasks)
+        self._process_leaf_tasks(leaf_tasks)
+
+        # Step 3: Process parent tasks level by level, from lowest to highest
+        self._process_parent_tasks_by_level(parent_tasks_by_level)
+
+        # Step 4: Update the overall progress information
+        overall_progress = self.get_overall_progress()
+        self.set_context("overall_progress", overall_progress)
+
+    def _identify_task_hierarchy(self, tasks: list[dict[str, Any]]) -> tuple[list[Task], dict[int, list[uuid.UUID]]]:
+        """Identify leaf tasks and organize parent tasks by level.
+
+        Args:
+            tasks: List of task dictionaries
+
+        Returns:
+            Tuple containing:
+            - List of leaf tasks (tasks without subtasks)
+            - Dictionary mapping level to list of parent task IDs at that level
+
+        """
         # First, identify all leaf tasks (tasks without subtasks)
         leaf_tasks = []
         for task_dict in tasks:
@@ -1694,12 +1943,25 @@ class AgentState:
             else:
                 break
 
-        # Now process tasks bottom-up, starting with leaf tasks
-        # First, check for stalled leaf tasks
+        return leaf_tasks, parent_tasks_by_level
+
+    def _process_leaf_tasks(self, leaf_tasks: list[Task]) -> None:
+        """Process leaf tasks (check for stalled tasks).
+
+        Args:
+            leaf_tasks: List of leaf tasks
+
+        """
         for leaf_task in leaf_tasks:
             self._check_for_stalled_task(leaf_task.task_id)
 
-        # Then process parent tasks level by level, from lowest to highest
+    def _process_parent_tasks_by_level(self, parent_tasks_by_level: dict[int, list[uuid.UUID]]) -> None:
+        """Process parent tasks level by level, from lowest to highest.
+
+        Args:
+            parent_tasks_by_level: Dictionary mapping level to list of parent task IDs at that level
+
+        """
         for level in sorted(parent_tasks_by_level.keys()):
             for parent_id in parent_tasks_by_level[level]:
                 # Recalculate rollup progress for this parent
@@ -1714,10 +1976,6 @@ class AgentState:
 
                 # Check if this parent task is stalled
                 self._check_for_stalled_task(parent_id)
-
-        # Finally, update the overall progress information
-        overall_progress = self.get_overall_progress()
-        self.set_context("overall_progress", overall_progress)
 
     def _check_for_stalled_task(self, task_id: uuid.UUID, stall_threshold_hours: float = 24.0) -> None:
         """Check if a task has stalled (not made progress in a while).
@@ -1843,7 +2101,7 @@ class AgentState:
         )
 
 
-class InMemoryStateManager(Protocol):
+class InMemoryStateManager:
     """State manager implementation that stores agent state in memory."""
 
     def __init__(self, state: AgentState | None = None) -> None:
@@ -1856,7 +2114,7 @@ class InMemoryStateManager(Protocol):
         self._state = state or AgentState()
         self._saved_states = {}  # Store saved states for listing
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> object:
         """Forward attribute access to the underlying state object.
 
         Args:
@@ -1879,102 +2137,7 @@ class InMemoryStateManager(Protocol):
             return getattr(self._state, name)
         except AttributeError:
             msg = f"Neither '{self.__class__.__name__}' nor 'AgentState' has attribute '{name}'"
-            raise AttributeError(msg)
-
-    def register_agent(self, agent_id: str, agent: Agent) -> None:
-        """Register agent.
-
-        Args:
-            agent_id: Agent ID.
-            agent: Agent instance.
-
-        """
-        self._state.register_agent(agent_id, agent)
-
-    def get_agent(self, agent_id: str) -> Agent | None:
-        """Get agent by ID.
-
-        Args:
-            agent_id: Agent ID.
-
-        Returns:
-            Agent instance or None if not found.
-
-        """
-        try:
-            return self._state._agents.get(agent_id)
-        except (KeyError, AttributeError):
-            return None
-
-    def get_agent_for_step(self, step: AgentStep) -> Agent:
-        """Get agent for step.
-
-        Args:
-            step: Step to get agent for.
-
-        Returns:
-            Agent for step.
-
-        Raises:
-            AgentNotFoundError: If agent not found.
-
-        """
-        return self._state.get_agent_for_step(step)
-
-    def add_task(self, task: Task) -> None:
-        """Add task.
-
-        Args:
-            task: Task to add.
-
-        """
-        self._state.add_task(task)
-
-    def get_tasks(self) -> list[Task]:
-        """Get tasks.
-
-        Returns:
-            List of tasks.
-
-        """
-        return self._state.get_tasks()
-
-    def get_task_by_id(self, task_id: uuid.UUID) -> Task:
-        """Get task by ID.
-
-        Args:
-            task_id: Task ID.
-
-        Returns:
-            Task.
-
-        Raises:
-            ValueError: If task not found.
-
-        """
-        task = self._state.get_task_by_id(task_id)
-        if not task:
-            msg = f"Task not found: {task_id}"
-            raise ValueError(msg)
-        return task
-
-    def add_message(self, message: Message) -> None:
-        """Add message.
-
-        Args:
-            message: Message to add.
-
-        """
-        self._state.add_message(message)
-
-    def get_messages(self) -> list[Message]:
-        """Get messages.
-
-        Returns:
-            List of messages.
-
-        """
-        return self._state.messages
+            raise AttributeError(msg) from None
 
     def get_state(self) -> AgentState:
         """Get current state.
@@ -1998,119 +2161,119 @@ class InMemoryStateManager(Protocol):
         """Clear current state."""
         self._state = AgentState()
 
-    def delete_state(self, state_id: str | None = None) -> None:
-        """Delete the state.
-
-        For in-memory state manager, this simply clears the current state.
-        The state_id argument is ignored.
+    def save_state(self, path: str | None = None) -> str:
+        """Save the current state to memory and disk.
 
         Args:
-            state_id: Optional state ID (ignored for in-memory state manager).
-
-        """
-        self.clear_state()
-
-    def list_states(self) -> list[str]:
-        """List available states.
-
-        For in-memory state manager, this returns a list of saved state IDs.
+            path: Optional path identifier or file path. If None, agent_id is used.
 
         Returns:
-            List of state IDs.
+            The identifier or file path the state was saved under.
 
         """
-        if not self._saved_states:
-            # If we've saved a state via save_state but not tracked it yet
-            if hasattr(self, "_saved_path") and self._saved_path:
-                agent_id = self._state.agent_id if self._state else "unknown"
-                self._saved_states[agent_id] = self._saved_path
+        # Use agent_id as the default key if path is not specified
+        key = path or self._state.agent_id
 
-        return list(self._saved_states.keys())
+        # Save the state in memory (deep copy to prevent modification)
+        self._saved_states[key] = deepcopy(self._state)
 
-    def save_state(self, state_path: str | None = None) -> str:
-        """Save the current state to a file.
+        # Determine file path for disk storage
+        file_path = path
+        if not file_path or not ("/" in file_path or "\\" in file_path):
+            # No path provided or it doesn't look like a file path
+            # Create default path as agent_id.json in current directory
+            file_path = f"{self._state.agent_id}.json"
 
-        Args:
-            state_path: Optional path to save the state to. If not provided,
-                a path will be generated based on the agent ID.
+        # Ensure directory exists
+        path_obj = Path(file_path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
 
-        Returns:
-            Path to the saved state file.
+        # Save to disk
+        state_dict = self._state.to_dict()
+        path_obj.write_text(json.dumps(state_dict, indent=2), encoding="utf-8")
 
-        """
-        if not self._state:
-            msg = "No state to save"
-            raise ConfigError(msg)
-
-        # Generate a path if one was not provided
-        if state_path is None:
-            agent_id = self._state.agent_id
-            state_path = self.get_state_path(agent_id)
-
-        # Create directory if it doesn't exist
-        state_dir = os.path.dirname(state_path)
-        os.makedirs(state_dir, exist_ok=True)
-
-        # Write state to file
-        with open(state_path, "w", encoding="utf-8") as f:
-            json.dump(self._state.to_dict(), f, indent=2)
-
-        # Save the path for reference
-        self._saved_path = state_path
-        # Track this state for listing
-        self._saved_states[self._state.agent_id] = state_path
-
-        return state_path
+        return file_path
 
     def load_state(self, path: str) -> AgentState:
-        """Load state from file.
+        """Load state from memory or disk.
 
         Args:
-            path: Path to load state from.
+            path: Path identifier or file path.
 
         Returns:
             Loaded state.
 
         Raises:
-            ConfigError: If state file not found.
+            ConfigError: If state loading fails.
 
         """
-        try:
-            with open(path, encoding="utf-8") as f:
-                state_dict = json.load(f)
-            self._state = AgentState.from_dict(state_dict)
-            return self._state
-        except FileNotFoundError:
-            msg = f"State file not found: {path}"
+        # Check if path exists as a file, if it does, load from disk
+        path_obj = Path(path)
+        if path_obj.exists() and path_obj.is_file():
+            try:
+                state_dict = json.loads(path_obj.read_text(encoding="utf-8"))
+                loaded_state = AgentState.from_dict(state_dict)
+                self._state = loaded_state
+            except Exception as e:
+                msg = f"Failed to load state from file: {e}"
+                raise ConfigError(msg) from e
+            else:
+                return self._state
+
+        # Otherwise try to load from in-memory storage
+        if path not in self._saved_states:
+            msg = f"State not found: {path}"
             raise ConfigError(msg)
 
-    def get_state_path(self, agent_id: str) -> str:
-        """Get path for state file.
+        # Set as current state (deep copy to prevent modification)
+        self._state = deepcopy(self._saved_states[path])
+        return self._state
 
-        Args:
-            agent_id: Agent ID.
+    def list_states(self) -> list[str]:
+        """List all saved states.
 
         Returns:
-            Path for state file.
+            List of state identifiers.
 
         """
-        # Create states directory if it doesn't exist
-        states_dir = os.path.join(os.getcwd(), "states")
-        os.makedirs(states_dir, exist_ok=True)
-        return os.path.join(states_dir, f"{agent_id}.json")
+        return list(self._saved_states.keys())
 
-    def _raise_file_not_found(self, path: str) -> None:
-        """Raise ConfigError for file not found.
+    def delete_state(self, state_id: str) -> None:
+        """Delete a saved state.
 
         Args:
-            path: File path.
+            state_id: The ID of the state to delete.
 
         Raises:
-            ConfigError: File not found error.
+            FileNotFoundError: If the state file doesn't exist.
 
         """
-        msg = f"State file not found: {path}"
-        raise ConfigError(msg)
+        if state_id in self._saved_states:
+            del self._saved_states[state_id]
+
+        # If there's a file on disk, delete it
+        file_path = Path(f"{state_id}.json")
+        if file_path.exists():
+            file_path.unlink()
+
+    def get_state_by_id(self, agent_id: str) -> AgentState:
+        """Get a saved state by agent ID.
+
+        Args:
+            agent_id: The agent ID to look up.
+
+        Returns:
+            The saved state.
+
+        Raises:
+            ConfigError: If state not found.
+
+        """
+        if agent_id not in self._saved_states:
+            msg = f"State not found for agent ID: {agent_id}"
+            raise ConfigError(msg)
+
+        return deepcopy(self._saved_states[agent_id])
 
 
 class FileStateManager:
@@ -2121,7 +2284,7 @@ class FileStateManager:
     """
 
     def __init__(self, base_dir: str, state: AgentState | None = None) -> None:
-        """Initialize state manager.
+        """Initialize FileStateManager.
 
         Args:
             base_dir: Base directory for state files.
@@ -2130,34 +2293,34 @@ class FileStateManager:
         """
         self.base_dir = base_dir
         self._state = state or AgentState()
+        self._saved_path = None
+        self._saved_states = {}
 
         # Create base directory if it doesn't exist
-        os.makedirs(self.base_dir, exist_ok=True)
+        Path(self.base_dir).mkdir(parents=True, exist_ok=True)
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> object:
         """Forward attribute access to the underlying state object.
 
         Args:
             name: Attribute name.
 
         Returns:
-            Attribute value from the state object.
+            Attribute value.
 
         Raises:
             AttributeError: If attribute not found.
 
         """
-        # Check if this is a state manager method that should be handled separately
-        if name in dir(self.__class__):
-            msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
-            raise AttributeError(msg)
-
-        # Forward to the underlying state
         try:
             return getattr(self._state, name)
         except AttributeError:
-            msg = f"Neither '{self.__class__.__name__}' nor 'AgentState' has attribute '{name}'"
-            raise AttributeError(msg)
+            # Try to get the attribute from AgentState
+            try:
+                return getattr(AgentState, name)
+            except AttributeError:
+                msg = f"Neither '{self.__class__.__name__}' nor 'AgentState' has attribute '{name}'"
+                raise AttributeError(msg) from None
 
     def get_state(self) -> AgentState:
         """Get current state.
@@ -2248,7 +2411,8 @@ class FileStateManager:
 
         """
         try:
-            return self._state._agents.get(agent_id)
+            agents = self._state.get_registered_agents()
+            return agents.get(agent_id)
         except (KeyError, AttributeError):
             return None
 
@@ -2289,17 +2453,17 @@ class FileStateManager:
         """Save state to file.
 
         Args:
-            path: Path to save state to. If None, a path is generated based on agent_id.
+            path: Path to save state to. If None, a default path is used.
 
         Returns:
-            Path to saved state file.
+            Path state was saved to.
 
         """
         if path is None:
-            path = os.path.join(self.base_dir, f"{self._state.agent_id}.json")
+            path = str(Path(self.base_dir) / f"{self._state.agent_id}.json")
 
         state_dict = self._state.to_dict()
-        with open(path, "w", encoding="utf-8") as f:
+        with Path(path).open("w", encoding="utf-8") as f:
             json.dump(state_dict, f, indent=2)
 
         return path
@@ -2318,13 +2482,14 @@ class FileStateManager:
 
         """
         try:
-            with open(path, encoding="utf-8") as f:
+            with Path(path).open(encoding="utf-8") as f:
                 state_dict = json.load(f)
-            self._state = AgentState.from_dict(state_dict)
-            return self._state
         except FileNotFoundError:
             msg = f"State file not found: {path}"
-            raise ConfigError(msg)
+            raise ConfigError(msg) from None
+
+        self._state = AgentState.from_dict(state_dict)
+        return self._state
 
     def list_states(self) -> list[str]:
         """List available state files.
@@ -2354,12 +2519,12 @@ class FileStateManager:
             ConfigError: If state file not found.
 
         """
-        path = os.path.join(self.base_dir, f"{agent_id}.json")
-        if not os.path.exists(path):
+        path = Path(self.base_dir) / f"{agent_id}.json"
+        if not path.exists():
             msg = f"State file not found for agent: {agent_id}"
             raise ConfigError(msg)
 
-        return self.load_state(path)
+        return self.load_state(str(path))
 
     def delete_state(self, agent_id: str) -> None:
         """Delete state file.
@@ -2371,12 +2536,12 @@ class FileStateManager:
             ConfigError: If state file not found.
 
         """
-        path = os.path.join(self.base_dir, f"{agent_id}.json")
-        if not os.path.exists(path):
+        path = Path(self.base_dir) / f"{agent_id}.json"
+        if not path.exists():
             msg = f"State file not found for agent: {agent_id}"
             raise ConfigError(msg)
 
-        os.remove(path)
+        path.unlink()
 
     def track_delegated_task_progress(
         self,
@@ -2406,14 +2571,191 @@ class FileStateManager:
     def calculate_rollup_progress(self, task_id: uuid.UUID) -> dict[str, Any]:
         """Calculate rollup progress for a task based on its subtasks.
 
+        This method provides an enhanced progress calculation that takes into account:
+        - Task priorities (higher priority tasks have more weight)
+        - Task complexity (more complex tasks have more weight)
+        - Task status (completed, in progress, blocked, etc.)
+        - Dependency relationships between tasks
+
         Args:
             task_id: Task ID.
 
         Returns:
-            Dictionary with rollup progress information.
+            Dictionary with rollup progress information including:
+            - progress: Overall progress value (0.0 to 1.0)
+            - status_message: Status message describing the progress
+            - weighted_progress: Progress weighted by priority and complexity
+            - critical_path_progress: Progress of tasks on the critical path
+            - blocking_tasks: List of tasks blocking progress
 
         """
-        return self._state.calculate_rollup_progress(task_id)
+        task = self.get_task_by_id(task_id)
+        if not task or not task.subtasks:
+            return {
+                "progress": 0.0,
+                "status_message": "No subtasks found",
+                "weighted_progress": 0.0,
+                "critical_path_progress": 0.0,
+                "blocking_tasks": [],
+            }
+
+        # Process subtasks and collect progress data
+        progress_data = self._collect_subtask_progress_data(task)
+
+        # Calculate final progress metrics
+        return self._calculate_final_progress_metrics(progress_data)
+
+    def _collect_subtask_progress_data(self, task: Task) -> dict[str, Any]:
+        """Collect progress data from all subtasks.
+
+        Args:
+            task: Parent task containing subtasks
+
+        Returns:
+            Dictionary with collected progress data
+
+        """
+        # Initialize counters and lists
+        total_subtasks = len(task.subtasks)
+        completed_subtasks = 0
+        in_progress_subtasks = 0
+        blocked_subtasks = 0
+        failed_subtasks = 0
+
+        # Priority and complexity weights
+        priority_weights = {
+            TaskPriority.LOW.value: 0.5,
+            TaskPriority.MEDIUM.value: 1.0,
+            TaskPriority.HIGH.value: 1.5,
+            TaskPriority.CRITICAL.value: 2.0,
+        }
+
+        complexity_weights = {
+            TaskComplexity.SIMPLE.value: 0.75,
+            TaskComplexity.MODERATE.value: 1.0,
+            TaskComplexity.COMPLEX.value: 1.5,
+            TaskComplexity.VERY_COMPLEX.value: 2.0,
+        }
+
+        # Track weighted progress
+        total_weight = 0.0
+        weighted_progress = 0.0
+
+        # Track critical path and blocking tasks
+        critical_path_tasks = []
+        blocking_tasks = []
+
+        # Process each subtask
+        for subtask_id in task.subtasks:
+            subtask = self.get_task_by_id(subtask_id)
+            if not subtask:
+                continue
+
+            # Get priority and complexity weights
+            priority = subtask.priority.value if hasattr(subtask.priority, "value") else subtask.priority
+            complexity = subtask.complexity.value if hasattr(subtask.complexity, "value") else subtask.complexity
+
+            priority_weight = priority_weights.get(priority, 1.0)
+            complexity_weight = complexity_weights.get(complexity, 1.0)
+
+            # Calculate combined weight
+            combined_weight = priority_weight * complexity_weight
+            total_weight += combined_weight
+
+            # Track task status
+            if subtask.status == TaskStatus.COMPLETED:
+                completed_subtasks += 1
+                weighted_progress += combined_weight
+            elif subtask.status == TaskStatus.IN_PROGRESS:
+                in_progress_subtasks += 1
+                # For in-progress tasks, use their reported progress
+                if "progress_tracking" in subtask.metadata:
+                    progress = subtask.metadata["progress_tracking"].get("progress_percentage", 0.0)
+                    weighted_progress += combined_weight * progress
+            elif subtask.status == TaskStatus.BLOCKED:
+                blocked_subtasks += 1
+                blocking_tasks.append(
+                    {
+                        "task_id": str(subtask_id),
+                        "description": subtask.description,
+                        "blockers": subtask.metadata.get("blockers", {}).get("blocking_dependencies", []),
+                    },
+                )
+            elif subtask.status == TaskStatus.FAILED:
+                failed_subtasks += 1
+
+            # Check if task is on critical path (has dependencies or dependents)
+            if subtask.dependencies or any(self.is_dependent_on(other_id, subtask_id) for other_id in task.subtasks):
+                critical_path_tasks.append(subtask)
+
+        return {
+            "total_subtasks": total_subtasks,
+            "completed_subtasks": completed_subtasks,
+            "in_progress_subtasks": in_progress_subtasks,
+            "blocked_subtasks": blocked_subtasks,
+            "failed_subtasks": failed_subtasks,
+            "total_weight": total_weight,
+            "weighted_progress": weighted_progress,
+            "critical_path_tasks": critical_path_tasks,
+            "blocking_tasks": blocking_tasks,
+        }
+
+    def _calculate_final_progress_metrics(self, progress_data: dict[str, Any]) -> dict[str, Any]:
+        """Calculate final progress metrics based on collected data.
+
+        Args:
+            progress_data: Dictionary with collected progress data
+
+        Returns:
+            Dictionary with final progress metrics
+
+        """
+        # Extract data from progress_data
+        total_subtasks = progress_data["total_subtasks"]
+        completed_subtasks = progress_data["completed_subtasks"]
+        in_progress_subtasks = progress_data["in_progress_subtasks"]
+        blocked_subtasks = progress_data["blocked_subtasks"]
+        failed_subtasks = progress_data["failed_subtasks"]
+        total_weight = progress_data["total_weight"]
+        weighted_progress = progress_data["weighted_progress"]
+        critical_path_tasks = progress_data["critical_path_tasks"]
+        blocking_tasks = progress_data["blocking_tasks"]
+
+        # Calculate normalized weighted progress
+        normalized_weighted_progress = weighted_progress / total_weight if total_weight > 0 else 0.0
+
+        # Calculate critical path progress
+        critical_path_progress = 0.0
+        if critical_path_tasks:
+            critical_path_completed = sum(1 for t in critical_path_tasks if t.status == TaskStatus.COMPLETED)
+            critical_path_progress = critical_path_completed / len(critical_path_tasks)
+
+        # Calculate overall progress using a weighted combination of metrics
+        # - 60% based on weighted task progress
+        # - 30% based on critical path progress
+        # - 10% based on simple task count progress
+        simple_progress = completed_subtasks / total_subtasks if total_subtasks > 0 else 0.0
+        overall_progress = 0.6 * normalized_weighted_progress + 0.3 * critical_path_progress + 0.1 * simple_progress
+
+        # Generate status message
+        status_message = (
+            f"Progress: {completed_subtasks}/{total_subtasks} tasks completed"
+            f" ({in_progress_subtasks} in progress, {blocked_subtasks} blocked, {failed_subtasks} failed)"
+        )
+
+        return {
+            "progress": overall_progress,
+            "status_message": status_message,
+            "weighted_progress": normalized_weighted_progress,
+            "critical_path_progress": critical_path_progress,
+            "simple_progress": simple_progress,
+            "completed_subtasks": completed_subtasks,
+            "in_progress_subtasks": in_progress_subtasks,
+            "blocked_subtasks": blocked_subtasks,
+            "failed_subtasks": failed_subtasks,
+            "total_subtasks": total_subtasks,
+            "blocking_tasks": blocking_tasks,
+        }
 
     def is_task_blocked_by_dependencies(self, task_id: uuid.UUID) -> bool:
         """Check if a task is blocked by dependencies.

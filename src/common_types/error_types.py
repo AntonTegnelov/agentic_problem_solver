@@ -6,6 +6,18 @@ from __future__ import annotations
 class AgentError(Exception):
     """Base class for agent-related errors."""
 
+    def __contains__(self, item: str) -> bool:
+        """Implement the 'in' operator for string containment tests.
+
+        Args:
+            item: The string to check for containment.
+
+        Returns:
+            True if the string is contained in the error message, False otherwise.
+
+        """
+        return item in str(self)
+
 
 class AgentNotFoundError(AgentError):
     """Error raised when an agent is not found."""

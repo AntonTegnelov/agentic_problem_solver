@@ -73,9 +73,7 @@ def test_provider_implements_protocol() -> None:
 @pytest.mark.asyncio
 async def test_generate_stream_default_empty_messages(provider) -> None:
     """Test generate_stream with empty messages returns empty string."""
-    chunks = []
-    async for chunk in provider.generate_stream([]):
-        chunks.append(chunk)
+    chunks = [chunk async for chunk in provider.generate_stream([])]
     assert not chunks
 
 
@@ -83,9 +81,7 @@ async def test_generate_stream_default_empty_messages(provider) -> None:
 async def test_generate_stream_default_with_config(provider) -> None:
     """Test generate_stream with empty messages and config returns empty string."""
     config = GenerationConfig(model="test-model")
-    chunks = []
-    async for chunk in provider.generate_stream([], config=config):
-        chunks.append(chunk)
+    chunks = [chunk async for chunk in provider.generate_stream([], config=config)]
     assert not chunks
 
 

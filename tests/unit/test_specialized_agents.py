@@ -627,7 +627,10 @@ class TestExecutorAgent:
         # ExecutorAgent is a leaf node, so delegation should return an error
         result = await executor_agent.delegate_to_child("child1", "Implement this function")
         assert result.success is False
-        assert "cannot delegate to child agents" in result.error.lower()
+
+        # Handle the case where error could be either a string or an AgentError
+        error_msg = str(result.error)
+        assert "cannot delegate to child agents" in error_msg.lower()
 
     @pytest.mark.asyncio
     async def test_collect_results_from_children(self, executor_agent: ExecutorAgent) -> None:

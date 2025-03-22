@@ -177,7 +177,7 @@ def test_mock_agent_error_handling() -> None:
     agent = MockAgent(agent_id="test-agent", capabilities=["test"])
 
     # Test delegating to non-existent child
-    with pytest.raises(Exception):  # Should raise some form of error
+    with pytest.raises(ValueError, match="Child agent .* not found"):
         agent.delegate_to_child("non-existent", "test task")
 
     # Test collecting results with no children

@@ -155,6 +155,38 @@ class MessagePriority(Enum):
         return self.value >= other.value
 
 
+class TaskComplexity(str, Enum):
+    """Task complexity levels.
+
+    These levels indicate the complexity of a task:
+    - SIMPLE: Simple, straightforward task requiring minimal effort
+    - MODERATE: Moderately complex task requiring some analysis
+    - COMPLEX: Complex task requiring significant analysis and planning
+    - VERY_COMPLEX: Extremely complex task requiring extensive analysis and planning
+    """
+
+    SIMPLE = "simple"
+    MODERATE = "moderate"
+    COMPLEX = "complex"
+    VERY_COMPLEX = "very_complex"
+
+
+class TaskPriority(str, Enum):
+    """Task priority levels.
+
+    These levels indicate the priority of a task:
+    - LOW: Task can be completed when convenient
+    - MEDIUM: Standard priority task
+    - HIGH: Important task that should be prioritized
+    - CRITICAL: Urgent task requiring immediate attention
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
 class ExecutionStage(str, Enum):
     """Execution stages for task implementation.
 
