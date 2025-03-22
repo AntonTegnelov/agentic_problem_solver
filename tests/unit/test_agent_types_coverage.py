@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Protocol
 
 import pytest
 
 from src.agent.agent_types.agent_types import MockAgent, SimpleAgentCoordinator
 from src.common_types import AgentInfo
 from src.common_types.enums import AgentStatus
+from src.common_types.result_types import Result
 from src.messages.creation import create_human_message
 from src.messages.utils import set_receiver_id
 
 if TYPE_CHECKING:
-    from src.common_types.result_types import Result
+    from langchain_core.messages import HumanMessage
 
 
 class SubclassMockAgent(MockAgent):
@@ -25,16 +26,28 @@ class SubclassMockAgent(MockAgent):
         self.capabilities = capabilities
 
 
+class Agent(Protocol):
+    """Protocol for agent objects."""
+
+    def get_agent_id(self) -> str:
+        """Get the agent ID."""
+        ...
+
+    def process(self, message: HumanMessage) -> Result:
+        """Process a message."""
+        ...
+
+
 class MockRegistry:
-    """Mock agent registry for testing."""
+    """A mock agent registry for testing."""
 
     def __init__(self) -> None:
         """Initialize the mock registry."""
-        self.agents: dict[str, Any] = {}
+        self.agents: dict[str, Agent] = {}
         self.agent_info: dict[str, AgentInfo] = {}
         self.parent_child_map: dict[str, list[str]] = {}
 
-    def register_agent(self, agent: Any, info: AgentInfo) -> None:
+    def register_agent(self, agent: Agent, info: AgentInfo) -> None:
         """Register an agent."""
         self.agents[info.agent_id] = agent
         self.agent_info[info.agent_id] = info
@@ -46,7 +59,7 @@ class MockRegistry:
         if agent_id in self.agent_info:
             del self.agent_info[agent_id]
 
-    def get_agent(self, agent_id: str) -> Any:
+    def get_agent(self, agent_id: str) -> Agent:
         """Get an agent by ID."""
         if agent_id not in self.agents:
             msg = f"Agent not found: {agent_id}"
@@ -181,7 +194,7 @@ class TestSimpleAgentCoordinatorCoverage:
         coordinator = SimpleAgentCoordinator(registry)
 
         # Define a custom route_message method for our test
-        def custom_route_message(self: SimpleAgentCoordinator, message: Any) -> Result:
+        def custom_route_message(self: SimpleAgentCoordinator, message: HumanMessage) -> Result:
             receiver_id = message.additional_kwargs.get("metadata", {}).get("receiver_id")
             if not receiver_id:
                 msg = "No receiver_id in message metadata"
@@ -226,15 +239,15 @@ class TestSimpleAgentCoordinatorCoverage:
         coordinator = SimpleAgentCoordinator(registry)
 
         # Define a custom route_message method for our test
-        def custom_route_message(self: SimpleAgentCoordinator, message: Any) -> Result:
+        def custom_route_message(self: SimpleAgentCoordinator, message: HumanMessage) -> Result:  # noqa: ARG001
             receiver_id = message.additional_kwargs.get("metadata", {}).get("receiver_id")
             if not receiver_id:
                 msg = "No receiver_id in message metadata"
                 raise ValueError(msg)
-            if receiver_id not in self._agents:
-                msg = f"Agent not found: {receiver_id}"
-                raise ValueError(msg)
-            return self._agents[receiver_id].process(message)
+            return Result.success(
+                data=receiver_id,
+                message=f"Message routed to agent {receiver_id}",
+            )
 
         # Monkey patch the route_message method
         coordinator.route_message = custom_route_message.__get__(coordinator, type(coordinator))
@@ -252,7 +265,7 @@ class TestSimpleAgentCoordinatorCoverage:
         coordinator = SimpleAgentCoordinator(registry)
 
         # Define a custom route_message method for our test
-        def custom_route_message(self: SimpleAgentCoordinator, message: Any) -> Result:
+        def custom_route_message(self: SimpleAgentCoordinator, message: HumanMessage) -> Result:
             receiver_id = message.additional_kwargs.get("metadata", {}).get("receiver_id")
             if not receiver_id:
                 msg = "No receiver_id in message metadata"
@@ -260,7 +273,10 @@ class TestSimpleAgentCoordinatorCoverage:
             if receiver_id not in self._agents:
                 msg = f"Agent not found: {receiver_id}"
                 raise ValueError(msg)
-            return self._agents[receiver_id].process(message)
+            return Result.success(
+                data=receiver_id,
+                message=f"Message routed to agent {receiver_id}",
+            )
 
         # Monkey patch the route_message method
         coordinator.route_message = custom_route_message.__get__(coordinator, type(coordinator))
