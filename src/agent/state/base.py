@@ -1652,7 +1652,7 @@ class AgentState:
             "suggested_changes": [
                 {
                     "dependency_id": blocker["task_id"],
-                    "action": "INTERVENTION_NEEDED",
+                    "action": "URGENT_INTERVENTION" if is_on_critical_path else "INTERVENTION_NEEDED",
                     "reason": f"Blocker stalled for {blocker.get('hours_stalled', 0):.1f} hours",
                 }
                 for blocker in stalled_blockers
@@ -1666,7 +1666,9 @@ class AgentState:
         task.metadata["resolution_suggestions"]["stalled_blockers"] = {
             "detected_at": datetime.now(UTC).isoformat(),
             "blockers": stalled_blockers,
-            "suggested_action": "Intervention needed for stalled dependencies",
+            "suggested_action": "Urgent intervention needed"
+            if is_on_critical_path
+            else "Intervention needed for stalled dependencies",
         }
         self.update_task(task)
 
