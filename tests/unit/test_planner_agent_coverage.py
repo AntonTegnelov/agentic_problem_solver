@@ -27,8 +27,9 @@ class MockLLMProvider(LLMProvider):
         """Set response for a prompt."""
         self.responses[prompt] = response
 
-    async def generate(self, messages: str | list[HumanMessage], *, config: None = None) -> str:
+    async def generate(self, messages: str | list[HumanMessage], *, config: None = None) -> str:  # noqa: ARG002
         """Generate response."""
+        # Ignoring config argument as it's not used in tests but required by protocol
         prompt = messages[0].content if isinstance(messages, list) else messages
         if prompt in self.responses:
             return json.dumps(self.responses[prompt])
