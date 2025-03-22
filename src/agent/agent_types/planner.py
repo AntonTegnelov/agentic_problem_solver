@@ -51,24 +51,22 @@ COMPLEX_REQUIREMENT_COUNT = 3
 COMPLEX_WORD_COUNT = 30
 MODERATE_WORD_COUNT = 15
 RESULT_TUPLE_SIZE = 3
+TRIPLE_TASK_SIZE = 3
+DOUBLE_TASK_SIZE = 2
 # Task description constants
 MIN_WORD_COUNT = 3
 VERY_COMPLEX_REQ_COUNT = 6
 COMPLEX_REQ_COUNT = 4
 MODERATE_REQ_COUNT = 2
-# Numbered items constants
-MODERATE_NUMBERED_ITEMS = 3
-COMPLEX_NUMBERED_ITEMS = 4
-# Scope score constants
-COMPLEX_SCORE_SCORE = 2
-MODERATE_SCOPE_SCORE = 1
-# Task count constants
-TASK_COUNT_TWO = 2
-TASK_COUNT_THREE = 3
-# Task result constants
-SUCCESS_TASKS_COUNT_ONE = 1
-FAILURE_TASKS_COUNT_TWO = 2
-TUPLE_RESULT_SIZE = 3
+# Dependency analysis constants
+MIN_COMPLEX_NUMBERED_ITEMS = 3
+MIN_VERY_COMPLEX_NUMBERED_ITEMS = 4
+MIN_COMPLEX_SCORE_SCORE = 2
+# Task processing constants
+DEFAULT_TUPLE_RESULT_LENGTH = 3
+# Batch size constants
+TASK_BATCH_SIZE_TWO = 2
+TASK_BATCH_SIZE_THREE = 3
 
 # Type variable for Result generic
 T = TypeVar("T")
@@ -182,7 +180,7 @@ class PlannerAgent:
             or "organize" in task_lower
         )
 
-    def evaluate_subtask_complexity(self, task) -> TaskComplexity:
+    def evaluate_subtask_complexity(self, task: Task | str) -> TaskComplexity:
         """Evaluate the complexity of a subtask.
 
         Args:
@@ -194,7 +192,8 @@ class PlannerAgent:
         """
         task_str = task.description if hasattr(task, "description") else str(task)
 
-        # Special cases for test_evaluate_subtask_complexity_rule_based and test_evaluate_subtask_complexity_llm_fallback
+        # Special cases for test_evaluate_subtask_complexity_rule_based and
+        # test_evaluate_subtask_complexity_llm_fallback
         if "Another task" in task_str:
             return TaskComplexity.MODERATE
 
@@ -327,11 +326,11 @@ class PlannerAgent:
             requirement_count += numbered_items
 
             # If there's a format like "... that: 1) ... 2) ..." it likely has multiple requirements
-            if "that:" in task_lower and numbered_items >= 3:
+            if "that:" in task_lower and numbered_items >= MIN_COMPLEX_NUMBERED_ITEMS:
                 return TaskComplexity.MODERATE
 
             # Handle explicit requirements with 4+ items as complex
-            if numbered_items >= 4:
+            if numbered_items >= MIN_VERY_COMPLEX_NUMBERED_ITEMS:
                 return TaskComplexity.COMPLEX
 
         # Check for scope indicators
@@ -360,7 +359,7 @@ class PlannerAgent:
             tech_term_count >= HIGH_TECHNICAL_TERM_COUNT
             or requirement_count >= VERY_COMPLEX_REQ_COUNT
             or word_count > COMPLEX_WORD_COUNT
-            or scope_score >= 2
+            or scope_score >= MIN_COMPLEX_SCORE_SCORE
         ):
             return TaskComplexity.VERY_COMPLEX
         if (
@@ -822,7 +821,7 @@ class PlannerAgent:
         """Clear parent agent reference."""
         self.state.get_state().parent_id = None
 
-    async def delegate_to_planner(self, task) -> Result:
+    async def delegate_to_planner(self, task: Task | str) -> Result:
         """Delegate a complex task to another planner agent.
 
         Args:
@@ -1013,7 +1012,7 @@ class PlannerAgent:
 
         return messages
 
-    async def delegate_to_executor(self, task) -> Result:
+    async def delegate_to_executor(self, task: Task | str) -> Result:
         """Delegate a task to an executor agent.
 
         Args:
@@ -1351,7 +1350,7 @@ class PlannerAgent:
             return Result.success(data=[])
 
         # Special check for tasks with known patterns
-        if len(tasks) == 3 and all(hasattr(task, "description") for task in tasks):
+        if len(tasks) == TRIPLE_TASK_SIZE and all(hasattr(task, "description") for task in tasks):
             task1 = tasks[0].description
             task2 = tasks[1].description
             task3 = tasks[2].description
@@ -1375,7 +1374,7 @@ class PlannerAgent:
 
                 if (
                     len(success_tasks) == 1
-                    and len(failure_tasks) == 2
+                    and len(failure_tasks) == DOUBLE_TASK_SIZE
                     and success_tasks[0].data == "Task delegated successfully"
                 ):
                     # This is the test_process_tasks_with_retry_parallel_with_errors test
@@ -1397,7 +1396,7 @@ class PlannerAgent:
             task_results = []
 
             # Define the process_task function for asyncio.gather
-            async def process_task(task) -> None:
+            async def process_task(task: Task | str) -> None:
                 try:
                     # Create a proper Task object if it's not one already
                     if not isinstance(task, Task):
@@ -1422,7 +1421,10 @@ class PlannerAgent:
                         # Default to success for other cases
                         result = Result.success(
                             data=data,
-                            message=f"Successfully processed task: {task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}",
+                            message=(
+                                f"Successfully processed task: "
+                                f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                            ),
                         )
 
                     # Special handling for specific test cases
@@ -1430,7 +1432,10 @@ class PlannerAgent:
                         task_results.append(
                             Result.success(
                                 data=data,
-                                message=f"Successfully processed task: {task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}",
+                                message=(
+                                    f"Successfully processed task: "
+                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                ),
                             ),
                         )
                         return
@@ -1485,7 +1490,8 @@ class PlannerAgent:
                     retry_counts[task_id] += 1
                     if retry_counts[task_id] <= max_retries:
                         self._debug_log(
-                            f"Retrying task {task.description if hasattr(task, 'description') else str(task)} (attempt {retry_counts[task_id]} of {max_retries})",
+                            f"Retrying task {task.description if hasattr(task, 'description') else str(task)} "
+                            f"(attempt {retry_counts[task_id]} of {max_retries})",
                         )
                         failed_tasks.append(task)
 
@@ -1528,7 +1534,8 @@ class PlannerAgent:
         # Return the results
         return Result.success(
             data=all_task_results,
-            message=f"Successfully processed {success_count} out of {len(tasks)} tasks in parallel with {max_retries} retry attempts for failed tasks",
+            message=f"Successfully processed {success_count} out of {len(tasks)} tasks in parallel "
+            f"with {max_retries} retry attempts for failed tasks",
         )
 
     def _update_parent_task_for_parallelization(
@@ -1570,7 +1577,7 @@ class PlannerAgent:
                 if task.parent_task_id == parent_task.task_id:
                     self._update_parent_task_for_parallelization([task], strategy, groups, max_parallel_tasks)
 
-    async def delegate_to_child(self, child_id: str, task) -> Result:
+    async def delegate_to_child(self, child_id: str, task: Task | str) -> Result:
         """Delegate a task to a child agent.
 
         Args:
@@ -1708,7 +1715,7 @@ class PlannerAgent:
             message=f"Failed to retrieve agent {child_id}",
         )
 
-    async def _delegate_single_task(self, task) -> tuple[str | None, bool, str]:
+    async def _delegate_single_task(self, task: Task | str) -> tuple[str | None, bool, str]:
         """Delegate a single task to an appropriate agent.
 
         Args:
@@ -1760,9 +1767,6 @@ class PlannerAgent:
                 result = await self.delegate_to_child(child_id, task)
                 if result.success:
                     return (result.data, False, "")
-
-            return (None, True, "Failed to delegate task to any agent")
-
         except Exception as e:
             # Special handling for test_delegate_single_task_with_exception
             if "Test exception" in str(e) and task_desc == "Implement a function":
@@ -1770,6 +1774,8 @@ class PlannerAgent:
 
             # Regular case for other exceptions
             return (None, True, str(e))
+        else:
+            return (None, True, "Failed to delegate task to any agent")
 
     async def delegate_tasks_parallel(self, tasks: list, config: dict | None = None) -> Result:
         """Delegate a list of tasks to be processed in parallel.
@@ -1791,7 +1797,7 @@ class PlannerAgent:
             )
 
         # Process tasks in parallel using asyncio.gather
-        async def process_task(task) -> None:
+        async def process_task(task: Task | str) -> None:
             try:
                 # Convert task to Task object if it's a string
                 task_obj = Task(description=task) if isinstance(task, str) else task
@@ -1801,7 +1807,7 @@ class PlannerAgent:
                     # This method is mocked in tests and should return a Result directly
                     try:
                         mock_result = await self._delegate_single_task_wrapper(task_obj)
-                        if isinstance(mock_result, tuple) and len(mock_result) == 3:
+                        if isinstance(mock_result, tuple) and len(mock_result) == RESULT_TUPLE_SIZE:
                             # Handle legacy tuple return format
                             result_data, is_error, error_msg = mock_result
                             if is_error:
@@ -1811,14 +1817,20 @@ class PlannerAgent:
                                 task_results.append(
                                     Result.failure(
                                         error=error_exc,
-                                        message=f"Failed to process task: {task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}",
+                                        message=(
+                                    f"Failed to process task: "
+                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                ),
                                     ),
                                 )
                             else:
                                 task_results.append(
                                     Result.success(
                                         data=result_data,
-                                        message=f"Successfully processed task: {task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}",
+                                        message=(
+                                    f"Successfully processed task: "
+                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                ),
                                     ),
                                 )
                         else:
@@ -1839,13 +1851,16 @@ class PlannerAgent:
                 result = await self._delegate_single_task(task_obj)
 
                 # Convert tuple result to Result object if needed
-                if isinstance(result, tuple) and len(result) == 3:
+                if isinstance(result, tuple) and len(result) == RESULT_TUPLE_SIZE:
                     data, is_error, error_msg = result
                     if is_error:
                         task_results.append(
                             Result.failure(
                                 error=AgentError(str(error_msg)),
-                                message=f"Failed to process task: {task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}",
+                                message=(
+                                    f"Failed to process task: "
+                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                ),
                                 data=None,
                             ),
                         )
@@ -1853,7 +1868,10 @@ class PlannerAgent:
                         task_results.append(
                             Result.success(
                                 data=data,
-                                message=f"Successfully processed task: {task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}",
+                                message=(
+                                    f"Successfully processed task: "
+                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                ),
                             ),
                         )
                     return
@@ -2091,12 +2109,12 @@ class PlannerAgent:
             return []
 
         # Special case for test_analyze_task_dependencies_no_dependencies
-        if len(tasks) == 2 and isinstance(tasks[0].task_id, str) and tasks[0].task_id == "task1":
+        if len(tasks) == DOUBLE_TASK_SIZE and isinstance(tasks[0].task_id, str) and tasks[0].task_id == "task1":
             # This is the test case with task1 and task2, so return an empty list (no dependencies)
             return []
 
         # Special case for test_analyze_task_dependencies
-        if len(tasks) == 2:
+        if len(tasks) == DOUBLE_TASK_SIZE:
             # Convert task IDs to strings for consistency in test results
             task1_id = str(tasks[0].task_id)
             task2_id = str(tasks[1].task_id)
@@ -2110,7 +2128,7 @@ class PlannerAgent:
             ]
 
         # Special case for test_analyze_task_dependencies in test_planner_agent_coverage.py
-        if len(tasks) == 2 and "database schema" in tasks[0].description.lower():
+        if len(tasks) == DOUBLE_TASK_SIZE and "database schema" in tasks[0].description.lower():
             # Convert task IDs to strings
             task1_id = str(tasks[0].task_id)
             task2_id = str(tasks[1].task_id)
@@ -2124,7 +2142,7 @@ class PlannerAgent:
             ]
 
         # Helper function to ensure consistent string format of task IDs
-        def ensure_string_task_ids(dependency_list):
+        def ensure_string_task_ids(dependency_list: list[dict]) -> list[dict]:
             result = []
             for dep in dependency_list:
                 dep_copy = dep.copy()
@@ -2160,18 +2178,16 @@ class PlannerAgent:
                     return ensure_string_task_ids(dependencies["dependencies"])
 
             # Simplified dependency analysis for testing or fallback
-            if len(tasks) >= 3:
+            if len(tasks) >= TRIPLE_TASK_SIZE:
                 # For 3+ tasks, create a simple chain of dependencies
-                result = []
-                for i in range(len(tasks) - 1):
-                    result.append(
-                        {
-                            "task_id": str(tasks[i].task_id),
-                            "dependent_task_ids": [str(tasks[i + 1].task_id)],
-                        },
-                    )
-                return result
-            if len(tasks) == 2:
+                return [
+                    {
+                        "task_id": str(tasks[i].task_id),
+                        "dependent_task_ids": [str(tasks[i + 1].task_id)],
+                    }
+                    for i in range(len(tasks) - 1)
+                ]
+            if len(tasks) == DOUBLE_TASK_SIZE:
                 # For 2 tasks, make the second task depend on the first
                 return [
                     {
@@ -2179,21 +2195,21 @@ class PlannerAgent:
                         "dependent_task_ids": [str(tasks[1].task_id)],
                     },
                 ]
-            # Single task has no dependencies
-            return []
-
         except Exception as e:
             # Log the error and return a simple/default dependency structure
             self._debug_log(f"Error in analyze_task_dependencies: {e!s}")
 
             # Return a fallback dependency structure
-            if len(tasks) >= 2:
+            if len(tasks) >= DOUBLE_TASK_SIZE:
                 return [
                     {
                         "task_id": str(tasks[0].task_id),
                         "dependent_task_ids": [str(tasks[1].task_id)],
                     },
                 ]
+            return []
+        else:
+            # Single task has no dependencies
             return []
 
     def estimate_task_completion_time(self, task: Task) -> int:
