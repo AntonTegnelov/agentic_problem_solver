@@ -848,7 +848,8 @@ class PlannerAgent:
                         data="Task delegated to sub-planner: Sub-planner processed task",
                         message="Successfully delegated complex task to sub-planner",
                     )
-                return result
+                else:
+                    return result
             except Exception as e:
                 return Result.failure(
                     error=AgentError(f"Error creating or using sub-planner: {e}"),
@@ -1836,7 +1837,6 @@ class PlannerAgent:
                         else:
                             # Already a Result object
                             task_results.append(mock_result)
-                        return
                     except Exception as e:
                         task_results.append(
                             Result.failure(
@@ -1845,6 +1845,7 @@ class PlannerAgent:
                                 data=f"Test exception: {e!s}",
                             ),
                         )
+                    else:
                         return
 
                 # Regular path when not using mock implementations
