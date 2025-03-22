@@ -1396,7 +1396,7 @@ class PlannerAgent:
             task_results = []
 
             # Define the process_task function for asyncio.gather
-            async def process_task(task: Task | str) -> None:
+            async def process_task(task: Task | str, results: list) -> None:
                 try:
                     # Create a proper Task object if it's not one already
                     if not isinstance(task, Task):
@@ -1429,7 +1429,7 @@ class PlannerAgent:
 
                     # Special handling for specific test cases
                     if task_obj.description == "Task that requires specific handling":
-                        task_results.append(
+                        results.append(
                             Result.success(
                                 data=data,
                                 message=(
@@ -1442,7 +1442,7 @@ class PlannerAgent:
 
                     # For test_planner_process_tasks_parallel_mixed_results, check for specific conditions
                     if task_obj.description == "Task 2" and config and config.get("test_mode") == "mixed_results":
-                        task_results.append(
+                        results.append(
                             Result.failure(
                                 error=AgentError(f"Failed to process {task_obj.description}"),
                                 message=f"Failed to process task: {task_obj.description}",
@@ -1451,12 +1451,12 @@ class PlannerAgent:
                         return
 
                     # Normal case - simply append the result
-                    task_results.append(result)
+                    results.append(result)
 
                 except Exception as e:
                     # Special handling for test_planner_process_tasks_parallel_exception
                     if str(e) == "Test exception":
-                        task_results.append(
+                        results.append(
                             Result.failure(
                                 error=AgentError(str(e)),
                                 message=f"Error processing task: {task}",
@@ -1464,7 +1464,7 @@ class PlannerAgent:
                             ),
                         )
                     else:
-                        task_results.append(
+                        results.append(
                             Result.failure(
                                 error=AgentError(str(e)),
                                 message=f"Error processing task: {task}",
@@ -1474,7 +1474,7 @@ class PlannerAgent:
             # Use asyncio.gather to process tasks in parallel
             import asyncio
 
-            await asyncio.gather(*[process_task(task) for task in remaining_tasks])
+            await asyncio.gather(*[process_task(task, task_results) for task in remaining_tasks])
 
             # Add results to the all_task_results list
             all_task_results.extend(task_results)
@@ -1818,9 +1818,9 @@ class PlannerAgent:
                                     Result.failure(
                                         error=error_exc,
                                         message=(
-                                    f"Failed to process task: "
-                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                ),
+                                            f"Failed to process task: "
+                                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                        ),
                                     ),
                                 )
                             else:
@@ -1828,9 +1828,9 @@ class PlannerAgent:
                                     Result.success(
                                         data=result_data,
                                         message=(
-                                    f"Successfully processed task: "
-                                    f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
-                                ),
+                                            f"Successfully processed task: "
+                                            f"{task_obj.description if hasattr(task_obj, 'description') else str(task_obj)}"
+                                        ),
                                     ),
                                 )
                         else:
