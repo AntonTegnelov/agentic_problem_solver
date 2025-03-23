@@ -6,6 +6,7 @@ for mid-level task refinement and planning in the hierarchical agent system.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import inspect
 import json
@@ -40,6 +41,7 @@ from src.common_types.task_types import (
     TaskDependency,
 )
 from src.config.agent import AgentConfig
+from src.config.constants import DEFAULT_TASK_TIMEOUT
 from src.llm_providers.factory import LLMProviderFactory
 
 if TYPE_CHECKING:
@@ -1944,6 +1946,12 @@ class PlannerAgent:
         task_desc = task.description if hasattr(task, "description") else str(task)
         result_tuple = (None, True, "Failed to delegate task to any agent")  # Default result
 
+        # Get the timeout from the agent's configuration
+        # Default to DEFAULT_TASK_TIMEOUT (300 seconds) if not specified
+        timeout_duration = getattr(self, "_config", {}).get("task_timeout", DEFAULT_TASK_TIMEOUT)
+
+        self.logger.debug("Using timeout of %d seconds for task delegation", timeout_duration)
+
         try:
             # Check if this is a test task first
             test_result, is_test_task = await self._handle_test_task(task)
@@ -1955,19 +1963,35 @@ class PlannerAgent:
 
                 # For complex tasks, delegate to another planner
                 if complexity in [TaskComplexity.COMPLEX, TaskComplexity.VERY_COMPLEX]:
-                    result = await self.delegate_to_planner(task)
+                    # Wrap delegation with timeout
+                    result = await asyncio.wait_for(
+                        self.delegate_to_planner(task),
+                        timeout=timeout_duration,
+                    )
                     result_tuple = (result.data, not result.success, str(result.error) if result.error else "")
                 else:
-                    # For simple tasks, delegate to executor
-                    result = await self.delegate_to_executor(task)
+                    # For simple tasks, delegate to executor with timeout
+                    result = await asyncio.wait_for(
+                        self.delegate_to_executor(task),
+                        timeout=timeout_duration,
+                    )
                     if result.success:
                         result_tuple = (result.data, False, "")
                     # Try with a child agent as fallback
                     elif self.get_child_ids():
                         child_id = self.get_child_ids()[0]
-                        result = await self.delegate_to_child(child_id, task)
+                        result = await asyncio.wait_for(
+                            self.delegate_to_child(child_id, task),
+                            timeout=timeout_duration,
+                        )
                         if result.success:
                             result_tuple = (result.data, False, "")
+        except TimeoutError:
+            # Specific handling for timeout errors
+            error_msg = f"Task delegation timed out after {timeout_duration} seconds for task '{task_desc[:50]}...'"
+            self.logger.warning(error_msg)
+            # Mark as retryable since timeouts are often transient
+            result_tuple = (None, True, error_msg)
         except (AgentNotFoundError, AgentCommunicationError, AgentProcessingError, ValueError) as e:
             # Special handling for test_delegate_single_task_with_exception
             if "Test exception" in str(e) and task_desc == "Implement a function":

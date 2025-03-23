@@ -27,6 +27,7 @@ from src.common_types.task_types import (
     TaskStatus,
 )
 from src.config.agent import AgentConfig
+from src.config.constants import DEFAULT_TASK_TIMEOUT
 from src.llm_providers.interface import LLMProvider
 from src.messages.creation import create_human_message, create_message
 from src.prompts import get_step_prompt
@@ -1740,15 +1741,37 @@ class ArchitectAgent:
         task_description = task.description
         task_complexity = task.complexity or self.analyze_task_complexity(task_description)
 
+        # Get the timeout from the agent's configuration
+        # Default to DEFAULT_TASK_TIMEOUT (300 seconds) if not specified
+        timeout_duration = getattr(self._config, "task_timeout", DEFAULT_TASK_TIMEOUT)
+
+        self._logger.debug("Using timeout of %d seconds for task delegation", timeout_duration)
+
         try:
             # For simple tasks, delegate directly to an ExecutorAgent
             if task_complexity in [TaskComplexity.SIMPLE, TaskComplexity.MODERATE]:
                 self._logger.info("Delegating task '%s...' directly to ExecutorAgent", task_description[:50])
-                result = await self.delegate_to_executor(task_description)
+                # Wrap delegation with timeout
+                result = await asyncio.wait_for(
+                    self.delegate_to_executor(task_description),
+                    timeout=timeout_duration,
+                )
             else:
                 # For more complex tasks, delegate to a PlannerAgent
-                result = await self._delegate_to_planner(task_description, task_complexity)
-        except (ConnectionError, TimeoutError) as e:
+                # Wrap delegation with timeout
+                result = await asyncio.wait_for(
+                    self._delegate_to_planner(task_description, task_complexity),
+                    timeout=timeout_duration,
+                )
+        except TimeoutError:
+            # Specific handling for timeout errors
+            error_msg = (
+                f"Task delegation timed out after {timeout_duration} seconds for task '{task_description[:50]}...'"
+            )
+            self._logger.warning(error_msg)
+            # Mark as retryable since timeouts are often transient
+            return None, True, error_msg
+        except ConnectionError as e:
             # Network-related errors are good candidates for retry
             error_msg = f"Network error delegating task '{task_description[:50]}...': {e!s}"
             self._logger.warning(error_msg)
