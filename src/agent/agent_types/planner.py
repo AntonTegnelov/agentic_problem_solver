@@ -1619,7 +1619,27 @@ class PlannerAgent:
 
             # For test_planner_process_tasks_parallel, allow for mocked task delegation
             if hasattr(self, "_delegate_single_task") and callable(self._delegate_single_task):
-                result = await self._delegate_single_task(task_obj)
+                # Use the retry_delegation_until_success method which handles retries automatically
+                # Get the max_retries from agent config or use default
+                max_retries = getattr(self, "_config", {}).get("max_retries", 3)
+
+                result_data, is_error, error_msg = await self.retry_delegation_until_success(
+                    task_obj,
+                    max_retries=max_retries,
+                    retry_delay=1.0,
+                )
+
+                # Convert the result tuple to a Result object
+                if result_data is not None:
+                    result = Result.success(
+                        data=result_data,
+                        message=f"Successfully processed task: {self.get_task_description(task_obj)}",
+                    )
+                else:
+                    result = Result.failure(
+                        error=AgentError(error_msg),
+                        message=f"Failed to process task: {self.get_task_description(task_obj)}",
+                    )
             else:
                 # For test_planner_process_tasks_parallel_exception
                 if task_obj.description == "Task that raises exception":
@@ -2834,3 +2854,63 @@ class PlannerAgent:
 
         """
         self._delegation_depth = depth
+
+    async def retry_delegation_until_success(
+        self,
+        task: Task | str,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> tuple[str | None, bool, str]:
+        """Retry task delegation until success or maximum retries reached.
+
+        Args:
+            task: The task to delegate
+            max_retries: Maximum number of retry attempts
+            retry_delay: Delay between retries in seconds
+
+        Returns:
+            Tuple containing (result data if successful, whether task failed, error message if any)
+
+        """
+        task_desc = task.description if hasattr(task, "description") else str(task)
+        retries = 0
+        result_data = None
+        is_error = True
+        error_msg = ""
+
+        # Try initial delegation
+        result_data, is_error, error_msg = await self._delegate_single_task(task)
+
+        # If successful or not retryable, return immediately
+        if result_data is not None or not is_error:
+            return result_data, is_error, error_msg
+
+        # Otherwise, retry until success or max_retries
+        while retries < max_retries and is_error:
+            retries += 1
+            self.logger.info(
+                "Retry attempt %d/%d for task '%s...'",
+                retries,
+                max_retries,
+                task_desc[:50],
+            )
+
+            # Add exponential backoff delay
+            await asyncio.sleep(retry_delay * (2 ** (retries - 1)))
+
+            # Try again
+            result_data, is_error, error_msg = await self._delegate_single_task(task)
+
+            # If successful, break out of the loop
+            if result_data is not None:
+                return result_data, False, ""
+
+        # If we've reached max retries, update the error message
+        if retries >= max_retries and is_error:
+            error_msg = f"Max retries ({max_retries}) reached for task '{task_desc[:50]}...': {error_msg}"
+            self.logger.warning(error_msg)
+            # Return failure without retry flag since we've exhausted retries
+            return None, False, error_msg
+
+        # Return the final result
+        return result_data, is_error, error_msg

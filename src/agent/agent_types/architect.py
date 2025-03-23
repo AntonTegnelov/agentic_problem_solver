@@ -1163,19 +1163,22 @@ class ArchitectAgent:
         tasks_to_retry = []
 
         for task in tasks:
-            task_result, is_retry_needed, error = await self._delegate_single_task(task)
+            # Use retry_delegation_until_success instead of direct delegation
+            # This will automatically retry the delegation if needed
+            task_result, is_retry_needed, error = await self.retry_delegation_until_success(
+                task,
+                max_retries=max_retries,
+                retry_delay=1.0,
+            )
 
             # If we have a result, add it to the results dictionary
             if task_result:
                 results[str(task.task_id)] = task_result
 
-            # Handle retry or error
-            if is_retry_needed:
-                if retry_count < max_retries:
-                    tasks_to_retry.append(task)
-                else:
-                    errors.append(f"Max retries reached for task: {error}")
-            elif error:
+            # Handle error if still present
+            if is_retry_needed and retry_count >= max_retries:
+                errors.append(f"Max retries reached for task: {error}")
+            elif error and not task_result:
                 errors.append(error)
 
         return results, errors, tasks_to_retry
@@ -1789,6 +1792,63 @@ class ArchitectAgent:
             error_msg = f"Task '{task_description[:50]}...' failed: {result.error}"
             self._logger.warning(error_msg)
             return None, True, error_msg
+
+    async def retry_delegation_until_success(
+        self,
+        task: Task,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> tuple[str | None, bool, str]:
+        """Retry task delegation until success or maximum retries reached.
+
+        Args:
+            task: The task to delegate
+            max_retries: Maximum number of retry attempts
+            retry_delay: Delay between retries in seconds
+
+        Returns:
+            Tuple containing (result data if successful, whether to retry, error message if any)
+
+        """
+        retries = 0
+        result_data = None
+        error_msg = ""
+
+        # Try initial delegation
+        result_data, should_retry, error_msg = await self._delegate_single_task(task)
+
+        # If successful or not retryable, return immediately
+        if result_data is not None or not should_retry:
+            return result_data, should_retry, error_msg
+
+        # Otherwise, retry until success or max_retries
+        while retries < max_retries and should_retry:
+            retries += 1
+            self._logger.info(
+                "Retry attempt %d/%d for task '%s...'",
+                retries,
+                max_retries,
+                task.description[:50],
+            )
+
+            # Add exponential backoff delay
+            await asyncio.sleep(retry_delay * (2 ** (retries - 1)))
+
+            # Try again
+            result_data, should_retry, error_msg = await self._delegate_single_task(task)
+
+            # If successful, break out of the loop
+            if result_data is not None:
+                return result_data, False, ""
+
+        # If we've reached max retries, update the error message
+        if retries >= max_retries and should_retry:
+            error_msg = f"Max retries ({max_retries}) reached for task '{task.description[:50]}...': {error_msg}"
+            self._logger.warning(error_msg)
+            return None, False, error_msg
+
+        # Return the final result
+        return result_data, should_retry, error_msg
 
     async def _delegate_to_planner(self, task_description: str, task_complexity: TaskComplexity) -> Result[str]:
         """Delegate a task to a planner agent.

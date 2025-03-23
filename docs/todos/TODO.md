@@ -177,7 +177,7 @@
     - [x] Add some very basic and simple task tree visualization tools
   - [ ] Create fallback mechanisms
     - [x] Add timeout handling for delegated tasks
-    - [ ] Implement automatic retries for failed delegations
+    - [x] Implement automatic retries for failed delegations
     - [ ] Create fallback logic for various failure scenarios
   - [ ] Update the TaskBreakdownStep to register additional metadata
     - [ ] Add information about suggested delegation targets based on complexity
