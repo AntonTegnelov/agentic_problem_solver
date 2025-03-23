@@ -1,0 +1,48 @@
+- implement tree-sitter based codebase map generation https://aider.chat/2023/10/22/repomap.html
+
+  - [ ] Create core repomap infrastructure in `src/repomap/`
+    - [ ] Implement `RepoMap` class in `src/repomap/repomap.py` for codebase maps
+    - [ ] Add tree-sitter integration in `src/repomap/parser.py`
+    - [ ] Create symbol extraction in `src/repomap/extractor.py`
+    - [ ] Add code relationship tracking in `src/repomap/relations.py`
+  - [ ] Add language-specific support
+    - [ ] Create language detection in `src/repomap/languages/detection.py`
+    - [ ] Implement base language parser in `src/repomap/languages/base.py`
+    - [ ] Add support for major languages (Python, JavaScript, etc.)
+    - [ ] Create extension mechanism for additional languages
+
+- [ ] Implement map optimization algorithms in `src/repomap/optimization.py`
+  - [ ] Add importance scoring for symbols and files
+  - [ ] Create token budget management for context fitting
+  - [ ] Implement pruning strategies for large codebases
+  - [ ] Add dependency-based prioritization
+  - [ ] Create map visualization and export in `src/repomap/visualization.py`
+    - [ ] Add text-based codebase summary
+    - [ ] Implement JSON export format
+    - [ ] Create Markdown representation
+    - [ ] Add HTML visualization option
+  - [ ] Add CLI commands in `src/cli/commands/repomap.py`
+    - [ ] Create map generation command
+    - [ ] Add visualization options
+    - [ ] Implement export functionality
+    - [ ] Create analysis utilities
+  - [ ] Integrate with MCP through `RepoMapResourceProvider`
+    - [ ] Implement in `src/agent/tools/primitives/repomap.py`
+    - [ ] Add context retrieval methods
+    - [ ] Create windowing for token management
+    - [ ] Implement dynamic generation based on queries
+  - [ ] Enhance the `continue` command with repomap
+    - [ ] Add structural understanding of codebase
+    - [ ] Implement architectural context for changes
+    - [ ] Create intelligent prompt enhancement
+  - [ ] Create configuration in `src/config/repomap.py`
+    - [ ] Add language support settings
+    - [ ] Configure token budgets
+    - [ ] Implement exclusion patterns
+    - [ ] Add persistence options
+  - [ ] Implement tests
+    - [ ] Create unit tests in `tests/unit/test_repomap.py`
+    - [ ] Add integration tests in `tests/integration/test_repomap_integration.py`
+  - [ ] Add documentation
+    - [ ] Create usage guide in `docs/howto/repomap.md`
+    - [ ] Add examples in `docs/examples/repomap_examples.md`

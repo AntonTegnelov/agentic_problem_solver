@@ -660,6 +660,10 @@ class AgentState:
         self.set_context("tasks", tasks)
         self.updated_at = datetime.now(UTC).isoformat()
 
+        # After adding a task, check for and resolve any potential deadlocks
+        if task.dependencies:
+            self.detect_and_resolve_deadlocks()
+
     def get_task_by_id(self, task_id: uuid.UUID) -> Task | None:
         """Get task by ID.
 
@@ -689,6 +693,23 @@ class AgentState:
         tasks = self.get_tasks()
         task_id_str = str(task.task_id)
 
+        # Check if dependencies exist and store them for comparison
+        original_task = self.get_task_by_id(task.task_id)
+        original_dependencies = original_task.dependencies if original_task else []
+
+        # Check if dependencies have changed
+        dependencies_changed = False
+        if original_task:
+            # Simple check if number of dependencies changed
+            if len(original_dependencies) != len(task.dependencies):
+                dependencies_changed = True
+            else:
+                # Check if any dependency details changed
+                for i, dep in enumerate(task.dependencies):
+                    if i >= len(original_dependencies) or dep != original_dependencies[i]:
+                        dependencies_changed = True
+                        break
+
         for i, task_dict in enumerate(tasks):
             if task_dict["task_id"] == task_id_str:
                 # Convert Task object to dict for storage
@@ -716,6 +737,11 @@ class AgentState:
                 tasks[i] = updated_task
                 self.set_context("tasks", tasks)
                 self.updated_at = datetime.now(UTC).isoformat()
+
+                # If dependencies changed, check for and resolve any potential deadlocks
+                if dependencies_changed and task.dependencies:
+                    self.detect_and_resolve_deadlocks()
+
                 return
 
         # If task not found, add it
@@ -2103,6 +2129,190 @@ class AgentState:
             verification_details=task_dict.get("verification_details", {}),
             execution_metadata=task_dict.get("execution_metadata", {}),
         )
+
+    def detect_and_resolve_deadlocks(self) -> list[dict[str, Any]]:
+        """Detect and resolve circular dependencies (deadlocks) in the task graph.
+
+        This method scans all tasks for circular dependencies and automatically resolves them
+        by making the least critical dependency in the cycle non-blocking.
+
+        Returns:
+            List of resolved deadlocks with information about the resolved dependencies
+
+        """
+        tasks = self.get_tasks()
+        resolved_deadlocks = []
+
+        # Check each task for circular dependencies
+        for task_dict in tasks:
+            task_id = uuid.UUID(task_dict["task_id"])
+
+            # Detect circular dependency starting from this task
+            circular_path = self._detect_circular_dependencies(task_id)
+
+            if circular_path:
+                # We found a circular dependency - resolve it
+                resolution_info = self._resolve_circular_dependency(circular_path)
+                if resolution_info:
+                    resolved_deadlocks.append(resolution_info)
+
+                    # After resolving one cycle, check if there are more from this task
+                    # This prevents cascading deadlocks
+                    circular_path = self._detect_circular_dependencies(task_id)
+                    while circular_path:
+                        resolution_info = self._resolve_circular_dependency(circular_path)
+                        if resolution_info:
+                            resolved_deadlocks.append(resolution_info)
+                        circular_path = self._detect_circular_dependencies(task_id)
+
+        return resolved_deadlocks
+
+    def _resolve_circular_dependency(self, circular_path: list[str]) -> dict[str, Any] | None:
+        """Resolve a circular dependency by breaking the least critical link.
+
+        Args:
+            circular_path: List of task IDs forming a circular dependency chain
+
+        Returns:
+            Dictionary with information about the resolution, or None if resolution failed
+
+        """
+        if not circular_path or len(circular_path) < 2:
+            return None
+
+        # Find the dependency with the lowest priority or complexity to break
+        best_task_to_modify = None
+        best_dependency_to_break = None
+        lowest_score = float("inf")  # Lower score means better candidate to break
+
+        # For each task in the circular path, find its dependency on the next task in the path
+        for i in range(len(circular_path) - 1):
+            current_task_id = uuid.UUID(circular_path[i])
+            next_task_id = uuid.UUID(circular_path[i + 1])
+
+            current_task = self.get_task_by_id(current_task_id)
+            if not current_task:
+                continue
+
+            # Find the dependency on the next task
+            for dependency in current_task.dependencies:
+                if dependency.task_id == next_task_id and dependency.is_blocking:
+                    # Skip if this is already non-blocking
+                    if not dependency.is_blocking:
+                        continue
+
+                    # Calculate the "score" of this dependency based on task priority and complexity
+                    # Lower score means better candidate to break
+                    priority_score = self._get_priority_score(current_task.priority)
+                    complexity_score = self._get_complexity_score(current_task.complexity)
+
+                    # Check if the next task is on the critical path
+                    critical_path_score = 100 if self._is_task_on_critical_path(next_task_id) else 0
+
+                    # Calculate final score - lower means better candidate to break
+                    score = priority_score + complexity_score + critical_path_score
+
+                    # If this is better than our current best, update it
+                    if score < lowest_score:
+                        lowest_score = score
+                        best_task_to_modify = current_task
+                        best_dependency_to_break = dependency
+
+        # If we found a dependency to break, make it non-blocking
+        if best_task_to_modify and best_dependency_to_break:
+            # Make a copy of the dependency with is_blocking=False
+            new_dependencies = []
+            for dep in best_task_to_modify.dependencies:
+                if dep.task_id == best_dependency_to_break.task_id:
+                    new_dependencies.append(
+                        TaskDependency(
+                            task_id=dep.task_id,
+                            description=dep.description,
+                            is_blocking=False,  # Make non-blocking
+                        ),
+                    )
+                else:
+                    new_dependencies.append(dep)
+
+            # Update the task's dependencies
+            best_task_to_modify.dependencies = new_dependencies
+
+            # Add metadata about the deadlock resolution
+            if "deadlock_resolutions" not in best_task_to_modify.metadata:
+                best_task_to_modify.metadata["deadlock_resolutions"] = []
+
+            best_task_to_modify.metadata["deadlock_resolutions"].append(
+                {
+                    "resolved_at": datetime.now(UTC).isoformat(),
+                    "circular_path": circular_path,
+                    "resolved_dependency": str(best_dependency_to_break.task_id),
+                    "reason": "Automatic deadlock prevention: Made dependency non-blocking to resolve circular dependency",
+                },
+            )
+
+            # Update the task
+            self.update_task(best_task_to_modify)
+
+            # Update status of tasks that may now be unblocked
+            self.update_task_status_based_on_dependencies(best_task_to_modify.task_id)
+            self.update_dependent_tasks(best_task_to_modify.task_id)
+
+            # Return information about the resolution
+            return {
+                "task_id": str(best_task_to_modify.task_id),
+                "description": best_task_to_modify.description,
+                "circular_path": circular_path,
+                "resolved_dependency": str(best_dependency_to_break.task_id),
+                "dependency_description": best_dependency_to_break.description,
+                "action": "Made dependency non-blocking",
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+
+        return None
+
+    def _get_priority_score(self, priority: TaskPriority | str) -> int:
+        """Convert task priority to a numeric score.
+
+        Args:
+            priority: Task priority enum or string
+
+        Returns:
+            Numeric score (lower is less critical)
+
+        """
+        if isinstance(priority, str):
+            priority = TaskPriority(priority)
+
+        priority_scores = {
+            TaskPriority.LOW: 1,
+            TaskPriority.MEDIUM: 2,
+            TaskPriority.HIGH: 4,
+            TaskPriority.CRITICAL: 8,
+        }
+
+        return priority_scores.get(priority, 2)  # Default to MEDIUM if unknown
+
+    def _get_complexity_score(self, complexity: TaskComplexity | str) -> int:
+        """Convert task complexity to a numeric score.
+
+        Args:
+            complexity: Task complexity enum or string
+
+        Returns:
+            Numeric score (lower is less complex)
+
+        """
+        if isinstance(complexity, str):
+            complexity = TaskComplexity(complexity)
+
+        complexity_scores = {
+            TaskComplexity.SIMPLE: 1,
+            TaskComplexity.MODERATE: 2,
+            TaskComplexity.COMPLEX: 3,
+            TaskComplexity.VERY_COMPLEX: 4,
+        }
+
+        return complexity_scores.get(complexity, 2)  # Default to MODERATE if unknown
 
 
 class InMemoryStateManager:

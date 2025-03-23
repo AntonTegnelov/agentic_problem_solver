@@ -1,0 +1,52 @@
+- setup a system for the agents to use tools with Model Context Protocol (MCP)
+  https://modelcontextprotocol.io/introduction
+  https://github.com/modelcontextprotocol/python-sdk
+
+  - [ ] Extend common types for MCP
+    - [ ] Add MCP-related enums in `src/common_types/enums.py` (TOOL_TYPE, RESOURCE_TYPE, PROMPT_TYPE)
+    - [ ] Create MCP tool types in `src/common_types/tool_types.py` with proper protocols and implementations
+    - [ ] Add MCP message schemas in `src/common_types/message_types.py` for tool requests and responses
+    - [ ] Define MCP result types in `src/common_types/result_types.py` for tool executions and prompt handling
+    - [ ] Create MCP error types in `src/common_types/error_types.py` for handling MCP-specific errors
+  - [ ] Implement core MCP infrastructure in `src/agent/tools/`
+    - [ ] Create `mcp_client.py` with MCP client implementation and connection handling
+    - [ ] Create `mcp_server.py` with server implementation for exposing agent capabilities
+    - [ ] Implement protocol handler in `protocol.py` for MCP message processing
+    - [ ] Add `mcp_factory.py` for creating and configuring MCP server/client instances
+  - [ ] Implement MCP primitives in `src/agent/tools/primitives/`
+    - [ ] Create `tools.py` for model-controlled functions that LLMs can invoke
+    - [ ] Create `resources.py` for application-controlled contextual data access
+    - [ ] Create `prompts.py` for user-controlled interactive templates
+  - [ ] Extend agent protocol in `src/agent/agent_types/agent_types.py` with MCP capabilities
+    - [ ] Add MCP client access methods to the `Agent` protocol
+    - [ ] Create MCP context management for agent interactions
+    - [ ] Update agent implementations to leverage MCP primitives
+  - [ ] Create code manipulation tools in `src/agent/tools/implementations/`
+    - [ ] Implement `CodeTools` in `src/agent/tools/implementations/code_tools.py`
+      - [ ] Add file creation/modification methods using file_utils
+      - [ ] Create code generation utilities with proper formatting
+      - [ ] Implement syntax checking for common languages
+      - [ ] Add automatic imports management
+    - [ ] Implement `ProjectTools` in `src/agent/tools/implementations/project_tools.py`
+      - [ ] Add project structure analysis and visualization
+      - [ ] Create scaffolding methods for common project types
+      - [ ] Implement dependency management utilities
+    - [ ] Create `FileTools` in `src/agent/tools/implementations/file_tools.py`
+      - [ ] Add search and replace across project files
+      - [ ] Implement file organization utilities
+      - [ ] Create backup/restore functionality
+  - [ ] Add MCP configuration in `src/config/mcp.py`
+    - [ ] Configure server parameters and capabilities
+    - [ ] Add tool access control by agent role
+    - [ ] Configure client connection settings
+    - [ ] Add resource access policies
+  - [ ] Enhance the `continue` command with MCP tools
+    - [ ] Update command in `src/cli/main.py` to utilize code tools
+    - [ ] Integrate file history tracking from project context
+    - [ ] Add prompt augmentation with project metadata
+  - [ ] Create tests for MCP tools
+    - [ ] Add unit tests in `tests/unit/test_mcp_tools.py`
+    - [ ] Create integration tests in `tests/integration/test_mcp_integration.py`
+  - [ ] Add documentation for MCP tools
+    - [ ] Create tool usage guide in `docs/reference/mcp_tools.md`
+    - [ ] Add examples in `docs/examples/tool_usage.md`

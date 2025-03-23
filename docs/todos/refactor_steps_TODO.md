@@ -1,8 +1,8 @@
 - Refactor `src/agent/steps.py`
-  - [ ] Perform initial structural analysis
-    - [ ] Create a map of all step classes and their responsibilities
-    - [ ] Document relationships between steps and functional areas
-    - [ ] Identify natural boundaries for code splitting
+  - [] Perform initial structural analysis
+    - [] Create a map of all step classes and their responsibilities
+    - [] Document relationships between steps and functional areas
+    - [] Identify natural boundaries for code splitting
   - [ ] Develop a specific splitting strategy
     - [ ] Plan for core step protocol and base classes → base.py
     - [ ] Plan for understanding steps → understanding_steps.py

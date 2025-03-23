@@ -218,4 +218,4 @@ The transition to the hierarchical architecture will follow these key steps:
 8. Update CLI for hierarchical operations
 9. Enhance documentation and testing
 
-Look at TODO.md for a more detailed roadmap
+Look at docs/todos/TODO.md for a more detailed roadmap
