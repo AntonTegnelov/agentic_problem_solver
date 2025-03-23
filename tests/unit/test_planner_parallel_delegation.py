@@ -308,11 +308,15 @@ class TestPlannerParallelDelegation:
             # Verify the result
             assert result.success is False  # Overall result should be failure
             assert isinstance(result.data, list)
+
+            # The implementation was changed to not include retries,
+            # so we expect 3 results (one per task)
             assert len(result.data) == 3
 
             # Check individual task results
             success_count = sum(1 for item in result.data if item.success)
             failure_count = sum(1 for item in result.data if not item.success)
+            # One task succeeds, two tasks fail
             assert success_count == 1
             assert failure_count == 2
 

@@ -21,9 +21,9 @@ class MinimalLLMProvider:
 
     def generate(
         self,
-        messages: list[Message],
+        messages: list[Message],  # noqa: ARG002
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> str:
         """Generate response from messages."""
         return "minimal"
@@ -32,14 +32,14 @@ class MinimalLLMProvider:
         self,
         messages: list[Message],
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> AsyncGenerator[str, None]:
         """Generate response stream from messages."""
         if not messages:
             return
         yield "minimal"
 
-    def count_tokens(self, text: str) -> int:
+    def count_tokens(self, text: str) -> int:  # noqa: ARG002
         """Count tokens in text."""
         return 1
 
@@ -59,9 +59,9 @@ class PartialLLMProvider:
 
     def generate(
         self,
-        messages: list[Message],
+        messages: list[Message],  # noqa: ARG002
         *,
-        config: GenerationConfig | None = None,
+        config: GenerationConfig | None = None,  # noqa: ARG002
     ) -> str:
         """Generate response from messages."""
         return "partial"

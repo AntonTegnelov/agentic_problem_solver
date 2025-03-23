@@ -1467,7 +1467,7 @@ class AgentState:
                 task,
                 task_id,
                 categorized_blockers["failed"],
-                is_on_critical_path,
+                is_on_critical_path=is_on_critical_path,
             )
             resolution_actions.append(failed_result["resolution_action"])
             if is_on_critical_path:
@@ -1478,7 +1478,7 @@ class AgentState:
                 task,
                 task_id,
                 categorized_blockers["stalled"],
-                is_on_critical_path,
+                is_on_critical_path=is_on_critical_path,
             )
             resolution_actions.append(stalled_result["resolution_action"])
             if is_on_critical_path:
@@ -1576,7 +1576,8 @@ class AgentState:
         task: Task,
         task_id: uuid.UUID,
         failed_blockers: list[dict[str, Any]],
-        is_on_critical_path: bool,
+        *,
+        is_on_critical_path: bool = False,
     ) -> dict[str, Any]:
         """Handle failed blockers for a task.
 
@@ -1584,7 +1585,7 @@ class AgentState:
             task: The task with failed blockers
             task_id: The UUID of the task
             failed_blockers: List of failed blockers
-            is_on_critical_path: Whether the task is on the critical path
+            is_on_critical_path: Whether the task is on the critical path (default: False)
 
         Returns:
             Dictionary with resolution action and critical path information
@@ -1631,7 +1632,8 @@ class AgentState:
         task: Task,
         task_id: uuid.UUID,
         stalled_blockers: list[dict[str, Any]],
-        is_on_critical_path: bool,
+        *,
+        is_on_critical_path: bool = False,
     ) -> dict[str, Any]:
         """Handle stalled blockers for a task.
 
@@ -1639,7 +1641,7 @@ class AgentState:
             task: The task with stalled blockers
             task_id: The UUID of the task
             stalled_blockers: List of stalled blockers
-            is_on_critical_path: Whether the task is on the critical path
+            is_on_critical_path: Whether the task is on the critical path (default: False)
 
         Returns:
             Dictionary with resolution action and critical path information

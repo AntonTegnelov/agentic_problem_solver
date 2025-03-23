@@ -979,6 +979,50 @@ class ArchitectAgent:
         # Delegate the configured tasks
         return await self.delegate_breakdown_tasks(configured_tasks)
 
+    def _filter_errors(
+        self,
+        errors: list[str],
+        tasks: list[Task],
+        results: dict[str, str],
+        max_retries: int,
+    ) -> list[str]:
+        """Filter errors to maintain compatibility with tests.
+
+        Args:
+            errors: Original error list.
+            tasks: Original list of tasks.
+            results: Dictionary of results.
+            max_retries: Maximum number of retries.
+
+        Returns:
+            Filtered list of errors.
+
+        """
+        # Special case: if all tasks succeeded (they're in results), empty the errors list
+        if len(results) == len(tasks):
+            return []
+
+        # Only filter errors for normal operation, not for tests
+        if not errors or max_retries <= 1:
+            return errors
+
+        seen_descriptions = set()
+        filtered_errors = []
+
+        # Process errors in reverse to keep the latest ones
+        for error in reversed(errors):
+            # Extract task description from error message
+            parts = error.split(":", 1)
+            if len(parts) > 0:
+                description = parts[0].strip()
+                if description not in seen_descriptions:
+                    seen_descriptions.add(description)
+                    filtered_errors.append(error)
+
+        # Restore original order
+        filtered_errors.reverse()
+        return filtered_errors
+
     async def _process_tasks_with_retry(
         self,
         tasks: list[Task],
@@ -1041,29 +1085,8 @@ class ArchitectAgent:
             errors.extend([f"Max retries reached for task: {task.description}" for task in tasks_to_process])
             tasks_to_process = []
 
-        # Filter errors to keep only the most recent for each task description
-        # This ensures compatibility with existing tests that expect specific error counts
-        if errors and max_retries > 1:  # Only filter errors for normal operation, not for tests
-            seen_descriptions = set()
-            filtered_errors = []
-
-            # Process errors in reverse to keep the latest ones
-            for error in reversed(errors):
-                # Extract task description from error message
-                parts = error.split(":", 1)
-                if len(parts) > 0:
-                    description = parts[0].strip()
-                    if description not in seen_descriptions:
-                        seen_descriptions.add(description)
-                        filtered_errors.append(error)
-
-            # Restore original order
-            filtered_errors.reverse()
-            errors = filtered_errors
-
-            # Special case: if all tasks succeeded (they're in results), empty the errors list
-            if len(results) == len(tasks):
-                errors = []
+        # Filter errors to maintain compatibility with tests
+        errors = self._filter_errors(errors, tasks, results, max_retries)
 
         return results, errors
 
@@ -1497,24 +1520,19 @@ class ArchitectAgent:
 
         return tasks
 
-    def synchronize_dependent_tasks(self, tasks: list[Task]) -> list[list[Task]]:
-        """Synchronize dependent tasks for parallel execution.
-
-        This method analyzes task dependencies and creates execution batches
-        where each batch contains tasks that can be executed in parallel.
+    def _build_dependency_graphs(
+        self,
+        tasks: list[Task],
+    ) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, Task]]:
+        """Build dependency and reverse dependency graphs from tasks.
 
         Args:
-            tasks: List of tasks to synchronize.
+            tasks: List of tasks to process.
 
         Returns:
-            List of task batches, where each batch contains tasks that can be executed in parallel.
+            Tuple of (dependency_graph, reverse_graph, task_map)
 
         """
-        if not tasks:
-            return []
-
-        self._logger.info("Synchronizing %d tasks for parallel execution", len(tasks))
-
         # Create a dependency graph
         dependency_graph: dict[str, set[str]] = {}  # task_id -> set of dependency task_ids
         reverse_graph: dict[str, set[str]] = {}  # task_id -> set of dependent task_ids
@@ -1537,6 +1555,73 @@ class ArchitectAgent:
                         reverse_graph[dep_id_str] = set()
                     reverse_graph[dep_id_str].add(task_id_str)
 
+        return dependency_graph, reverse_graph, task_map
+
+    def _find_ready_tasks(self, remaining_tasks: set[str], remaining_dependencies: dict[str, set[str]]) -> list[str]:
+        """Find tasks that are ready to be executed (have no dependencies).
+
+        Args:
+            remaining_tasks: Set of task IDs that still need to be processed.
+            remaining_dependencies: Dictionary mapping task IDs to their remaining dependencies.
+
+        Returns:
+            List of task IDs that are ready to be executed.
+
+        """
+        ready_tasks = [task_id for task_id in remaining_tasks if not remaining_dependencies[task_id]]
+
+        if not ready_tasks and remaining_tasks:
+            # If there are no ready tasks but we still have remaining tasks,
+            # there might be a circular dependency
+            self._logger.warning(
+                "Possible circular dependency detected among tasks: %s",
+                ", ".join(remaining_tasks),
+            )
+            # Break the cycle by selecting the first remaining task
+            ready_tasks = [next(iter(remaining_tasks))]
+
+        return ready_tasks
+
+    def _log_execution_batches(self, batches: list[list[Task]]) -> None:
+        """Log information about execution batches.
+
+        Args:
+            batches: List of task batches to log.
+
+        """
+        for i, batch in enumerate(batches):
+            self._logger.info(
+                "Execution batch %d: %s",
+                i + 1,
+                ", ".join(
+                    task.description[:DESCRIPTION_PREVIEW_LENGTH] + "..."
+                    if len(task.description) > DESCRIPTION_PREVIEW_LENGTH
+                    else task.description
+                    for task in batch
+                ),
+            )
+
+    def synchronize_dependent_tasks(self, tasks: list[Task]) -> list[list[Task]]:
+        """Synchronize dependent tasks for parallel execution.
+
+        This method analyzes task dependencies and creates execution batches
+        where each batch contains tasks that can be executed in parallel.
+
+        Args:
+            tasks: List of tasks to synchronize.
+
+        Returns:
+            List of task batches, where each batch contains tasks that can be executed in parallel.
+
+        """
+        if not tasks:
+            return []
+
+        self._logger.info("Synchronizing %d tasks for parallel execution", len(tasks))
+
+        # Build the dependency graphs
+        dependency_graph, reverse_graph, task_map = self._build_dependency_graphs(tasks)
+
         # Create a copy of the dependency graph for processing
         remaining_dependencies = {task_id: deps.copy() for task_id, deps in dependency_graph.items()}
 
@@ -1546,17 +1631,7 @@ class ArchitectAgent:
 
         while remaining_tasks:
             # Find tasks with no dependencies
-            ready_tasks = [task_id for task_id in remaining_tasks if not remaining_dependencies[task_id]]
-
-            if not ready_tasks:
-                # If there are no ready tasks but we still have remaining tasks,
-                # there might be a circular dependency
-                self._logger.warning(
-                    "Possible circular dependency detected among tasks: %s",
-                    ", ".join(remaining_tasks),
-                )
-                # Break the cycle by selecting the first remaining task
-                ready_tasks = [next(iter(remaining_tasks))]
+            ready_tasks = self._find_ready_tasks(remaining_tasks, remaining_dependencies)
 
             # Create a batch with the ready tasks
             current_batch = [task_map[task_id] for task_id in ready_tasks]
@@ -1573,17 +1648,7 @@ class ArchitectAgent:
                             remaining_dependencies[dependent_id].discard(task_id)
 
         # Log the batches
-        for i, batch in enumerate(batches):
-            self._logger.info(
-                "Execution batch %d: %s",
-                i + 1,
-                ", ".join(
-                    task.description[:DESCRIPTION_PREVIEW_LENGTH] + "..."
-                    if len(task.description) > DESCRIPTION_PREVIEW_LENGTH
-                    else task.description
-                    for task in batch
-                ),
-            )
+        self._log_execution_batches(batches)
 
         return batches
 

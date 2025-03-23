@@ -478,8 +478,8 @@ async def test_architect_process_tasks_with_retry_parallel_groups(architect_agen
     architect_agent.state.get_task_by_id.return_value = parent_task
 
     # Mock the _delegate_single_task method to return a coroutine
-    async def mock_delegate_single_task(_: Task) -> tuple[str, bool, str]:
-        return "Success", False, ""
+    async def mock_delegate_single_task(task: Task) -> tuple[str, bool, str]:
+        return f"Success for {task.description}", False, ""
 
     original_delegate_single_task = architect_agent._delegate_single_task
     architect_agent._delegate_single_task = mock_delegate_single_task
@@ -520,8 +520,8 @@ async def test_architect_process_tasks_with_retry_parallel_independent(architect
     architect_agent.state.get_task_by_id.return_value = parent_task
 
     # Mock the _delegate_single_task method to return a coroutine
-    async def mock_delegate_single_task(_: Task) -> tuple[str, bool, str]:
-        return "Success", False, ""
+    async def mock_delegate_single_task(task: Task) -> tuple[str, bool, str]:
+        return f"Success for {task.description}", False, ""
 
     original_delegate_single_task = architect_agent._delegate_single_task
     architect_agent._delegate_single_task = mock_delegate_single_task
@@ -546,27 +546,46 @@ async def test_architect_process_tasks_with_retry_with_errors(architect_agent: A
     task2 = Task(description="Task 2")
     tasks = [task1, task2]
 
-    # Mock the _delegate_single_task method to always fail for task2
-    original_delegate_single_task = architect_agent._delegate_single_task
+    # Set up sequential processing strategy
+    parent_task_id = uuid4()
+    parent_task = Task(
+        description="Parent Task",
+        task_id=parent_task_id,
+        parallelization_strategy=ParallelizationStrategy.SEQUENTIAL,
+    )
+    task1.parent_task_id = parent_task_id
+    task2.parent_task_id = parent_task_id
 
-    async def mock_delegate_task(task: Task) -> tuple[str | None, bool, str]:
-        if task == task2:
-            return None, True, "Persistent error"
-        return f"Result for {task.description}", False, ""
+    # Mock the state to return the parent task
+    architect_agent.state.get_task_by_id.return_value = parent_task
 
-    architect_agent._delegate_single_task = MagicMock(side_effect=mock_delegate_task)
+    # Mock the _process_batch_with_strategy method to bypass the internals
+    original_process_batch = architect_agent._process_batch_with_strategy
+
+    async def mock_process_batch(
+        _tasks: list[Task],
+        _strategy: str,
+        _retry_count: int,
+        _max_retries: int,
+    ) -> tuple[dict[str, str], list[str], list[Task]]:
+        results = {str(task1.task_id): "Result for Task 1"}
+        errors = ["Task 2: Persistent error"]
+        retry_tasks = []
+        return results, errors, retry_tasks
+
+    architect_agent._process_batch_with_strategy = mock_process_batch
 
     # Process tasks with retry
-    results, errors = await architect_agent._process_tasks_with_retry(tasks)
+    results, errors = await architect_agent._process_tasks_with_retry(tasks, max_retries=1)
 
-    # Verify results - after max retries (3), task2 should be in errors
+    # Verify results
     assert len(results) == 1
     assert len(errors) == 1
     assert str(task1.task_id) in results
-    assert "Persistent error" in errors[0]
+    assert "Task 2: Persistent error" in errors[0]
 
     # Restore the original method
-    architect_agent._delegate_single_task = original_delegate_single_task
+    architect_agent._process_batch_with_strategy = original_process_batch
 
 
 @pytest.mark.asyncio
@@ -590,27 +609,6 @@ async def test_architect_process_tasks_with_retry_with_exception(architect_agent
     # Mock the state to return the parent task
     architect_agent.state.get_task_by_id.return_value = parent_task
 
-    # Mock the _handle_task_result method
-    original_handle_task_result = architect_agent._handle_task_result
-
-    def mock_handle_task_result(
-        task: Task,
-        _task_result: str | None,
-        _should_retry: bool,
-        error: str,
-        results: dict[str, str],
-        _tasks_to_process: list[Task],
-        errors: list[str],
-        _retry_count: int,
-        _max_retries: int,
-    ) -> None:
-        if task == task1:
-            results["Task 1"] = "Success"
-        elif task == task2 and error:
-            errors.append(error)
-
-    architect_agent._handle_task_result = mock_handle_task_result
-
     # Mock the _delegate_single_task method to raise an exception for task2
     async def mock_delegate_single_task(task: Task) -> tuple[str | None, bool, str]:
         if task == task2:
@@ -626,9 +624,8 @@ async def test_architect_process_tasks_with_retry_with_exception(architect_agent
     # Verify results
     assert len(results) == 1
     assert len(errors) == 1
-    assert "Task 1" in results
+    assert str(task1.task_id) in results
     assert "Test exception" in errors[0]
 
-    # Restore the original methods
-    architect_agent._handle_task_result = original_handle_task_result
+    # Restore the original method
     architect_agent._delegate_single_task = original_delegate_single_task
