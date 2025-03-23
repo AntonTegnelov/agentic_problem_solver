@@ -62,7 +62,58 @@ Based on the file structure and responsibilities, the following natural boundari
 
 ## Relationships Between Steps and Functional Areas
 
-- `TaskBreakdownStep` → `TaskExecutionStep` → `TaskVerificationStep`: Natural progression of task processing
-- All specialized steps depend on the base Step class and protocols
-- All steps interact with the agent state management system
-- Steps are used by different agent types (Architect, Planner) to implement their specific behaviors
+### Task Processing Flow
+
+The steps collectively implement a processing flow for tasks:
+
+1. `TaskBreakdownStep` → `TaskExecutionStep` → `TaskVerificationStep`: Sequential processing flow
+2. Each step produces output that feeds into the next step in the chain
+3. The outputs are stored in the agent state for tracking and reference
+
+### Agent Type Integration
+
+Different agent types use specific steps for their responsibilities:
+
+1. `ArchitectAgent` primarily uses `TaskBreakdownStep` for high-level task decomposition
+2. `PlannerAgent` uses `TaskBreakdownStep` for refining mid-level tasks
+3. `ExecutorAgent` uses both `TaskExecutionStep` and `TaskVerificationStep` for implementation and validation
+
+### State Management Integration
+
+All steps interact with `AgentState` for persistence:
+
+1. `TaskBreakdownStep._store_task_in_state`: Stores generated tasks in state
+2. `TaskExecutionStep._update_task_with_result`: Updates task execution status and results
+3. `TaskVerificationStep._update_task_with_verification`: Records verification outcomes
+
+### Prompt Generation Relationships
+
+Steps depend on prompts from `src.prompts.templates`:
+
+1. `TaskBreakdownStep` uses specialized prompts for different agent roles (Architect, Planner)
+2. `TaskExecutionStep` uses stage-specific prompts for different execution phases
+3. `TaskVerificationStep` uses validation-focused prompts
+
+### Error Handling and Retry Mechanisms
+
+Steps implement a common approach to error handling:
+
+1. All steps inherit from `Step` which includes `retry_on_error` and `max_retries` fields
+2. `BaseStepExecutor.execute_step` implements retry logic for all steps
+3. `execute_step_with_retry` provides a higher-level retry mechanism
+
+### Hierarchical Task Management
+
+Steps collaborate to manage task hierarchies:
+
+1. `TaskBreakdownStep._update_parent_task_with_subtasks`: Maintains parent-child relationships
+2. `TaskExecutionStep` respects task dependencies during execution
+3. `TaskVerificationStep` can propagate verification status to dependent tasks
+
+### LLM Integration
+
+Each step interfaces with language models in a similar pattern:
+
+1. `_create_X_prompt`: Generates a specialized prompt for the LLM
+2. `_process_message`: Sends the prompt to the LLM and processes the response
+3. Result parsing and validation logic to handle the LLM output
