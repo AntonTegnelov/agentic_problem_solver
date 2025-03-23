@@ -11,6 +11,7 @@ import inspect
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.agent.state.base import AgentState, InMemoryStateManager, StateManager
@@ -43,6 +44,25 @@ if TYPE_CHECKING:
     from src.llm_providers.interface import LLMProvider
 
 T = TypeVar("T")
+
+
+@dataclass
+class TaskResultContext:
+    """Container for task result handling parameters.
+
+    This class groups together the parameters needed for handling task results,
+    making the interface cleaner and reducing the number of parameters.
+    """
+
+    task: Task
+    task_result: str | None
+    retry_needed: bool
+    error: str
+    results: dict[str, str]
+    tasks_to_process: list[Task]
+    errors: list[str]
+    retry_count: int
+    max_retries: int
 
 
 class ArchitectAgent:
@@ -1341,45 +1361,28 @@ class ArchitectAgent:
 
     def _handle_task_result(
         self,
-        task: Task,
-        task_result: str | None,
-        *,
-        retry_needed: bool,
-        error: str,
-        results: dict[str, str],
-        tasks_to_process: list[Task],
-        errors: list[str],
-        retry_count: int,
-        max_retries: int,
+        context: TaskResultContext,
     ) -> None:
         """Handle the result of a task delegation.
 
         Args:
-            task: The task that was delegated.
-            task_result: The result of the delegation.
-            retry_needed: Whether the task needs to be retried.
-            error: Error message if the delegation failed.
-            results: Dictionary to add results to.
-            tasks_to_process: List of tasks to process.
-            errors: List to add errors to.
-            retry_count: Current retry count.
-            max_retries: Maximum number of retries.
+            context: The task result context containing all necessary parameters.
 
         """
         # If we have a result, add it to the results dictionary
-        if task_result:
-            results[str(task.task_id)] = task_result
+        if context.task_result:
+            context.results[str(context.task.task_id)] = context.task_result
 
         # If we need to retry the task
-        if retry_needed:
+        if context.retry_needed:
             # Check if we have retries left
-            if retry_count < max_retries:
-                tasks_to_process.append(task)
+            if context.retry_count < context.max_retries:
+                context.tasks_to_process.append(context.task)
             else:
-                errors.append(f"Max retries reached for task: {error}")
+                context.errors.append(f"Max retries reached for task: {context.error}")
         # If there was an error but no retry needed
-        elif error:
-            errors.append(error)
+        elif context.error:
+            context.errors.append(context.error)
 
     def _create_delegation_result(self, results: dict[str, str], errors: list[str]) -> Result[str]:
         """Create a result object from delegation results and errors.
