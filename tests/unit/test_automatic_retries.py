@@ -10,7 +10,7 @@ from src.common_types.task_types import Task
 
 
 @pytest.fixture
-def architect_agent():
+def architect_agent() -> ArchitectAgent:
     """Create a test architect agent with configured mocks."""
     agent = ArchitectAgent(provider=AsyncMock())
     agent._logger = MagicMock()
@@ -18,7 +18,7 @@ def architect_agent():
 
 
 @pytest.fixture
-def planner_agent():
+def planner_agent() -> PlannerAgent:
     """Create a test planner agent with configured mocks."""
     agent = PlannerAgent(provider=AsyncMock())
     agent.logger = MagicMock()
@@ -29,13 +29,13 @@ class TestAutomaticRetries:
     """Test cases for automatic retries functionality."""
 
     @pytest.mark.asyncio
-    async def test_architect_retry_delegation_success_after_retry(self, architect_agent) -> None:
+    async def test_architect_retry_delegation_success_after_retry(self, architect_agent: ArchitectAgent) -> None:
         """Test that architect successfully retries a failed delegation."""
         # Patch the _delegate_single_task method to fail once then succeed
         original_delegate = architect_agent._delegate_single_task
         call_count = 0
 
-        async def mock_delegate(task):
+        async def mock_delegate(_task: Task) -> tuple[str | None, bool, str]:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -74,13 +74,13 @@ class TestAutomaticRetries:
             architect_agent._delegate_single_task = original_delegate
 
     @pytest.mark.asyncio
-    async def test_architect_retry_delegation_max_retries_reached(self, architect_agent) -> None:
+    async def test_architect_retry_delegation_max_retries_reached(self, architect_agent: ArchitectAgent) -> None:
         """Test that architect stops retrying after reaching max retries."""
         # Patch the _delegate_single_task method to always fail
         original_delegate = architect_agent._delegate_single_task
         call_count = 0
 
-        async def mock_delegate(task):
+        async def mock_delegate(_task: Task) -> tuple[str | None, bool, str]:
             nonlocal call_count
             call_count += 1
             return None, True, "Persistent failure"
@@ -112,13 +112,13 @@ class TestAutomaticRetries:
             architect_agent._delegate_single_task = original_delegate
 
     @pytest.mark.asyncio
-    async def test_planner_retry_delegation_success_after_retry(self, planner_agent) -> None:
+    async def test_planner_retry_delegation_success_after_retry(self, planner_agent: PlannerAgent) -> None:
         """Test that planner successfully retries a failed delegation."""
         # Patch the _delegate_single_task method to fail once then succeed
         original_delegate = planner_agent._delegate_single_task
         call_count = 0
 
-        async def mock_delegate(task):
+        async def mock_delegate(_task: Task) -> tuple[str | None, bool, str]:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -157,13 +157,13 @@ class TestAutomaticRetries:
             planner_agent._delegate_single_task = original_delegate
 
     @pytest.mark.asyncio
-    async def test_planner_retry_delegation_max_retries_reached(self, planner_agent) -> None:
+    async def test_planner_retry_delegation_max_retries_reached(self, planner_agent: PlannerAgent) -> None:
         """Test that planner stops retrying after reaching max retries."""
         # Patch the _delegate_single_task method to always fail
         original_delegate = planner_agent._delegate_single_task
         call_count = 0
 
-        async def mock_delegate(task):
+        async def mock_delegate(_task: Task) -> tuple[str | None, bool, str]:
             nonlocal call_count
             call_count += 1
             return None, True, "Persistent failure"
