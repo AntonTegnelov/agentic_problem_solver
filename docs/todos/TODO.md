@@ -197,22 +197,25 @@
     - [ ] Add delegation examples in existing documentation
 
 - Refactor `src/agent/coordination.py`
+- [ ] execute all steps in `docs/todos/refactor_coordination_TODO.md`
 
-  - [ ] make detailed migration plan and put it into a dosctring at the top of coordination.py
-  - [ ] add documentation in src/docs that the migration is taking place
-  - [ ] find all references using coordination.py and list them in both the docstring of coordination.py and in the documentation
-  - [ ] create its own folder. `src/agent/coordination`
-  - [ ] create `src/agent/coordination/__init__.py`
-  - [ ] copy code from `src/agent/coordination.py` and split it into multiple files in `src/agent/coordination`, logically dividing the responsibilities of the file
-  - [ ] check any references and update those that will change because of the move into `src/agent/coordination`.
-  - [ ] remove coordination.py, completing the migration into `src/agent/coordination`
-  - [ ] verify that all tests pass and the linter is happy
-  - [ ] remove the documentation that mentions the migration and only leave documentation of the current situation
-  - [ ] remove any comments that mention the migration
-  - [ ] split `tests/unit/test_agent_coordination.py` into new files corresponding to the layout in `src/agent/coordination`
-  - [ ] bring up the unit test coverage over`src/agent/coordination` to 90%
-  - [ ] add integration tests
-  - [ ] add and update documentation
+- Refactor `src/agent/state/base.py`
+- [ ] execute all steps in `docs/todos/refactor_base_state_TODO.md`
+
+- Refactor `src/agent/agent_types/planner.py`
+- [ ] execute all steps in `docs/todos/refactor_planner_TODO.md`
+
+- Refactor `src/agent/agent_types/executor.py`
+- [ ] execute all steps in `docs/todos/refactor_executor_TODO.md`
+
+- Refactor `src/agent/agent_types/architect.py`
+- [ ] execute all steps in `docs/todos/refactor_architect_TODO.md`
+
+- Refactor `src/agent/steps.py`
+- [ ] execute all steps in `docs/todos/refactor_steps_TODO.md`
+
+- Refactor `src/prompts/templates.py`
+- [ ] execute all steps in `docs/todos/refactor_templates_TODO.md`
 
 - implement project management infrastructure and CLI commands for file generation
 
@@ -247,110 +250,43 @@
     - [ ] Update CLI documentation in `docs/howto/cli_usage.md`
 
 - setup a system for the agents to use tools with Model Context Protocol (MCP)
-  https://modelcontextprotocol.io/introduction
-  https://github.com/modelcontextprotocol/python-sdk
 
-  - [ ] Extend common types for MCP
-    - [ ] Add MCP-related enums in `src/common_types/enums.py` (TOOL_TYPE, RESOURCE_TYPE, PROMPT_TYPE)
-    - [ ] Create MCP tool types in `src/common_types/tool_types.py` with proper protocols and implementations
-    - [ ] Add MCP message schemas in `src/common_types/message_types.py` for tool requests and responses
-    - [ ] Define MCP result types in `src/common_types/result_types.py` for tool executions and prompt handling
-    - [ ] Create MCP error types in `src/common_types/error_types.py` for handling MCP-specific errors
-  - [ ] Implement core MCP infrastructure in `src/agent/tools/`
-    - [ ] Create `mcp_client.py` with MCP client implementation and connection handling
-    - [ ] Create `mcp_server.py` with server implementation for exposing agent capabilities
-    - [ ] Implement protocol handler in `protocol.py` for MCP message processing
-    - [ ] Add `mcp_factory.py` for creating and configuring MCP server/client instances
-  - [ ] Implement MCP primitives in `src/agent/tools/primitives/`
-    - [ ] Create `tools.py` for model-controlled functions that LLMs can invoke
-    - [ ] Create `resources.py` for application-controlled contextual data access
-    - [ ] Create `prompts.py` for user-controlled interactive templates
-  - [ ] Extend agent protocol in `src/agent/agent_types/agent_types.py` with MCP capabilities
-    - [ ] Add MCP client access methods to the `Agent` protocol
-    - [ ] Create MCP context management for agent interactions
-    - [ ] Update agent implementations to leverage MCP primitives
-  - [ ] Create code manipulation tools in `src/agent/tools/implementations/`
-    - [ ] Implement `CodeTools` in `src/agent/tools/implementations/code_tools.py`
-      - [ ] Add file creation/modification methods using file_utils
-      - [ ] Create code generation utilities with proper formatting
-      - [ ] Implement syntax checking for common languages
-      - [ ] Add automatic imports management
-    - [ ] Implement `ProjectTools` in `src/agent/tools/implementations/project_tools.py`
-      - [ ] Add project structure analysis and visualization
-      - [ ] Create scaffolding methods for common project types
-      - [ ] Implement dependency management utilities
-    - [ ] Create `FileTools` in `src/agent/tools/implementations/file_tools.py`
-      - [ ] Add search and replace across project files
-      - [ ] Implement file organization utilities
-      - [ ] Create backup/restore functionality
-  - [ ] Add MCP configuration in `src/config/mcp.py`
-    - [ ] Configure server parameters and capabilities
-    - [ ] Add tool access control by agent role
-    - [ ] Configure client connection settings
-    - [ ] Add resource access policies
-  - [ ] Enhance the `continue` command with MCP tools
-    - [ ] Update command in `src/cli/main.py` to utilize code tools
-    - [ ] Integrate file history tracking from project context
-    - [ ] Add prompt augmentation with project metadata
-  - [ ] Create tests for MCP tools
-    - [ ] Add unit tests in `tests/unit/test_mcp_tools.py`
-    - [ ] Create integration tests in `tests/integration/test_mcp_integration.py`
-  - [ ] Add documentation for MCP tools
-    - [ ] Create tool usage guide in `docs/reference/mcp_tools.md`
-    - [ ] Add examples in `docs/examples/tool_usage.md`
+  - [ ] execute all steps in `docs/todos/MCP_TODO.md`
 
 - implement RAG system for code context retrieval
 
-  - [ ] Create vector database infrastructure in `src/vector_db/`
-    - [ ] Implement `VectorDB` interface in `src/vector_db/interface.py`
-    - [ ] Create in-memory implementation in `src/vector_db/memory_db.py` for testing
-    - [ ] Add persistent implementation in `src/vector_db/disk_db.py` for production
-    - [ ] Implement embedding utilities in `src/vector_db/embeddings.py`
-  - [ ] Add code indexing functionality
-    - [ ] Create file parser in `src/vector_db/parser.py` for code extraction
-    - [ ] Implement chunk management in `src/vector_db/chunking.py`
-    - [ ] Add incremental indexing for efficient updates
-    - [ ] Create metadata extraction for context enrichment
-  - [ ] Implement retrieval mechanism
-    - [ ] Create query builder in `src/vector_db/query.py`
-    - [ ] Add relevance ranking in `src/vector_db/ranking.py`
-    - [ ] Implement context window management
-    - [ ] Create hybrid search combining vector and keyword approaches
-  - [ ] Create RAG resource provider in `src/agent/tools/primitives/resources.py`
-    - [ ] Implement `CodebaseResourceProvider` using the MCP resource interface
-    - [ ] Add initialization with vector DB connection
-    - [ ] Create methods for resource request lifecycle
-    - [ ] Implement resource metadata tracking
-  - [ ] Add resource caching
-    - [ ] Create LRU cache for frequently accessed resources
-    - [ ] Implement cache invalidation on code changes
-    - [ ] Add persistence options for caching
-  - [ ] Create database management utilities in `src/cli/commands/db.py`
-    - [ ] Add database initialization command
-    - [ ] Create reindexing command
-    - [ ] Implement status checking utilities
-    - [ ] Add query testing functionality
-  - [ ] Integrate with `continue` command
-    - [ ] Enhance project context with vector search capabilities
-    - [ ] Add relevant code snippet retrieval for context
-    - [ ] Implement intelligent prompt enhancement with code context
-  - [ ] Add tests for RAG system
-    - [ ] Create unit tests in `tests/unit/test_vector_db.py`
-    - [ ] Add integration tests in `tests/integration/test_rag_system.py`
-  - [ ] Create documentation
-    - [ ] Add setup guide in `docs/howto/vector_database.md`
-    - [ ] Create usage examples in `docs/examples/rag_usage.md`
+  - [ ] execute all steps in `docs/todos/RAG_TODO.md`
 
 - implement tree-sitter based codebase map generation https://aider.chat/2023/10/22/repomap.html
 
-  - [ ] Create core repomap infrastructure in `src/repomap/`
-    - [ ] Implement `RepoMap` class in `src/repomap/repomap.py` for codebase maps
-    - [ ] Add tree-sitter integration in `src/repomap/parser.py`
-    - [ ] Create symbol extraction in `src/repomap/extractor.py`
-    - [ ] Add code relationship tracking in `src/repomap/relations.py`
-  - [ ] Add language-specific support
-    - [ ] Create language detection in `src/repomap/languages/detection.py`
-    - [ ] Implement base language parser in `src/repomap/languages/base.py`
-    - [ ] Add support for major languages (Python, JavaScript, etc.)
-    - [ ] Create extension mechanism for additional languages
-  - [ ] Implement map optimization algorithms in `
+  - [ ] execute all steps in `docs/todos/repomap_TODO.md`
+
+- create comprehensive project generation workflow
+  - [ ] Enhance existing infrastructure for complete workflow
+    - [ ] Update `ProjectContext` in `src/common_types/project_types.py` with full lifecycle support
+    - [ ] Extend file utils in `src/utils/file_utils.py` with advanced operations
+    - [ ] Create project templates in `src/templates/` for common project types
+  - [ ] Implement project type detection and scaffolding
+    - [ ] Add project type analysis in `src/utils/project_utils.py`
+    - [ ] Create template-based scaffolding system
+    - [ ] Implement dependency management for detected project types
+  - [ ] Create unified CLI interface
+    - [ ] Update `start` command to support templates and project types
+    - [ ] Enhance `continue` command with full context capabilities
+    - [ ] Add `extend` command for adding features to existing projects
+    - [ ] Create `refactor` command for restructuring existing code
+  - [ ] Implement persistent project state
+    - [ ] Add state management in `src/project/state.py`
+    - [ ] Create session history tracking
+    - [ ] Implement version control integration
+  - [ ] Add interactive mode
+    - [ ] Create interactive shell in `src/cli/interactive.py`
+    - [ ] Implement step-by-step project generation
+    - [ ] Add real-time feedback and suggestions
+  - [ ] Create comprehensive tests
+    - [ ] Add end-to-end workflow tests in `tests/integration/test_complete_workflow.py`
+    - [ ] Create performance benchmarks in `tests/benchmarks/`
+  - [ ] Update documentation
+    - [ ] Create comprehensive workflow guide in `docs/guides/project_workflows.md`
+    - [ ] Add tutorial series in `docs/tutorials/`
+    - [ ] Update all command documentation

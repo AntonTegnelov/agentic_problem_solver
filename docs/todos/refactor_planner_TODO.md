@@ -1,0 +1,62 @@
+- Refactor `src/agent/agent_types/planner.py`
+  - [ ] Perform initial structural analysis
+    - [ ] Create a map of all classes and their responsibilities
+    - [ ] Document relationships between classes and functional areas
+    - [ ] Identify natural boundaries for code splitting
+  - [ ] Develop a specific splitting strategy
+    - [ ] Plan for core `PlannerAgent` → planner_agent.py
+    - [ ] Plan for planning strategies → planning_strategies.py
+    - [ ] Plan for task refinement logic → task_refinement.py
+    - [ ] Plan for complexity evaluation → complexity_evaluator.py
+    - [ ] Plan for task delegation → delegation.py
+  - [ ] Perform dependency analysis
+    - [ ] Document internal dependencies between classes and methods
+    - [ ] Create precedence order for migration based on dependencies
+    - [ ] Identify potential circular dependency issues
+  - [ ] Find deprecated functionality
+    - [ ] Use static analysis tools to identify dead code
+    - [ ] Perform code execution path analysis to find unused branches
+    - [ ] Find code, classes and functions that are not used by anything else in the codebase, and list those that should be removed in the docstring at the top and a docstring near the offender
+    - [ ] Remove the old code marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Find duplicated functionality
+    - [ ] Create utility functions for common operations
+    - [ ] Implement interfaces or base classes to standardize similar functionality
+    - [ ] Find code, classes and functions that fulfill similar purposes, and list those that should be combined in the docstring at the top and a docstring near the offender
+    - [ ] (if necessary) Combine the functions, mark any deprecated code as such and list it in the docstring and in the documentation
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+    - [ ] Remove the old code marked by deprecation notices
+    - [ ] Rerun tests
+  - [ ] Find overcomplicated functionality
+    - [ ] Break down large methods (many methods are 50+ lines)
+    - [ ] Document complex algorithms before simplifying them
+    - [ ] Find code, classes and functions that are unnecessarily complex and could be simplified without a loss of functionality, and list those that should be simplified in the docstring at the top and a docstring near the offender
+    - [ ] Simplify the old code marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Split it up
+    - [ ] Define clear criteria for what functionality goes into each file
+    - [ ] Create cross-file unit tests to verify proper integration
+    - [ ] Specify approach for handling circular dependencies
+    - [ ] Make detailed migration plan and put it into a docstring at the top of planner.py
+    - [ ] Add documentation in src/docs that the migration is taking place
+    - [ ] Find all references using planner.py and list them in both the docstring of planner.py and in the documentation
+    - [ ] Create its own folder. `src/agent/agent_types/planner`
+    - [ ] Create `src/agent/agent_types/planner/__init__.py`
+    - [ ] Copy code from `src/agent/agent_types/planner.py` and split it into multiple files in `src/agent/agent_types/planner`, logically dividing the responsibilities of the file:
+      - [ ] Move the core PlannerAgent class to `src/agent/agent_types/planner/planner_agent.py`
+      - [ ] Move planning strategies to `src/agent/agent_types/planner/planning_strategies.py`
+      - [ ] Move task refinement logic to `src/agent/agent_types/planner/task_refinement.py`
+      - [ ] Move complexity evaluation to `src/agent/agent_types/planner/complexity_evaluator.py`
+      - [ ] Move task delegation to `src/agent/agent_types/planner/delegation.py`
+    - [ ] Check any references and update those that will change because of the move into `src/agent/agent_types/planner`
+    - [ ] Create a streamlined `src/agent/agent_types/planner.py` that re-exports from planner/ to maintain backward compatibility
+    - [ ] Verify that all tests pass and the linter is happy
+    - [ ] Remove the documentation that mentions the migration and only leave documentation of the current situation
+    - [ ] Remove any comments that mention the migration
+    - [ ] Update relevant tests to reflect the new structure
+    - [ ] Bring up the unit test coverage over `src/agent/agent_types/planner/` to 90%
+    - [ ] Add integration tests
+    - [ ] Add and update documentation
