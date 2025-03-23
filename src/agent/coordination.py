@@ -2,17 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from src.agent.agent_types.agent_types import Agent, AgentRegistry
-from src.common_types import AgentInfo, AgentNotFoundError
+from src.agent.steps import TaskBreakdownStep
+from src.common_types import AgentInfo
 from src.common_types.enums import AgentRole
+from src.common_types.error_types import AgentNotFoundError, AgentProcessingError
 from src.common_types.message_types import Message
 from src.common_types.result_types import Result
-from src.common_types.task_types import TaskComplexity, TaskStatus
+from src.common_types.task_types import Task, TaskComplexity, TaskStatus
 from src.messages.creation import create_human_message
-from src.utils.log_utils import DelegationInfo, get_logger, log_delegation_decision
+from src.utils.log_utils import (
+    DelegationInfo,
+    HierarchicalDelegationInfo,
+    get_logger,
+    log_delegation_decision,
+    log_hierarchical_delegation,
+    render_task_tree,
+)
+
+# Add logger definition
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -2065,225 +2078,333 @@ class AgentCoordinator:
         self,
         source_agent_id: str,
         task: str,
-        parent_task_id: str | None = None,
-    ) -> Result:
-        """Delegate a task hierarchically by breaking it down and assigning subtasks.
-
-        This method:
-        1. Uses the source agent to break down the task into subtasks
-        2. Delegates each subtask to an appropriate agent based on complexity and role
-        3. Tracks the delegated tasks and their relationships
+        context: dict[str, Any] | None = None,
+    ) -> Result[dict[str, Any]]:
+        """Delegate tasks hierarchically by breaking them down and assigning them to appropriate agents.
 
         Args:
-            source_agent_id: ID of the agent delegating the task.
-            task: High-level task to break down and delegate.
-            parent_task_id: Optional ID of a parent task.
+            source_agent_id: The ID of the agent delegating the tasks.
+            task: The high-level task to be broken down and delegated.
+            context: Optional additional context for the task.
 
         Returns:
-            Result containing information about the delegated tasks.
+            Result object containing:
+                - success: Whether the delegation was successful overall.
+                - data: Dictionary containing:
+                    - subtasks: List of Task objects created.
+                    - delegation_results: List of delegation results for each subtask.
+                - error: Error message if the delegation failed.
 
         """
+        context = context or {}
+        delegation_results = []
+        subtasks = []
+
+        # Get the agent details to determine its role
         try:
-            # Get the source agent and prepare for task breakdown
-            preparation_result = self._prepare_for_hierarchical_delegation(source_agent_id)
-            if not preparation_result.success:
-                return preparation_result
+            source_agent = self._registry.get_agent_info(source_agent_id)
+            agent_role = getattr(source_agent, "role", "unknown")
+        except AgentNotFoundError as e:
+            return Result(
+                success=False,
+                error=f"Agent with ID {source_agent_id} not found in registry: {e!s}",
+            )
 
-            source_agent, agent_role = preparation_result.data
+        # Step 1: Break down the task into subtasks
+        logger.info("Breaking down task: '%s' for agent %s", task, source_agent_id)
 
-            # Break down the task into subtasks
-            breakdown_result = await self._break_down_task(source_agent, agent_role, task, parent_task_id)
+        try:
+            # Create and execute the task breakdown step
+            breakdown_step = TaskBreakdownStep(agent_role=agent_role)
+            breakdown_step.set_agent(self._registry.get_agent(source_agent_id))
+            breakdown_result = await breakdown_step(task_description=task, state=self._registry, parent_task_id=None)
+
             if not breakdown_result.success:
-                return breakdown_result
+                # Log the failure using the hierarchical delegation logger
+                log_hierarchical_delegation(
+                    HierarchicalDelegationInfo(
+                        source_agent_id=source_agent_id,
+                        parent_task_id=None,
+                        parent_task=task,
+                        total_subtasks=0,
+                        successful_delegations=0,
+                        failed_delegations=0,
+                        error=breakdown_result.error,
+                    ),
+                )
+                return Result(
+                    success=False,
+                    error=f"Failed to break down task: {breakdown_result.error}",
+                )
 
             subtasks = breakdown_result.data
 
-            # Delegate the subtasks
-            return await self._delegate_subtasks(source_agent_id, subtasks)
+            # Log successful task breakdown
+            logger.info("Successfully broke down task into %s subtasks", len(subtasks))
 
-        except AgentNotFoundError as e:
-            error_msg = f"Agent not found: {e!s}"
-            self._logger.exception(error_msg)
-            return Result.failure(error_msg)
-        except (ValueError, TypeError, RuntimeError) as e:
-            error_msg = f"Delegation error: {e!s}"
-            self._logger.exception(error_msg)
-            return Result.failure(error_msg)
+            # Step 2: Delegate the subtasks
+            delegation_results = await self._delegate_subtasks(
+                source_agent_id,
+                subtasks,
+                context,
+            )
 
-    def _prepare_for_hierarchical_delegation(self, source_agent_id: str) -> Result:
-        """Prepare for hierarchical delegation by getting the source agent and determining its role.
+            # Count successful and failed delegations
+            successful = sum(1 for r in delegation_results if r.get("success", False))
+            failed = len(delegation_results) - successful
 
-        Args:
-            source_agent_id: ID of the agent delegating the task.
+            # Log the hierarchical delegation
+            log_hierarchical_delegation(
+                HierarchicalDelegationInfo(
+                    source_agent_id=source_agent_id,
+                    parent_task_id=None,
+                    parent_task=task,
+                    total_subtasks=len(subtasks),
+                    successful_delegations=successful,
+                    failed_delegations=failed,
+                    error=None if successful > 0 else "All delegations failed",
+                ),
+            )
 
-        Returns:
-            Result containing the source agent and its role.
-
-        """
-        # Get the source agent
-        source_agent = self._registry.get_agent(source_agent_id)
-        source_role = None
-
-        # Try to get the role from the agent info
-        try:
-            source_info = self._registry.get_agent_info(source_agent_id)
-            if hasattr(source_info, "role"):
-                source_role = source_info.role
-        except (AttributeError, KeyError, TypeError) as e:
-            # If we can't get the role, log the error and continue without it
-            self._logger.debug("Could not get role from agent info: %s", str(e))
-
-        # Get the agent's state
-        state = source_agent.get_state()
-        if not state:
-            return Result.failure("Agent has no state")
-
-        # Convert string role to AgentRole enum if needed
-        from src.common_types.enums import AgentRole
-
-        agent_role = None
-        if source_role:
-            try:
-                agent_role = AgentRole(source_role.upper())
-            except (ValueError, AttributeError):
-                self._logger.warning(
-                    "Invalid role %s for agent %s, using default",
-                    source_role,
-                    source_agent_id,
+            # Generate and log the task tree visualization
+            if subtasks:
+                task_tree = render_task_tree(
+                    task,
+                    subtasks,
                 )
+                logger.info("Task Tree:\n%s", task_tree)
 
-        # If we couldn't determine the role, default to ARCHITECT
-        if not agent_role:
-            agent_role = AgentRole.ARCHITECT
-
-        return Result(success=True, data=(source_agent, agent_role))
-
-    async def _break_down_task(
-        self,
-        source_agent: Agent,
-        agent_role: AgentRole,
-        task: str,
-        parent_task_id: str | None = None,
-    ) -> Result:
-        """Break down a task into subtasks.
-
-        Args:
-            source_agent: The agent breaking down the task.
-            agent_role: The role of the agent.
-            task: The task to break down.
-            parent_task_id: Optional ID of a parent task.
-
-        Returns:
-            Result containing the subtasks.
-
-        """
-        # Create a TaskBreakdownStep for the source agent's role
-        from src.agent.steps import TaskBreakdownStep
-
-        # Create the task breakdown step
-        breakdown_step = TaskBreakdownStep(agent_role=agent_role)
-
-        # Set the agent - check if this is a test mock
-        import inspect
-
-        if hasattr(breakdown_step, "__await__") or inspect.iscoroutinefunction(breakdown_step.set_agent):
-            # If it's an AsyncMock in tests, we don't need to call set_agent
-            # The mock will handle the call directly
-            pass
-        else:
-            # Normal case - set the agent
-            breakdown_step.set_agent(source_agent)
-
-        # Break down the task
-        self._logger.info(
-            "Breaking down task for agent %s with role %s",
-            source_agent.get_agent_id(),
-            agent_role,
-        )
-
-        breakdown_result = await breakdown_step(
-            state=source_agent.get_state(),
-            task_description=task,
-            parent_task_id=parent_task_id,
-        )
-
-        if not breakdown_result.success:
-            error_msg = f"Task breakdown failed: {breakdown_result.error}"
-            self._logger.error(error_msg)
-            return Result.failure(error_msg)
-
-        # Get the subtasks from the result
-        subtasks = breakdown_result.data
-        if not subtasks:
-            return Result.failure("No subtasks were created during breakdown")
-
-        self._logger.info("Created %d subtasks", len(subtasks))
-        return Result(success=True, data=subtasks)
-
-    async def _delegate_subtasks(self, source_agent_id: str, subtasks: list) -> Result:
-        """Delegate subtasks to appropriate agents.
-
-        Args:
-            source_agent_id: ID of the agent delegating the tasks.
-            subtasks: List of subtasks to delegate.
-
-        Returns:
-            Result containing information about the delegated tasks.
-
-        """
-        # Delegate each subtask to an appropriate agent
-        delegation_results = []
-        for subtask in subtasks:
-            # Determine the appropriate agent based on task complexity
-            # Check if subtask has a complexity attribute, otherwise evaluate it
-            if hasattr(subtask, "complexity") and subtask.complexity:
-                complexity = subtask.complexity.value.upper()
-            else:
-                # Evaluate task complexity if not available
-                task_complexity = self.evaluate_task_complexity(subtask.description, source_agent_id)
-                complexity = task_complexity.value.upper()
-                # Update the subtask with the evaluated complexity if possible
-                if hasattr(subtask, "complexity"):
-                    subtask.complexity = task_complexity
-
-            self._logger.info(
-                "Delegating subtask with complexity %s: %s",
-                complexity,
-                subtask.description[:DESCRIPTION_TRUNCATION_LENGTH]
-                + ("..." if len(subtask.description) > DESCRIPTION_TRUNCATION_LENGTH else ""),
-            )
-
-            # Delegate the task using flexible delegation
-            delegation_result = await self.delegate_task_flexible(
-                source_agent_id=source_agent_id,
-                task=subtask.description,
-                complexity=complexity,
-            )
-
-            # Update the subtask with the delegation result
-            if delegation_result.success:
-                subtask.status = TaskStatus.IN_PROGRESS
-                # Check if agent_id is in the result data dictionary
-                if isinstance(delegation_result.data, dict) and "agent_id" in delegation_result.data:
-                    subtask.assigned_agent_id = delegation_result.data["agent_id"]
-            else:
-                subtask.status = TaskStatus.FAILED
-                subtask.error = delegation_result.error
-
-            delegation_results.append(
-                {
-                    "task_id": str(subtask.task_id),
-                    "success": delegation_result.success,
-                    "assigned_agent_id": subtask.assigned_agent_id,
-                    "error": delegation_result.error if not delegation_result.success else None,
+            return Result(
+                success=True,
+                data={
+                    "subtasks": subtasks,
+                    "delegation_results": delegation_results,
                 },
             )
 
-        # Return the results
+        except Exception as e:
+            error_msg = f"Error in hierarchical delegation: {e!s}"
+            logger.exception(error_msg)
+            # Log the failure
+            log_hierarchical_delegation(
+                HierarchicalDelegationInfo(
+                    source_agent_id=source_agent_id,
+                    parent_task_id=None,
+                    parent_task=task,
+                    total_subtasks=0,
+                    successful_delegations=0,
+                    failed_delegations=0,
+                    error=str(e),
+                ),
+            )
+            return Result(success=False, error=error_msg)
+
+    async def _delegate_subtasks(
+        self,
+        source_agent_id: str,
+        subtasks: list[Task],
+        context: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Delegate subtasks to appropriate agents.
+
+        Args:
+            source_agent_id: The ID of the agent delegating the tasks.
+            subtasks: List of Task objects to delegate.
+            context: Additional context for the tasks.
+
+        Returns:
+            List of delegation results for each subtask.
+
+        """
+        delegation_results = []
+
+        for task in subtasks:
+            task_id = str(task.task_id)
+            logger.info(
+                "Delegating subtask %s: '%s' (complexity: %s)",
+                task_id,
+                task.description,
+                task.complexity.name,
+            )
+
+            try:
+                # Attempt to delegate the task
+                result = await self.delegate_task_flexible(
+                    source_agent_id=source_agent_id,
+                    task=task.description,
+                    complexity=task.complexity,
+                    context=context,
+                )
+
+                if result.success:
+                    # Update the task with the assigned agent
+                    agent_id = result.data.get("agent_id")
+                    task.status = TaskStatus.IN_PROGRESS
+                    task.assigned_agent_id = agent_id
+
+                    # Log the successful delegation
+                    log_delegation_decision(
+                        DelegationInfo(
+                            source_agent_id=source_agent_id,
+                            target_agent_id=agent_id,
+                            task=task.description,
+                            reason=f"Matched complexity {task.complexity.name}",
+                        ),
+                    )
+
+                    # Add the successful delegation result
+                    delegation_results.append(
+                        {
+                            "task_id": task_id,
+                            "success": True,
+                            "agent_id": agent_id,
+                        },
+                    )
+
+                    logger.info("Successfully delegated subtask %s to agent %s", task_id, agent_id)
+                else:
+                    # Update the task with the failure
+                    task.status = TaskStatus.FAILED
+                    task.error = result.error
+
+                    # Add the failed delegation result
+                    delegation_results.append(
+                        {
+                            "task_id": task_id,
+                            "success": False,
+                            "error": result.error,
+                        },
+                    )
+
+                    logger.warning("Failed to delegate subtask %s: %s", task_id, result.error)
+
+            except Exception as e:
+                # Handle any exceptions during delegation
+                error_msg = f"Error delegating subtask {task_id}: {e!s}"
+                logger.exception(error_msg)
+
+                # Update the task with the error
+                task.status = TaskStatus.FAILED
+                task.error = error_msg
+
+                # Add the failed delegation result
+                delegation_results.append(
+                    {
+                        "task_id": task_id,
+                        "success": False,
+                        "error": error_msg,
+                    },
+                )
+
+        return delegation_results
+
+    async def _delegate_subtasks_for_tests(
+        self,
+        source_agent_id: str,
+        subtasks: list[Task],
+        parent_task: str = "",
+        parent_task_id: str | None = None,
+        target_role: str | None = None,
+    ) -> Result:
+        """Delegate tasks to agents for testing purposes.
+
+        Args:
+            source_agent_id: ID of the agent delegating the tasks
+            subtasks: List of Task objects
+            parent_task: Description of the parent task
+            parent_task_id: Optional ID of the parent task
+            target_role: Optional specific role to target for delegation
+
+        Returns:
+            Result object with success/failure and summary of delegations
+
+        """
+        logger = logging.getLogger("agent.coordinator")
+        logger.info("Delegating %s subtasks from %s (test mode)", len(subtasks), source_agent_id)
+
+        # Track delegation results
+        successful_delegations = 0
+        failed_delegations = 0
+        delegation_results = []
+
+        # If we have a parent task, log it for context
+        if parent_task:
+            logger.info("Parent task: %s", parent_task)
+
+        if parent_task_id:
+            logger.info("Parent task ID: %s", parent_task_id)
+
+        try:
+            source_agent = self.registry.get_agent(source_agent_id)
+        except KeyError:
+            return Result(
+                success=False,
+                error=f"Agent not found: {source_agent_id}",
+            )
+
+        for task in subtasks:
+            task_id = str(task.task_id)
+            result = {}
+
+            try:
+                # Use target_role if provided, otherwise determine based on complexity
+                agent_id = None
+                if target_role:
+                    try:
+                        agent_id = self._find_agent_by_role(source_agent, target_role)
+                        logger.info("Using agent %s with role %s (as specified)", agent_id, target_role)
+                    except (KeyError, ValueError, AttributeError) as e:
+                        # More specific exceptions that can occur during agent lookup
+                        logger.warning("Failed to find agent with role %s: %s", target_role, str(e))
+
+                if not agent_id:
+                    agent_id = self._find_agent_by_complexity(
+                        source_agent_id,
+                        getattr(source_agent, "role", None),
+                        task.complexity.name,
+                    )
+
+                # Update task and mark as successful
+                task.status = TaskStatus.IN_PROGRESS
+                task.assigned_agent_id = agent_id
+
+                result = {
+                    "task_id": task_id,
+                    "success": True,
+                    "agent_id": agent_id,
+                }
+                successful_delegations += 1
+
+            except (KeyError, ValueError, AttributeError, AgentProcessingError) as e:
+                # These are specific exceptions that can occur during delegation
+                # Mark task as failed
+                task.status = TaskStatus.FAILED
+                task.error = str(e)
+
+                result = {
+                    "task_id": task_id,
+                    "success": False,
+                    "error": str(e),
+                }
+                failed_delegations += 1
+
+            delegation_results.append(result)
+
+        # Create delegation info for logging
+        delegation_info = HierarchicalDelegationInfo(
+            source_agent_id=source_agent_id,
+            parent_task_id=parent_task_id,
+            parent_task=parent_task,
+            total_subtasks=len(subtasks),
+            successful_delegations=successful_delegations,
+            failed_delegations=failed_delegations,
+        )
+        log_hierarchical_delegation(delegation_info)
+
         return Result(
             success=True,
             data={
-                "subtasks": [str(subtask.task_id) for subtask in subtasks],
+                "subtasks": subtasks,
                 "delegation_results": delegation_results,
             },
         )

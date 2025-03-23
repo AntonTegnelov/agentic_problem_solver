@@ -160,7 +160,7 @@
     - [x] Add `delegate_breakdown_tasks` method in `src/agent/agent_types/architect.py` to process broken-down tasks
     - [x] Update the `process_normal_message` method to call this new method after task breakdown
     - [x] Implement retry and error handling for the delegation process
-  - [ ] Enhance task result collection and aggregation
+  - [x] Enhance task result collection and aggregation
     - [x] Create a `TaskResultAggregator` class in `src/agent/coordination.py` to collect and combine results
     - [x] Add methods for tracking subtask completion status
     - [x] Implement result merging logic for different result types
@@ -171,10 +171,10 @@
   - [ ] Update task progress tracking
     - [x] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
     - [x] Add blocking task detection and resolution
-    - [ ] Implement deadlock prevention mechanisms
-  - [ ] Add logging and observability
-    - [ ] Create detailed delegation logging in `src/utils/log_utils.py`
-    - [ ] Add some very basic and simple task tree visualization tools
+    - [x] Implement deadlock prevention mechanisms
+  - [x] Add logging and observability
+    - [x] Create detailed delegation logging in `src/utils/log_utils.py`
+    - [x] Add some very basic and simple task tree visualization tools
   - [ ] Create fallback mechanisms
     - [ ] Add timeout handling for delegated tasks
     - [ ] Implement automatic retries for failed delegations
