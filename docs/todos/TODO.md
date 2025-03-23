@@ -176,7 +176,7 @@
     - [x] Create detailed delegation logging in `src/utils/log_utils.py`
     - [x] Add some very basic and simple task tree visualization tools
   - [ ] Create fallback mechanisms
-    - [ ] Add timeout handling for delegated tasks
+    - [x] Add timeout handling for delegated tasks
     - [ ] Implement automatic retries for failed delegations
     - [ ] Create fallback logic for various failure scenarios
   - [ ] Update the TaskBreakdownStep to register additional metadata
