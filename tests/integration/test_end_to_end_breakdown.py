@@ -240,7 +240,7 @@ async def test_parallel_execution_scenarios(agent_coordinator) -> None:
     """Test parallel execution of independent tasks."""
     task = "Implement payment processing"
 
-    # Mock the architect's response
+    # Mock the architect's response with parallel tasks
     mock_architect = Mock()
     mock_architect.get_agent_id.return_value = "architect-1"
     mock_architect.process = AsyncMock(
@@ -248,14 +248,56 @@ async def test_parallel_execution_scenarios(agent_coordinator) -> None:
             success=True,
             data={
                 "subtasks": [
-                    {"description": "Implement payment gateway", "complexity": TaskComplexity.COMPLEX},
-                    {"description": "Set up security measures", "complexity": TaskComplexity.COMPLEX},
+                    {
+                        "description": "Implement payment gateway",
+                        "complexity": TaskComplexity.COMPLEX,
+                        "parallel": True,  # Mark as parallel task
+                        "subtasks": [
+                            {
+                                "description": "Setup payment provider integration",
+                                "complexity": TaskComplexity.MODERATE,
+                                "dependencies": [],
+                            },
+                            {
+                                "description": "Implement payment processing logic",
+                                "complexity": TaskComplexity.COMPLEX,
+                                "dependencies": ["Setup payment provider integration"],
+                            },
+                        ],
+                    },
+                    {
+                        "description": "Set up security measures",
+                        "complexity": TaskComplexity.COMPLEX,
+                        "parallel": True,  # Mark as parallel task
+                        "subtasks": [
+                            {
+                                "description": "Implement encryption",
+                                "complexity": TaskComplexity.MODERATE,
+                                "dependencies": [],
+                            },
+                            {
+                                "description": "Add authentication",
+                                "complexity": TaskComplexity.COMPLEX,
+                                "dependencies": [],
+                            },
+                            {
+                                "description": "Setup monitoring",
+                                "complexity": TaskComplexity.MODERATE,
+                                "dependencies": ["Implement encryption", "Add authentication"],
+                            },
+                        ],
+                    },
                 ],
+                "execution_stats": {
+                    "total_time": "12s",
+                    "parallel_tasks": 2,
+                    "sequential_tasks": 0,
+                },
             },
         ),
     )
 
-    # Mock the planner's response
+    # Mock the planner's response with parallel implementation steps
     mock_planner = Mock()
     mock_planner.get_agent_id.return_value = "planner-1"
     mock_planner.process = AsyncMock(
@@ -263,14 +305,32 @@ async def test_parallel_execution_scenarios(agent_coordinator) -> None:
             success=True,
             data={
                 "implementation_steps": [
-                    "Integrate payment API",
-                    "Add encryption",
+                    {
+                        "description": "Payment Gateway Implementation",
+                        "parallel": True,
+                        "subtasks": [
+                            "Configure payment provider SDK",
+                            "Implement payment processing",
+                            "Add error handling",
+                        ],
+                    },
+                    {
+                        "description": "Security Implementation",
+                        "parallel": True,
+                        "subtasks": [
+                            "Setup encryption library",
+                            "Implement authentication system",
+                            "Configure monitoring tools",
+                        ],
+                    },
                 ],
+                "dependencies": {},  # No dependencies between main tasks
+                "parallel_execution": True,  # Enable parallel execution
             },
         ),
     )
 
-    # Mock the executor's response
+    # Mock the executor's response with parallel execution results
     mock_executor = Mock()
     mock_executor.get_agent_id.return_value = "executor-1"
     mock_executor.process = AsyncMock(
@@ -278,9 +338,34 @@ async def test_parallel_execution_scenarios(agent_coordinator) -> None:
             success=True,
             data={
                 "completed_steps": [
-                    "Payment API integrated",
-                    "Encryption implemented",
+                    {
+                        "description": "Payment Gateway Implementation",
+                        "parallel": True,
+                        "details": [
+                            "Payment provider SDK configured",
+                            "Payment processing implemented",
+                            "Error handling added",
+                        ],
+                        "status": "completed",
+                        "execution_time": "10s",
+                    },
+                    {
+                        "description": "Security Implementation",
+                        "parallel": True,
+                        "details": [
+                            "Encryption library setup",
+                            "Authentication system implemented",
+                            "Monitoring tools configured",
+                        ],
+                        "status": "completed",
+                        "execution_time": "8s",
+                    },
                 ],
+                "execution_stats": {
+                    "total_time": "12s",  # Less than sum of individual times due to parallel execution
+                    "parallel_tasks": 2,
+                    "sequential_tasks": 0,
+                },
             },
         ),
     )
@@ -290,9 +375,32 @@ async def test_parallel_execution_scenarios(agent_coordinator) -> None:
     agent_coordinator._registry.register_agent(mock_planner)
     agent_coordinator._registry.register_agent(mock_executor)
 
-    # Delegate tasks in parallel
+    # Delegate the task
     result = await agent_coordinator.delegate_task("architect-1", task)
 
-    # Verify the result
+    # Verify the result structure
     assert result.success
-    assert "Implement payment gateway" in str(result.data)
+    assert isinstance(result.data, dict)
+
+    # Verify parallel task structure
+    subtasks = result.data.get("subtasks", [])
+    assert len(subtasks) == 2
+    assert all(t.get("parallel", False) for t in subtasks), "Tasks should be marked for parallel execution"
+
+    # Verify execution stats
+    execution_stats = result.data.get("execution_stats", {})
+    assert execution_stats.get("parallel_tasks", 0) > 0, "Should have parallel tasks"
+    assert float(execution_stats.get("total_time", "0").rstrip("s")) < 20, (
+        "Total time should be less than sum of individual times"
+    )
+
+    # Verify task dependencies are respected within parallel groups
+    gateway_task = next(t for t in subtasks if t["description"] == "Implement payment gateway")
+    gateway_subtasks = gateway_task.get("subtasks", [])
+    processing_task = next(t for t in gateway_subtasks if t["description"] == "Implement payment processing logic")
+    assert "Setup payment provider integration" in processing_task["dependencies"]
+
+    security_task = next(t for t in subtasks if t["description"] == "Set up security measures")
+    security_subtasks = security_task.get("subtasks", [])
+    monitoring_task = next(t for t in security_subtasks if t["description"] == "Setup monitoring")
+    assert all(dep in monitoring_task["dependencies"] for dep in ["Implement encryption", "Add authentication"])
