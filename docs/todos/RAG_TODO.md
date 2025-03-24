@@ -1,0 +1,41 @@
+- implement RAG system for code context retrieval
+
+  - [ ] Create vector database infrastructure in `src/vector_db/`
+    - [ ] Implement `VectorDB` interface in `src/vector_db/interface.py`
+    - [ ] Create in-memory implementation in `src/vector_db/memory_db.py` for testing
+    - [ ] Add persistent implementation in `src/vector_db/disk_db.py` for production
+    - [ ] Implement embedding utilities in `src/vector_db/embeddings.py`
+  - [ ] Add code indexing functionality
+    - [ ] Create file parser in `src/vector_db/parser.py` for code extraction
+    - [ ] Implement chunk management in `src/vector_db/chunking.py`
+    - [ ] Add incremental indexing for efficient updates
+    - [ ] Create metadata extraction for context enrichment
+  - [ ] Implement retrieval mechanism
+    - [ ] Create query builder in `src/vector_db/query.py`
+    - [ ] Add relevance ranking in `src/vector_db/ranking.py`
+    - [ ] Implement context window management
+    - [ ] Create hybrid search combining vector and keyword approaches
+  - [ ] Create RAG resource provider in `src/agent/tools/primitives/resources.py`
+    - [ ] Implement `CodebaseResourceProvider` using the MCP resource interface
+    - [ ] Add initialization with vector DB connection
+    - [ ] Create methods for resource request lifecycle
+    - [ ] Implement resource metadata tracking
+  - [ ] Add resource caching
+    - [ ] Create LRU cache for frequently accessed resources
+    - [ ] Implement cache invalidation on code changes
+    - [ ] Add persistence options for caching
+  - [ ] Create database management utilities in `src/cli/commands/db.py`
+    - [ ] Add database initialization command
+    - [ ] Create reindexing command
+    - [ ] Implement status checking utilities
+    - [ ] Add query testing functionality
+  - [ ] Integrate with `continue` command
+    - [ ] Enhance project context with vector search capabilities
+    - [ ] Add relevant code snippet retrieval for context
+    - [ ] Implement intelligent prompt enhancement with code context
+  - [ ] Add tests for RAG system
+    - [ ] Create unit tests in `tests/unit/test_vector_db.py`
+    - [ ] Add integration tests in `tests/integration/test_rag_system.py`
+  - [ ] Create documentation
+    - [ ] Add setup guide in `docs/howto/vector_database.md`
+    - [ ] Create usage examples in `docs/examples/rag_usage.md`

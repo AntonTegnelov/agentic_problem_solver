@@ -1,0 +1,74 @@
+- Refactor `src/prompts/templates.py`
+  - [ ] Perform initial structural analysis
+    - [ ] Create a map of all templates and their purposes
+    - [ ] Document relationships between templates and their usage
+    - [ ] Identify natural boundaries for grouping templates
+  - [ ] Develop a specific splitting strategy
+    - [ ] Plan for common templates → common.py
+    - [ ] Plan for agent role-specific templates → roles/
+      - [ ] Plan for architect templates → roles/architect.py
+      - [ ] Plan for planner templates → roles/planner.py
+      - [ ] Plan for executor templates → roles/executor.py
+    - [ ] Plan for step-specific templates → steps/
+      - [ ] Plan for understanding templates → steps/understanding.py
+      - [ ] Plan for breakdown templates → steps/breakdown.py
+      - [ ] Plan for execution templates → steps/execution.py
+      - [ ] Plan for verification templates → steps/verification.py
+    - [ ] Plan for utility functions → utils.py
+  - [ ] Perform dependency analysis
+    - [ ] Document which areas of the code use which templates
+    - [ ] Create precedence order for migration based on dependencies
+    - [ ] Identify templates that should be kept together
+  - [ ] Find deprecated functionality
+    - [ ] Use code search to find templates that are no longer used
+    - [ ] Perform execution path analysis to find templates never accessed
+    - [ ] Find templates that are not used by anything else in the codebase, and list those that should be removed in the docstring at the top and a docstring near the offender
+    - [ ] Remove the old templates marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Find duplicated functionality
+    - [ ] Create utility functions for common template generation
+    - [ ] Implement template inheritance or composition for similar templates
+    - [ ] Find templates that fulfill similar purposes, and list those that should be combined in the docstring at the top and a docstring near the offender
+    - [ ] (if necessary) Combine similar templates, mark any deprecated templates as such and list it in the docstring and in the documentation
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+    - [ ] Remove the old templates marked by deprecation notices
+    - [ ] Rerun tests
+  - [ ] Find overcomplicated functionality
+    - [ ] Simplify complex templates
+    - [ ] Document complex templates before simplifying them
+    - [ ] Find templates that are unnecessarily complex and could be simplified without a loss of functionality, and list those that should be simplified in the docstring at the top and a docstring near the offender
+    - [ ] Simplify the old templates marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Split it up
+    - [ ] Define clear criteria for what templates go into each file
+    - [ ] Create cross-file unit tests to verify proper integration
+    - [ ] Specify approach for handling common templates
+    - [ ] Make detailed migration plan and put it into a docstring at the top of templates.py
+    - [ ] Add documentation in src/docs that the migration is taking place
+    - [ ] Find all references using templates.py and list them in both the docstring of templates.py and in the documentation
+    - [ ] Create subdirectories within `src/prompts/`
+      - [ ] Create `src/prompts/templates/__init__.py`
+      - [ ] Create `src/prompts/templates/roles/__init__.py`
+      - [ ] Create `src/prompts/templates/steps/__init__.py`
+    - [ ] Copy code from `src/prompts/templates.py` and split it into multiple files, logically dividing the templates:
+      - [ ] Move common templates to `src/prompts/templates/common.py`
+      - [ ] Move architect-specific templates to `src/prompts/templates/roles/architect.py`
+      - [ ] Move planner-specific templates to `src/prompts/templates/roles/planner.py`
+      - [ ] Move executor-specific templates to `src/prompts/templates/roles/executor.py`
+      - [ ] Move understanding step templates to `src/prompts/templates/steps/understanding.py`
+      - [ ] Move breakdown step templates to `src/prompts/templates/steps/breakdown.py`
+      - [ ] Move execution step templates to `src/prompts/templates/steps/execution.py`
+      - [ ] Move verification step templates to `src/prompts/templates/steps/verification.py`
+      - [ ] Move utility functions to `src/prompts/templates/utils.py`
+    - [ ] Check any references and update those that will change because of the move into subdirectories
+    - [ ] Create a streamlined `src/prompts/templates.py` that re-exports from subdirectories to maintain backward compatibility
+    - [ ] Verify that all tests pass and the linter is happy
+    - [ ] Remove the documentation that mentions the migration and only leave documentation of the current situation
+    - [ ] Remove any comments that mention the migration
+    - [ ] Update relevant tests to reflect the new structure
+    - [ ] Bring up the unit test coverage over `src/prompts/templates/` to 90%
+    - [ ] Add integration tests
+    - [ ] Add and update documentation

@@ -130,6 +130,60 @@ A standardized task system:
 - **Task Breakdown**: Specialized steps for decomposing complex tasks
 - **Task Tracking**: Monitor progress of delegated tasks throughout the hierarchy
 
+### Task Delegation Flow
+
+The task delegation system connects task breakdown with task execution through a structured workflow:
+
+#### Delegation Process
+
+1. **Task Receipt and Breakdown**:
+
+   - High-level task received by ArchitectAgent
+   - `TaskBreakdownStep` decomposes tasks into subtasks with complexity evaluation
+   - Dependencies between tasks are identified and recorded
+
+2. **Complexity-Based Delegation**:
+
+   - **SIMPLE/MODERATE tasks**: ArchitectAgent → ExecutorAgent (direct implementation)
+   - **COMPLEX tasks**: ArchitectAgent → PlannerAgent → ExecutorAgent (planning then implementation)
+   - **VERY_COMPLEX tasks**: ArchitectAgent → PlannerAgent → PlannerAgent → ExecutorAgent (multi-level planning)
+
+3. **Delegation Methods**:
+
+   - `delegate_breakdown_tasks()`: Main entry point for processing breakdown results
+   - `delegate_to_planner()`: Handles delegation to PlannerAgents
+   - `delegate_to_executor()`: Handles direct delegation to ExecutorAgents
+   - `_process_tasks_with_retry()`: Manages parallel execution and retries
+
+4. **Parallel Execution Strategies**:
+
+   - **Sequential**: Tasks processed one after another (default)
+   - **Parallel All**: All tasks processed simultaneously
+   - **Parallel Independent**: Only tasks without dependencies processed in parallel
+   - **Parallel with Dependencies**: Tasks processed in dependency-based batches
+   - **Parallel Groups**: Tasks processed in predefined groups
+
+5. **Result Aggregation**:
+   - Child agent results collected by parent agents
+   - `TaskResultAggregator` merges results from multiple tasks
+   - Results flow upward through hierarchy to final solution
+
+#### Delegation Optimizations
+
+- **Timeout Handling**: Prevents stuck or excessively long-running tasks
+- **Automatic Retries**: Re-attempts failed delegations with exponential backoff
+- **Fallback Paths**: Alternative delegation routes when primary path fails
+- **Task Reassignment**: Capability-based assignment when agents can't handle tasks
+- **Deadlock Prevention**: Detection and resolution of circular dependencies
+
+#### Progress Tracking and Observability
+
+- **Execution Stages**: PLANNING, IMPLEMENTING, TESTING, REFINING, FINALIZING
+- **Task Status Updates**: PENDING, IN_PROGRESS, COMPLETED, FAILED
+- **Progress Calculation**: Rollup of completion percentages through hierarchy
+- **Dependency Visualization**: Graphical view of task relationships
+- **Delegation Decision Logging**: Detailed logs of delegation choices
+
 ## Hierarchical Data Flow
 
 1. User Input → CLI
@@ -218,4 +272,4 @@ The transition to the hierarchical architecture will follow these key steps:
 8. Update CLI for hierarchical operations
 9. Enhance documentation and testing
 
-Look at TODO.md for a more detailed roadmap
+Look at docs/todos/TODO.md for a more detailed roadmap

@@ -5,7 +5,6 @@
   - [x] Extend `src/agent/agent_types/agent_types.py` to add hierarchical methods to the `Agent` protocol
   - [x] Add agent role enums in `src/common_types/enums.py` (ARCHITECT, PLANNER, EXECUTOR)
   - [x] Enhance `AgentInfo` in `src/common_types/agent_types.py` to include parent/child relationship tracking
-  - [x] Add deprecation warning to `SolverAgent` in `src/agent/solver.py` while maintaining compatibility
   - [x] Create `ArchitectAgent` in `src/agent/agent_types/architect.py` for high-level task decomposition
   - [x] Create `PlannerAgent` in `src/agent/agent_types/planner.py` for mid-level task refinement
   - [x] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution
@@ -31,40 +30,6 @@
   - [x] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
   - [x] Update documentation in `docs/howto/task_breakdown.md` with usage examples
   - [x] Ensure CI/CD pipeline validates the new functionality
-
-- implement a safe migration path from SolverAgent to the hierarchical agent system
-
-  - [x] Create migration documentation in `docs/howto/migration.md`
-    - [x] Outline a clear, step-by-step migration path for users
-    - [x] Document API differences between SolverAgent and hierarchical system
-    - [x] Include a checklist for verifying successful migration
-  - [ ] Transition solver agent into a temporary compatibility Layer
-    - [x] Identify all references to SolverAgent in the codebase (see `docs/migration/solver_agent_references.md` for the complete list)
-    - [x] Add appropriate deprecation warnings throughout the codebase
-    - [x] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
-  - [ ] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
-    - [x] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
-    - [x] Continue refactoring remaining deprecated components
-  - [x] Update examples to show new approach
-    - [x] Annotate existing examples with deprecation notices if they no longer apply
-    - [x] Create parallel examples showing the new hierarchical approach where it differs
-  - [x] Update CLI code to use hierarchical agents
-    - [x] Identify all CLI dependencies on SolverAgent (see `docs/migration/solver_agent_references.md` for details)
-    - [x] Incrementally update each reference (+corresponding tests), testing between changes
-    - [x] Ensure backward compatibility during transition
-  - [x] Plan for eventual removal of SolverAgent
-    - [x] Ensure all documentation is updated to focus on hierarchical system
-    - [x] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)
-    - [x] Remove SolverAgent implementation completely
-    - [x] Verify all tests pass with SolverAgent removed
-  - [x] Update documentation
-    - [x] remove all deprecated examples
-    - [x] Remove all traces of SolverAgent in the documentation to avoid confusion (see `docs/migration/solver_agent_references.md` for a list of documentation to update)
-  - [x] Update CLI
-    - [x] Remove any backward compatibility still left
-    - [x] Review the codebase.
-    - [x] Analyzse the migration to see if it left any undesireable traces.
-    - [x] Run tests and linter
 
 - enable flexible delegation paths between agent types
 
@@ -160,7 +125,7 @@
     - [x] Add `delegate_breakdown_tasks` method in `src/agent/agent_types/architect.py` to process broken-down tasks
     - [x] Update the `process_normal_message` method to call this new method after task breakdown
     - [x] Implement retry and error handling for the delegation process
-  - [ ] Enhance task result collection and aggregation
+  - [x] Enhance task result collection and aggregation
     - [x] Create a `TaskResultAggregator` class in `src/agent/coordination.py` to collect and combine results
     - [x] Add methods for tracking subtask completion status
     - [x] Implement result merging logic for different result types
@@ -168,51 +133,113 @@
     - [x] Add task parallelization options in `src/common_types/task_types.py`
     - [x] Create parallel delegation logic in `ArchitectAgent` and `PlannerAgent`
     - [x] Add synchronization mechanisms for dependent tasks
-  - [ ] Update task progress tracking
+  - [x] Update task progress tracking
     - [x] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
     - [x] Add blocking task detection and resolution
-    - [ ] Implement deadlock prevention mechanisms
-  - [ ] Add logging and observability
-    - [ ] Create detailed delegation logging in `src/utils/log_utils.py`
-    - [ ] Add some very basic and simple task tree visualization tools
-  - [ ] Create fallback mechanisms
-    - [ ] Add timeout handling for delegated tasks
-    - [ ] Implement automatic retries for failed delegations
-    - [ ] Create fallback logic for various failure scenarios
-  - [ ] Update the TaskBreakdownStep to register additional metadata
-    - [ ] Add information about suggested delegation targets based on complexity
-    - [ ] Register task dependencies in graph structure
-    - [ ] Store execution order hints
-  - [ ] Create unit tests in `tests/unit/test_task_delegation.py`
-    - [ ] Test delegation logic for various task complexities
-    - [ ] Verify proper handling of subtask relationships
-    - [ ] Test result aggregation functionality
-  - [ ] Add integration tests in `tests/integration/test_end_to_end_breakdown.py`
-    - [ ] Test complete breakdown-to-execution workflow
-    - [ ] Verify proper handling of complex tasks with multiple levels
-    - [ ] Test parallel execution scenarios
-  - [ ] Update documentation
-    - [ ] Create delegation workflow guide in `docs/howto/task_delegation.md`
-    - [ ] Update architecture documentation to clarify delegation flow
-    - [ ] Add delegation examples in existing documentation
+    - [x] Implement deadlock prevention mechanisms
+  - [x] Add logging and observability
+    - [x] Create detailed delegation logging in `src/utils/log_utils.py`
+    - [x] Add some very basic and simple task tree visualization tools
+  - [x] Create fallback mechanisms
+    - [x] Add timeout handling for delegated tasks
+    - [x] Implement automatic retries for failed delegations
+    - [x] Create fallback logic for various failure scenarios
+  - [x] Create unit tests in `tests/unit/test_task_delegation.py`
+    - [x] Test delegation logic for various task complexities
+    - [x] Verify proper handling of subtask relationships
+    - [x] Test result aggregation functionality
+  - [x] Add integration tests in `tests/integration/test_end_to_end_breakdown.py`
+    - [x] Test complete breakdown-to-execution workflow
+    - [x] Verify proper handling of complex tasks with multiple levels
+    - [x] Test parallel execution scenarios
+  - [x] Update documentation
+    - [x] Create delegation workflow guide in `docs/howto/task_delegation.md`
+    - [x] Update architecture documentation to clarify delegation flow
+    - [x] Add delegation examples in existing documentation
 
 - Refactor `src/agent/coordination.py`
 
-  - [ ] make detailed migration plan and put it into a dosctring at the top of coordination.py
-  - [ ] add documentation in src/docs that the migration is taking place
-  - [ ] find all references using coordination.py and list them in both the docstring of coordination.py and in the documentation
-  - [ ] create its own folder. `src/agent/coordination`
-  - [ ] create `src/agent/coordination/__init__.py`
-  - [ ] copy code from `src/agent/coordination.py` and split it into multiple files in `src/agent/coordination`, logically dividing the responsibilities of the file
-  - [ ] check any references and update those that will change because of the move into `src/agent/coordination`.
-  - [ ] remove coordination.py, completing the migration into `src/agent/coordination`
-  - [ ] verify that all tests pass and the linter is happy
-  - [ ] remove the documentation that mentions the migration and only leave documentation of the current situation
-  - [ ] remove any comments that mention the migration
-  - [ ] split `tests/unit/test_agent_coordination.py` into new files corresponding to the layout in `src/agent/coordination`
-  - [ ] bring up the unit test coverage over`src/agent/coordination` to 90%
-  - [ ] add integration tests
-  - [ ] add and update documentation
+  - [ ] execute all steps in `docs/todos/refactor_coordination_TODO.md`
+
+- Refactor `src/agent/state/base.py`
+
+  - [ ] execute all steps in `docs/todos/refactor_base_state_TODO.md`
+
+- Refactor `src/agent/agent_types/planner.py`
+
+  - [ ] execute all steps in `docs/todos/refactor_planner_TODO.md`
+
+- Refactor `src/agent/agent_types/executor.py`
+
+  - [ ] execute all steps in `docs/todos/refactor_executor_TODO.md`
+
+- Refactor `src/agent/agent_types/architect.py`
+
+  - [ ] execute all steps in `docs/todos/refactor_architect_TODO.md`
+
+- Refactor `src/agent/steps.py`
+
+  - [ ] execute all steps in `docs/todos/refactor_steps_TODO.md`
+
+- Refactor `src/prompts/templates.py`
+  [ ] execute all steps in `docs/todos/refactor_templates_TODO.md`
+
+- Investigate and fix duplicate log messages in the delegation process
+
+  - [ ] Review logging configuration in `src/utils/log_utils.py` to identify source of duplication
+  - [ ] Check for potential redundant calls to logging functions
+  - [ ] Add more logging context to differentiate between similar but unique events
+  - [ ] Create unit tests to verify logging behavior
+    - [ ] Add tests in `tests/unit/test_log_utils.py` to verify proper logging patterns
+    - [ ] Create test cases that check for duplicate log prevention
+  - [ ] Update logging documentation to clarify expected behavior
+
+- Resolve recursive task breakdown prompt detection issues
+
+  - [ ] Implement task history tracking to prevent repeated delegation
+    - [ ] Add task signature generation for identifying similar tasks
+  - [ ] Enhance recursive task breakdown detection in `src/agent/agent_types/architect`
+    - [ ] Create a more robust structure for identifying recursive prompts, ideally not relying on the contents of the message
+    - [ ] Improve detection logic to reduce false positives
+  - [ ] Add unit tests
+    - [ ] Test recursive pattern detection with various inputs
+    - [ ] Verify proper handling of similar but distinct tasks
+    - [ ] Ensure no legitimate tasks are incorrectly flagged
+
+- Optimize delegation paths between agent types
+
+  - [ ] Streamline agent delegation logic in `src/agent/coordination` and `src/agent/agent_types/architect`
+    - [ ] Remove unnecessary self-delegation in architect agent
+  - [ ] Add delegation efficiency analysis
+    - [ ] Add logging for delegation chain efficiency
+  - [ ] Update delegation documentation in `docs/howto/delegation_strategies.md`
+    - [ ] Clarify ideal delegation patterns
+    - [ ] Document optimized delegation flows
+    - [ ] Provide examples of efficient vs. inefficient delegation
+
+- Improve task complexity analysis with reliable LLM-based approach
+
+  - [ ] Create centralized complexity analysis module in `src/agent/complexity_analyzer.py`
+    - [ ] Implement `ComplexityAnalyzer` class with purely LLM-based analysis
+    - [ ] Add caching mechanism using LRU cache to avoid repeated LLM calls
+    - [ ] Implement proper async patterns with error handling and retries
+    - [ ] Add detailed logging for analysis decisions and performance metrics
+  - [ ] Add complexity analysis prompt template in `src/prompts/templates.py`
+    - [ ] Create `COMPLEXITY_ANALYSIS_PROMPT` with clear criteria for each complexity level
+    - [ ] Ensure prompt produces consistent, structured responses for reliable parsing
+  - [ ] Update agent implementations to use the centralized analyzer
+    - [ ] Modify `ArchitectAgent` to use the shared analyzer via dependency injection
+    - [ ] Update `PlannerAgent` to use the shared analyzer via dependency injection
+    - [ ] Refactor `AgentCoordinator` to leverage the centralized complexity analyzer
+    - [ ] Remove duplicate complexity analysis code from individual agents
+  - [ ] Add comprehensive tests for complexity analysis
+    - [ ] Create unit tests for the `ComplexityAnalyzer` class
+    - [ ] Add integration tests with mock LLM responses
+    - [ ] Create test cases with a wide variety of technical and non-technical tasks
+  - [ ] Add documentation about complexity analysis
+    - [ ] Document the centralized approach in `docs/reference/agent_system.md`
+    - [ ] Add usage examples in agent documentation
+    - [ ] Document caching and performance considerations
 
 - implement project management infrastructure and CLI commands for file generation
 
@@ -247,110 +274,43 @@
     - [ ] Update CLI documentation in `docs/howto/cli_usage.md`
 
 - setup a system for the agents to use tools with Model Context Protocol (MCP)
-  https://modelcontextprotocol.io/introduction
-  https://github.com/modelcontextprotocol/python-sdk
 
-  - [ ] Extend common types for MCP
-    - [ ] Add MCP-related enums in `src/common_types/enums.py` (TOOL_TYPE, RESOURCE_TYPE, PROMPT_TYPE)
-    - [ ] Create MCP tool types in `src/common_types/tool_types.py` with proper protocols and implementations
-    - [ ] Add MCP message schemas in `src/common_types/message_types.py` for tool requests and responses
-    - [ ] Define MCP result types in `src/common_types/result_types.py` for tool executions and prompt handling
-    - [ ] Create MCP error types in `src/common_types/error_types.py` for handling MCP-specific errors
-  - [ ] Implement core MCP infrastructure in `src/agent/tools/`
-    - [ ] Create `mcp_client.py` with MCP client implementation and connection handling
-    - [ ] Create `mcp_server.py` with server implementation for exposing agent capabilities
-    - [ ] Implement protocol handler in `protocol.py` for MCP message processing
-    - [ ] Add `mcp_factory.py` for creating and configuring MCP server/client instances
-  - [ ] Implement MCP primitives in `src/agent/tools/primitives/`
-    - [ ] Create `tools.py` for model-controlled functions that LLMs can invoke
-    - [ ] Create `resources.py` for application-controlled contextual data access
-    - [ ] Create `prompts.py` for user-controlled interactive templates
-  - [ ] Extend agent protocol in `src/agent/agent_types/agent_types.py` with MCP capabilities
-    - [ ] Add MCP client access methods to the `Agent` protocol
-    - [ ] Create MCP context management for agent interactions
-    - [ ] Update agent implementations to leverage MCP primitives
-  - [ ] Create code manipulation tools in `src/agent/tools/implementations/`
-    - [ ] Implement `CodeTools` in `src/agent/tools/implementations/code_tools.py`
-      - [ ] Add file creation/modification methods using file_utils
-      - [ ] Create code generation utilities with proper formatting
-      - [ ] Implement syntax checking for common languages
-      - [ ] Add automatic imports management
-    - [ ] Implement `ProjectTools` in `src/agent/tools/implementations/project_tools.py`
-      - [ ] Add project structure analysis and visualization
-      - [ ] Create scaffolding methods for common project types
-      - [ ] Implement dependency management utilities
-    - [ ] Create `FileTools` in `src/agent/tools/implementations/file_tools.py`
-      - [ ] Add search and replace across project files
-      - [ ] Implement file organization utilities
-      - [ ] Create backup/restore functionality
-  - [ ] Add MCP configuration in `src/config/mcp.py`
-    - [ ] Configure server parameters and capabilities
-    - [ ] Add tool access control by agent role
-    - [ ] Configure client connection settings
-    - [ ] Add resource access policies
-  - [ ] Enhance the `continue` command with MCP tools
-    - [ ] Update command in `src/cli/main.py` to utilize code tools
-    - [ ] Integrate file history tracking from project context
-    - [ ] Add prompt augmentation with project metadata
-  - [ ] Create tests for MCP tools
-    - [ ] Add unit tests in `tests/unit/test_mcp_tools.py`
-    - [ ] Create integration tests in `tests/integration/test_mcp_integration.py`
-  - [ ] Add documentation for MCP tools
-    - [ ] Create tool usage guide in `docs/reference/mcp_tools.md`
-    - [ ] Add examples in `docs/examples/tool_usage.md`
+  - [ ] execute all steps in `docs/todos/MCP_TODO.md`
 
 - implement RAG system for code context retrieval
 
-  - [ ] Create vector database infrastructure in `src/vector_db/`
-    - [ ] Implement `VectorDB` interface in `src/vector_db/interface.py`
-    - [ ] Create in-memory implementation in `src/vector_db/memory_db.py` for testing
-    - [ ] Add persistent implementation in `src/vector_db/disk_db.py` for production
-    - [ ] Implement embedding utilities in `src/vector_db/embeddings.py`
-  - [ ] Add code indexing functionality
-    - [ ] Create file parser in `src/vector_db/parser.py` for code extraction
-    - [ ] Implement chunk management in `src/vector_db/chunking.py`
-    - [ ] Add incremental indexing for efficient updates
-    - [ ] Create metadata extraction for context enrichment
-  - [ ] Implement retrieval mechanism
-    - [ ] Create query builder in `src/vector_db/query.py`
-    - [ ] Add relevance ranking in `src/vector_db/ranking.py`
-    - [ ] Implement context window management
-    - [ ] Create hybrid search combining vector and keyword approaches
-  - [ ] Create RAG resource provider in `src/agent/tools/primitives/resources.py`
-    - [ ] Implement `CodebaseResourceProvider` using the MCP resource interface
-    - [ ] Add initialization with vector DB connection
-    - [ ] Create methods for resource request lifecycle
-    - [ ] Implement resource metadata tracking
-  - [ ] Add resource caching
-    - [ ] Create LRU cache for frequently accessed resources
-    - [ ] Implement cache invalidation on code changes
-    - [ ] Add persistence options for caching
-  - [ ] Create database management utilities in `src/cli/commands/db.py`
-    - [ ] Add database initialization command
-    - [ ] Create reindexing command
-    - [ ] Implement status checking utilities
-    - [ ] Add query testing functionality
-  - [ ] Integrate with `continue` command
-    - [ ] Enhance project context with vector search capabilities
-    - [ ] Add relevant code snippet retrieval for context
-    - [ ] Implement intelligent prompt enhancement with code context
-  - [ ] Add tests for RAG system
-    - [ ] Create unit tests in `tests/unit/test_vector_db.py`
-    - [ ] Add integration tests in `tests/integration/test_rag_system.py`
-  - [ ] Create documentation
-    - [ ] Add setup guide in `docs/howto/vector_database.md`
-    - [ ] Create usage examples in `docs/examples/rag_usage.md`
+  - [ ] execute all steps in `docs/todos/RAG_TODO.md`
 
 - implement tree-sitter based codebase map generation https://aider.chat/2023/10/22/repomap.html
 
-  - [ ] Create core repomap infrastructure in `src/repomap/`
-    - [ ] Implement `RepoMap` class in `src/repomap/repomap.py` for codebase maps
-    - [ ] Add tree-sitter integration in `src/repomap/parser.py`
-    - [ ] Create symbol extraction in `src/repomap/extractor.py`
-    - [ ] Add code relationship tracking in `src/repomap/relations.py`
-  - [ ] Add language-specific support
-    - [ ] Create language detection in `src/repomap/languages/detection.py`
-    - [ ] Implement base language parser in `src/repomap/languages/base.py`
-    - [ ] Add support for major languages (Python, JavaScript, etc.)
-    - [ ] Create extension mechanism for additional languages
-  - [ ] Implement map optimization algorithms in `
+  - [ ] execute all steps in `docs/todos/repomap_TODO.md`
+
+- create comprehensive project generation workflow
+  - [ ] Enhance existing infrastructure for complete workflow
+    - [ ] Update `ProjectContext` in `src/common_types/project_types.py` with full lifecycle support
+    - [ ] Extend file utils in `src/utils/file_utils.py` with advanced operations
+    - [ ] Create project templates in `src/templates/` for common project types
+  - [ ] Implement project type detection and scaffolding
+    - [ ] Add project type analysis in `src/utils/project_utils.py`
+    - [ ] Create template-based scaffolding system
+    - [ ] Implement dependency management for detected project types
+  - [ ] Create unified CLI interface
+    - [ ] Update `start` command to support templates and project types
+    - [ ] Enhance `continue` command with full context capabilities
+    - [ ] Add `extend` command for adding features to existing projects
+    - [ ] Create `refactor` command for restructuring existing code
+  - [ ] Implement persistent project state
+    - [ ] Add state management in `src/project/state.py`
+    - [ ] Create session history tracking
+    - [ ] Implement version control integration
+  - [ ] Add interactive mode
+    - [ ] Create interactive shell in `src/cli/interactive.py`
+    - [ ] Implement step-by-step project generation
+    - [ ] Add real-time feedback and suggestions
+  - [ ] Create comprehensive tests
+    - [ ] Add end-to-end workflow tests in `tests/integration/test_complete_workflow.py`
+    - [ ] Create performance benchmarks in `tests/benchmarks/`
+  - [ ] Update documentation
+    - [ ] Create comprehensive workflow guide in `docs/guides/project_workflows.md`
+    - [ ] Add tutorial series in `docs/tutorials/`
+    - [ ] Update all command documentation

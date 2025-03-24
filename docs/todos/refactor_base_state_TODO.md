@@ -1,0 +1,64 @@
+- Refactor `src/agent/state/base.py`
+  - [ ] Perform initial structural analysis
+    - [ ] Create a map of all classes and their responsibilities
+    - [ ] Document relationships between classes and functional areas
+    - [ ] Identify natural boundaries for code splitting
+  - [ ] Develop a specific splitting strategy
+    - [ ] Plan for `Context` → context.py
+    - [ ] Plan for `StateManager` protocol → protocols.py
+    - [ ] Plan for `AgentState` → agent_state.py
+    - [ ] Plan for `InMemoryStateManager` → memory_state.py
+    - [ ] Plan for `FileStateManager` → file_state.py
+    - [ ] Plan for task-related methods → task_management.py
+  - [ ] Perform dependency analysis
+    - [ ] Document internal dependencies between classes
+    - [ ] Create precedence order for migration based on dependencies
+    - [ ] Identify potential circular dependency issues
+  - [ ] Find deprecated functionality
+    - [ ] Use static analysis tools to identify dead code
+    - [ ] Perform code execution path analysis to find unused branches
+    - [ ] Find code, classes and functions that are not used by anything else in the codebase, and list those that should be removed in the docstring at the top and a docstring near the offender
+    - [ ] Remove the old code marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Find duplicated functionality
+    - [ ] Create utility functions for common operations
+    - [ ] Implement interfaces or base classes to standardize similar functionality
+    - [ ] Find code, classes and functions that fulfill similar purposes, and list those that should be combined in the docstring at the top and a docstring near the offender
+    - [ ] (if necessary) Combine the functions, mark any deprecated code as such and list it in the docstring and in the documentation
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+    - [ ] Remove the old code marked by deprecation notices
+    - [ ] Rerun tests
+  - [ ] Find overcomplicated functionality
+    - [ ] Break down large methods like `_collect_subtask_progress_data` and `calculate_rollup_progress`
+    - [ ] Document complex algorithms related to task dependency management before simplifying
+    - [ ] Find code, classes and functions that are unnecessarily complex and could be simplified without a loss of functionality, and list those that should be simplified in the docstring at the top and a docstring near the offender
+    - [ ] Simplify the old code marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Split it up
+    - [ ] Define clear criteria for what functionality goes into each file
+    - [ ] Create cross-file unit tests to verify proper integration
+    - [ ] Specify approach for handling circular dependencies
+    - [ ] Make detailed migration plan and put it into a docstring at the top of base.py
+    - [ ] Add documentation in src/docs that the migration is taking place
+    - [ ] Find all references using base.py and list them in both the docstring of base.py and in the documentation
+    - [ ] Create its own folder. `src/agent/state/managers`
+    - [ ] Create `src/agent/state/managers/__init__.py`
+    - [ ] Copy code from `src/agent/state/base.py` and split it into multiple files in `src/agent/state/managers`, logically dividing the responsibilities of the file:
+      - [ ] Move task management functionality to `src/agent/state/managers/task_management.py`
+      - [ ] Move state protocols to `src/agent/state/managers/protocols.py`
+      - [ ] Move context handling to `src/agent/state/managers/context.py`
+      - [ ] Move basic AgentState to `src/agent/state/managers/agent_state.py`
+      - [ ] Move InMemoryStateManager to `src/agent/state/managers/memory_state.py`
+      - [ ] Move FileStateManager to `src/agent/state/managers/file_state.py`
+    - [ ] Check any references and update those that will change because of the move into `src/agent/state/managers`
+    - [ ] Create a streamlined `src/agent/state/base.py` that re-exports from managers to maintain backward compatibility
+    - [ ] Verify that all tests pass and the linter is happy
+    - [ ] Remove the documentation that mentions the migration and only leave documentation of the current situation
+    - [ ] Remove any comments that mention the migration
+    - [ ] Split `tests/unit/test_agent_state.py` into new files corresponding to the layout in `src/agent/state/managers`
+    - [ ] Bring up the unit test coverage over `src/agent/state/managers` to 90%
+    - [ ] Add integration tests
+    - [ ] Add and update documentation

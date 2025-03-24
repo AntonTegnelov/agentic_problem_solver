@@ -6,6 +6,7 @@ for mid-level task refinement and planning in the hierarchical agent system.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import inspect
 import json
@@ -40,6 +41,7 @@ from src.common_types.task_types import (
     TaskDependency,
 )
 from src.config.agent import AgentConfig
+from src.config.constants import DEFAULT_TASK_TIMEOUT
 from src.llm_providers.factory import LLMProviderFactory
 
 if TYPE_CHECKING:
@@ -1617,7 +1619,24 @@ class PlannerAgent:
 
             # For test_planner_process_tasks_parallel, allow for mocked task delegation
             if hasattr(self, "_delegate_single_task") and callable(self._delegate_single_task):
-                result = await self._delegate_single_task(task_obj)
+                # Handle both Result objects and tuples
+                delegation_result = await self._delegate_single_task(task_obj)
+
+                if isinstance(delegation_result, Result):
+                    result = delegation_result
+                else:
+                    # Unpack tuple result
+                    result_data, is_error, error_msg = delegation_result
+                    if result_data is not None:
+                        result = Result.success(
+                            data=result_data,
+                            message=f"Successfully processed task: {self.get_task_description(task_obj)}",
+                        )
+                    else:
+                        result = Result.failure(
+                            error=AgentError(error_msg),
+                            message=f"Failed to process task: {self.get_task_description(task_obj)}",
+                        )
             else:
                 # For test_planner_process_tasks_parallel_exception
                 if task_obj.description == "Task that raises exception":
@@ -1944,6 +1963,12 @@ class PlannerAgent:
         task_desc = task.description if hasattr(task, "description") else str(task)
         result_tuple = (None, True, "Failed to delegate task to any agent")  # Default result
 
+        # Get the timeout from the agent's configuration
+        # Default to DEFAULT_TASK_TIMEOUT (300 seconds) if not specified
+        timeout_duration = getattr(self, "_config", {}).get("task_timeout", DEFAULT_TASK_TIMEOUT)
+
+        self.logger.debug("Using timeout of %d seconds for task delegation", timeout_duration)
+
         try:
             # Check if this is a test task first
             test_result, is_test_task = await self._handle_test_task(task)
@@ -1955,19 +1980,35 @@ class PlannerAgent:
 
                 # For complex tasks, delegate to another planner
                 if complexity in [TaskComplexity.COMPLEX, TaskComplexity.VERY_COMPLEX]:
-                    result = await self.delegate_to_planner(task)
+                    # Wrap delegation with timeout
+                    result = await asyncio.wait_for(
+                        self.delegate_to_planner(task),
+                        timeout=timeout_duration,
+                    )
                     result_tuple = (result.data, not result.success, str(result.error) if result.error else "")
                 else:
-                    # For simple tasks, delegate to executor
-                    result = await self.delegate_to_executor(task)
+                    # For simple tasks, delegate to executor with timeout
+                    result = await asyncio.wait_for(
+                        self.delegate_to_executor(task),
+                        timeout=timeout_duration,
+                    )
                     if result.success:
                         result_tuple = (result.data, False, "")
                     # Try with a child agent as fallback
                     elif self.get_child_ids():
                         child_id = self.get_child_ids()[0]
-                        result = await self.delegate_to_child(child_id, task)
+                        result = await asyncio.wait_for(
+                            self.delegate_to_child(child_id, task),
+                            timeout=timeout_duration,
+                        )
                         if result.success:
                             result_tuple = (result.data, False, "")
+        except TimeoutError:
+            # Specific handling for timeout errors
+            error_msg = f"Task delegation timed out after {timeout_duration} seconds for task '{task_desc[:50]}...'"
+            self.logger.warning(error_msg)
+            # Mark as retryable since timeouts are often transient
+            result_tuple = (None, True, error_msg)
         except (AgentNotFoundError, AgentCommunicationError, AgentProcessingError, ValueError) as e:
             # Special handling for test_delegate_single_task_with_exception
             if "Test exception" in str(e) and task_desc == "Implement a function":
@@ -2810,3 +2851,63 @@ class PlannerAgent:
 
         """
         self._delegation_depth = depth
+
+    async def retry_delegation_until_success(
+        self,
+        task: Task | str,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> tuple[str | None, bool, str]:
+        """Retry task delegation until success or maximum retries reached.
+
+        Args:
+            task: The task to delegate
+            max_retries: Maximum number of retry attempts
+            retry_delay: Delay between retries in seconds
+
+        Returns:
+            Tuple containing (result data if successful, whether task failed, error message if any)
+
+        """
+        task_desc = task.description if hasattr(task, "description") else str(task)
+        retries = 0
+        result_data = None
+        is_error = True
+        error_msg = ""
+
+        # Try initial delegation
+        result_data, is_error, error_msg = await self._delegate_single_task(task)
+
+        # If successful or not retryable, return immediately
+        if result_data is not None or not is_error:
+            return result_data, is_error, error_msg
+
+        # Otherwise, retry until success or max_retries
+        while retries < max_retries and is_error:
+            retries += 1
+            self.logger.info(
+                "Retry attempt %d/%d for task '%s...'",
+                retries,
+                max_retries,
+                task_desc[:50],
+            )
+
+            # Add exponential backoff delay
+            await asyncio.sleep(retry_delay * (2 ** (retries - 1)))
+
+            # Try again
+            result_data, is_error, error_msg = await self._delegate_single_task(task)
+
+            # If successful, break out of the loop
+            if result_data is not None:
+                return result_data, False, ""
+
+        # If we've reached max retries, update the error message
+        if retries >= max_retries and is_error:
+            error_msg = f"Max retries ({max_retries}) reached for task '{task_desc[:50]}...': {error_msg}"
+            self.logger.warning(error_msg)
+            # Return failure without retry flag since we've exhausted retries
+            return None, False, error_msg
+
+        # Return the final result
+        return result_data, is_error, error_msg

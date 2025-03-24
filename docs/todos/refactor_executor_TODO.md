@@ -1,0 +1,64 @@
+- Refactor `src/agent/agent_types/executor.py`
+  - [ ] Perform initial structural analysis
+    - [ ] Create a map of all classes and their responsibilities
+    - [ ] Document relationships between classes and functional areas
+    - [ ] Identify natural boundaries for code splitting
+  - [ ] Develop a specific splitting strategy
+    - [ ] Plan for core `ExecutorAgent` → executor_agent.py
+    - [ ] Plan for task execution strategies → execution_strategies.py
+    - [ ] Plan for validation logic → validation.py
+    - [ ] Plan for error handling → error_handling.py
+    - [ ] Plan for task reporting → reporting.py
+    - [ ] Plan for self-prompting logic → self_prompting.py
+  - [ ] Perform dependency analysis
+    - [ ] Document internal dependencies between classes and methods
+    - [ ] Create precedence order for migration based on dependencies
+    - [ ] Identify potential circular dependency issues
+  - [ ] Find deprecated functionality
+    - [ ] Use static analysis tools to identify dead code
+    - [ ] Perform code execution path analysis to find unused branches
+    - [ ] Find code, classes and functions that are not used by anything else in the codebase, and list those that should be removed in the docstring at the top and a docstring near the offender
+    - [ ] Remove the old code marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Find duplicated functionality
+    - [ ] Create utility functions for common operations
+    - [ ] Implement interfaces or base classes to standardize similar functionality
+    - [ ] Find code, classes and functions that fulfill similar purposes, and list those that should be combined in the docstring at the top and a docstring near the offender
+    - [ ] (if necessary) Combine the functions, mark any deprecated code as such and list it in the docstring and in the documentation
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+    - [ ] Remove the old code marked by deprecation notices
+    - [ ] Rerun tests
+  - [ ] Find overcomplicated functionality
+    - [ ] Break down large methods (many methods are 50+ lines)
+    - [ ] Document complex algorithms before simplifying them, particularly execution flow and retry logic
+    - [ ] Find code, classes and functions that are unnecessarily complex and could be simplified without a loss of functionality, and list those that should be simplified in the docstring at the top and a docstring near the offender
+    - [ ] Simplify the old code marked by deprecation notices
+    - [ ] Run tests to make sure that nothing is breaking and if it is breaking fix it in a architecturally sound way
+    - [ ] Run the linter and fix issues
+  - [ ] Split it up
+    - [ ] Define clear criteria for what functionality goes into each file
+    - [ ] Create cross-file unit tests to verify proper integration
+    - [ ] Specify approach for handling circular dependencies
+    - [ ] Make detailed migration plan and put it into a docstring at the top of executor.py
+    - [ ] Add documentation in src/docs that the migration is taking place
+    - [ ] Find all references using executor.py and list them in both the docstring of executor.py and in the documentation
+    - [ ] Create its own folder. `src/agent/agent_types/executor`
+    - [ ] Create `src/agent/agent_types/executor/__init__.py`
+    - [ ] Copy code from `src/agent/agent_types/executor.py` and split it into multiple files in `src/agent/agent_types/executor`, logically dividing the responsibilities of the file:
+      - [ ] Move the core ExecutorAgent class to `src/agent/agent_types/executor/executor_agent.py`
+      - [ ] Move execution strategies to `src/agent/agent_types/executor/execution_strategies.py`
+      - [ ] Move validation logic to `src/agent/agent_types/executor/validation.py`
+      - [ ] Move error handling to `src/agent/agent_types/executor/error_handling.py`
+      - [ ] Move task reporting to `src/agent/agent_types/executor/reporting.py`
+      - [ ] Move self-prompting logic to `src/agent/agent_types/executor/self_prompting.py`
+    - [ ] Check any references and update those that will change because of the move into `src/agent/agent_types/executor`
+    - [ ] Create a streamlined `src/agent/agent_types/executor.py` that re-exports from executor/ to maintain backward compatibility
+    - [ ] Verify that all tests pass and the linter is happy
+    - [ ] Remove the documentation that mentions the migration and only leave documentation of the current situation
+    - [ ] Remove any comments that mention the migration
+    - [ ] Update relevant tests to reflect the new structure
+    - [ ] Bring up the unit test coverage over `src/agent/agent_types/executor/` to 90%
+    - [ ] Add integration tests
+    - [ ] Add and update documentation
