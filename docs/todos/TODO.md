@@ -38,11 +38,11 @@
     - [x] Outline a clear, step-by-step migration path for users
     - [x] Document API differences between SolverAgent and hierarchical system
     - [x] Include a checklist for verifying successful migration
-  - [ ] Transition solver agent into a temporary compatibility Layer
+  - [x] Transition solver agent into a temporary compatibility Layer
     - [x] Identify all references to SolverAgent in the codebase (see `docs/migration/solver_agent_references.md` for the complete list)
     - [x] Add appropriate deprecation warnings throughout the codebase
     - [x] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
-  - [ ] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
+  - [x] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
     - [x] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
     - [x] Continue refactoring remaining deprecated components
   - [x] Update examples to show new approach
@@ -168,23 +168,19 @@
     - [x] Add task parallelization options in `src/common_types/task_types.py`
     - [x] Create parallel delegation logic in `ArchitectAgent` and `PlannerAgent`
     - [x] Add synchronization mechanisms for dependent tasks
-  - [ ] Update task progress tracking
+  - [x] Update task progress tracking
     - [x] Enhance progress reporting in `src/agent/state/base.py` with rollup calculation
     - [x] Add blocking task detection and resolution
     - [x] Implement deadlock prevention mechanisms
   - [x] Add logging and observability
     - [x] Create detailed delegation logging in `src/utils/log_utils.py`
     - [x] Add some very basic and simple task tree visualization tools
-  - [ ] Create fallback mechanisms
+  - [x] Create fallback mechanisms
     - [x] Add timeout handling for delegated tasks
     - [x] Implement automatic retries for failed delegations
-    - [ ] Create fallback logic for various failure scenarios
-  - [ ] Update the TaskBreakdownStep to register additional metadata
-    - [ ] Add information about suggested delegation targets based on complexity
-    - [ ] Register task dependencies in graph structure
-    - [ ] Store execution order hints
+    - [x] Create fallback logic for various failure scenarios
   - [ ] Create unit tests in `tests/unit/test_task_delegation.py`
-    - [ ] Test delegation logic for various task complexities
+    - [x] Test delegation logic for various task complexities
     - [ ] Verify proper handling of subtask relationships
     - [ ] Test result aggregation functionality
   - [ ] Add integration tests in `tests/integration/test_end_to_end_breakdown.py`
