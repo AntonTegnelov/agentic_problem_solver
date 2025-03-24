@@ -189,8 +189,8 @@
     - [x] Test parallel execution scenarios
   - [x] Update documentation
     - [x] Create delegation workflow guide in `docs/howto/task_delegation.md`
-    - [ ] Update architecture documentation to clarify delegation flow
-    - [ ] Add delegation examples in existing documentation
+    - [x] Update architecture documentation to clarify delegation flow
+    - [x] Add delegation examples in existing documentation
 
 - Refactor `src/agent/coordination.py`
 - [ ] execute all steps in `docs/todos/refactor_coordination_TODO.md`
@@ -286,3 +286,28 @@
     - [ ] Create comprehensive workflow guide in `docs/guides/project_workflows.md`
     - [ ] Add tutorial series in `docs/tutorials/`
     - [ ] Update all command documentation
+
+## Task Delegation Feature Implementation
+
+### Task Breakdown/Planning Enhancements
+
+- [x] Implement a protocol-based hierarchical agent system
+- [x] Enable complex task breakdown with nested delegation
+- [x] Establish flexible delegation paths among agent types
+- [x] Create comprehensive unit and integration tests for delegation paths
+- [x] Update system architecture documentation to clarify delegation flow
+
+### Agent Type Enhancements
+
+- [x] Update ArchitectAgent to support complexity analysis and delegation decisions
+- [x] Enhance PlannerAgent with recursive task breakdown capability
+- [x] Add ExecutorAgent specialization for focused task execution
+- [x] Implement fallback mechanisms for delegation failures
+
+### Testing & Documentation
+
+- [x] Create unit tests for complexity-based delegation
+- [x] Implement integration tests for hierarchical delegation workflows
+- [x] Document task delegation workflow in a how-to guide
+- [x] Update architecture documentation to clarify delegation flow
+- [ ] Add API reference for delegation-related methods and classes
