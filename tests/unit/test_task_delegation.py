@@ -165,3 +165,147 @@ class TestTaskDelegation:
             assert child2_result.success is True
             assert child2_result.data == "Child task 2 processed"
             mock_executor.process.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_result_aggregation(self) -> None:
+        """Test aggregation of results from multiple delegated tasks."""
+        # Create mock agents
+        mock_architect = MagicMock(spec=ArchitectAgent)
+        mock_planner = MagicMock(spec=PlannerAgent)
+        mock_executor = MagicMock()
+
+        # Setup coordinator with mock registry
+        mock_registry = MagicMock()
+        coordinator = AgentCoordinator(mock_registry)
+
+        # Configure mock registry responses
+        mock_registry.get_agent.side_effect = lambda agent_id: {
+            "architect_1": mock_architect,
+            "planner_1": mock_planner,
+            "executor_1": mock_executor,
+        }.get(agent_id)
+
+        # Create parent task
+        parent_task = Task(description="Implement user profile system", complexity=TaskComplexity.COMPLEX)
+        parent_task.task_id = "parent-123"
+
+        # Create child tasks with different complexities
+        child_tasks = [
+            Task(
+                description="Design database schema",
+                complexity=TaskComplexity.MODERATE,
+                parent_task_id=parent_task.task_id,
+            ),
+            Task(
+                description="Implement CRUD operations",
+                complexity=TaskComplexity.MODERATE,
+                parent_task_id=parent_task.task_id,
+            ),
+            Task(
+                description="Add input validation",
+                complexity=TaskComplexity.SIMPLE,
+                parent_task_id=parent_task.task_id,
+            ),
+        ]
+
+        # Configure mock process responses with different results
+        mock_architect.process = AsyncMock(
+            return_value=Result(
+                success=True,
+                data={
+                    "subtasks": child_tasks,
+                    "message": "Task broken down into components",
+                    "aggregated_results": [],
+                },
+            ),
+        )
+
+        mock_planner.process = AsyncMock(
+            side_effect=[
+                Result(
+                    success=True,
+                    data={
+                        "component": "database",
+                        "status": "completed",
+                        "schema": {"users": ["id", "name", "email"]},
+                    },
+                ),
+                Result(
+                    success=True,
+                    data={
+                        "component": "api",
+                        "status": "completed",
+                        "endpoints": ["/users", "/users/{id}"],
+                    },
+                ),
+            ],
+        )
+
+        mock_executor.process = AsyncMock(
+            return_value=Result(
+                success=True,
+                data={
+                    "component": "validation",
+                    "status": "completed",
+                    "rules": ["email_format", "required_fields"],
+                },
+            ),
+        )
+
+        # Test parent task delegation and result aggregation
+        with patch.object(coordinator, "_find_agent_by_complexity", return_value="architect_1"):
+            parent_result = await coordinator.delegate_task_flexible(
+                source_agent_id="system",
+                task=parent_task.description,
+                complexity=TaskComplexity.COMPLEX.value,
+            )
+
+            # Verify parent task delegation
+            assert parent_result.success is True
+            assert "Task broken down into components" in parent_result.data["message"]
+            mock_architect.process.assert_called_once()
+
+            # Verify subtasks were created
+            subtasks = parent_result.data["subtasks"]
+            assert len(subtasks) == 3
+
+        # Test child task delegations and result aggregation
+        with patch.object(
+            coordinator,
+            "_find_agent_by_complexity",
+            side_effect=["planner_1", "planner_1", "executor_1"],
+        ):
+            # Process all child tasks
+            results = []
+            for task in child_tasks:
+                result = await coordinator.delegate_task_flexible(
+                    source_agent_id="architect_1",
+                    task=task.description,
+                    complexity=task.complexity.value,
+                )
+                results.append(result)
+
+            # Verify all tasks were processed successfully
+            assert all(result.success for result in results)
+
+            # Verify results contain expected components
+            components = [result.data["component"] for result in results]
+            assert "database" in components
+            assert "api" in components
+            assert "validation" in components
+
+            # Verify specific result data
+            database_result = next(r for r in results if r.data["component"] == "database")
+            assert "schema" in database_result.data
+            assert database_result.data["schema"]["users"] == ["id", "name", "email"]
+
+            api_result = next(r for r in results if r.data["component"] == "api")
+            assert "endpoints" in api_result.data
+            assert "/users" in api_result.data["endpoints"]
+
+            validation_result = next(r for r in results if r.data["component"] == "validation")
+            assert "rules" in validation_result.data
+            assert "email_format" in validation_result.data["rules"]
+
+            # Verify all components are marked as completed
+            assert all(result.data["status"] == "completed" for result in results)

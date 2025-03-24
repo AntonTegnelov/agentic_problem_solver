@@ -5,7 +5,6 @@
   - [x] Extend `src/agent/agent_types/agent_types.py` to add hierarchical methods to the `Agent` protocol
   - [x] Add agent role enums in `src/common_types/enums.py` (ARCHITECT, PLANNER, EXECUTOR)
   - [x] Enhance `AgentInfo` in `src/common_types/agent_types.py` to include parent/child relationship tracking
-  - [x] Add deprecation warning to `SolverAgent` in `src/agent/solver.py` while maintaining compatibility
   - [x] Create `ArchitectAgent` in `src/agent/agent_types/architect.py` for high-level task decomposition
   - [x] Create `PlannerAgent` in `src/agent/agent_types/planner.py` for mid-level task refinement
   - [x] Create `ExecutorAgent` in `src/agent/agent_types/executor.py` for low-level task execution
@@ -31,40 +30,6 @@
   - [x] Add integration tests in `tests/integration/test_task_workflow.py` to verify end-to-end workflow
   - [x] Update documentation in `docs/howto/task_breakdown.md` with usage examples
   - [x] Ensure CI/CD pipeline validates the new functionality
-
-- implement a safe migration path from SolverAgent to the hierarchical agent system
-
-  - [x] Create migration documentation in `docs/howto/migration.md`
-    - [x] Outline a clear, step-by-step migration path for users
-    - [x] Document API differences between SolverAgent and hierarchical system
-    - [x] Include a checklist for verifying successful migration
-  - [x] Transition solver agent into a temporary compatibility Layer
-    - [x] Identify all references to SolverAgent in the codebase (see `docs/migration/solver_agent_references.md` for the complete list)
-    - [x] Add appropriate deprecation warnings throughout the codebase
-    - [x] Gradually update SolverAgent internals one-by-one (+corresponding tests), testing between each one, to delegate to hierarchical agents
-  - [x] Apply incremental updates to the rest of system to transition from SolverAgent to hierarchical system
-    - [x] Carefully refactor one deprecated component (+corresponding tests) at a time to not use SolverAgent, with tests between each change, run linter and test suite after each change to verify functionality
-    - [x] Continue refactoring remaining deprecated components
-  - [x] Update examples to show new approach
-    - [x] Annotate existing examples with deprecation notices if they no longer apply
-    - [x] Create parallel examples showing the new hierarchical approach where it differs
-  - [x] Update CLI code to use hierarchical agents
-    - [x] Identify all CLI dependencies on SolverAgent (see `docs/migration/solver_agent_references.md` for details)
-    - [x] Incrementally update each reference (+corresponding tests), testing between changes
-    - [x] Ensure backward compatibility during transition
-  - [x] Plan for eventual removal of SolverAgent
-    - [x] Ensure all documentation is updated to focus on hierarchical system
-    - [x] Verify that nothing uses the SolverAgent implementation anymore (check against `docs/migration/solver_agent_references.md`)
-    - [x] Remove SolverAgent implementation completely
-    - [x] Verify all tests pass with SolverAgent removed
-  - [x] Update documentation
-    - [x] remove all deprecated examples
-    - [x] Remove all traces of SolverAgent in the documentation to avoid confusion (see `docs/migration/solver_agent_references.md` for a list of documentation to update)
-  - [x] Update CLI
-    - [x] Remove any backward compatibility still left
-    - [x] Review the codebase.
-    - [x] Analyzse the migration to see if it left any undesireable traces.
-    - [x] Run tests and linter
 
 - enable flexible delegation paths between agent types
 
@@ -193,25 +158,88 @@
     - [x] Add delegation examples in existing documentation
 
 - Refactor `src/agent/coordination.py`
-- [ ] execute all steps in `docs/todos/refactor_coordination_TODO.md`
+
+  - [ ] execute all steps in `docs/todos/refactor_coordination_TODO.md`
 
 - Refactor `src/agent/state/base.py`
-- [ ] execute all steps in `docs/todos/refactor_base_state_TODO.md`
+
+  - [ ] execute all steps in `docs/todos/refactor_base_state_TODO.md`
 
 - Refactor `src/agent/agent_types/planner.py`
-- [ ] execute all steps in `docs/todos/refactor_planner_TODO.md`
+
+  - [ ] execute all steps in `docs/todos/refactor_planner_TODO.md`
 
 - Refactor `src/agent/agent_types/executor.py`
-- [ ] execute all steps in `docs/todos/refactor_executor_TODO.md`
+
+  - [ ] execute all steps in `docs/todos/refactor_executor_TODO.md`
 
 - Refactor `src/agent/agent_types/architect.py`
-- [ ] execute all steps in `docs/todos/refactor_architect_TODO.md`
+
+  - [ ] execute all steps in `docs/todos/refactor_architect_TODO.md`
 
 - Refactor `src/agent/steps.py`
-- [ ] execute all steps in `docs/todos/refactor_steps_TODO.md`
+
+  - [ ] execute all steps in `docs/todos/refactor_steps_TODO.md`
 
 - Refactor `src/prompts/templates.py`
-- [ ] execute all steps in `docs/todos/refactor_templates_TODO.md`
+  [ ] execute all steps in `docs/todos/refactor_templates_TODO.md`
+
+- Investigate and fix duplicate log messages in the delegation process
+
+  - [ ] Review logging configuration in `src/utils/log_utils.py` to identify source of duplication
+  - [ ] Check for potential redundant calls to logging functions
+  - [ ] Add more logging context to differentiate between similar but unique events
+  - [ ] Create unit tests to verify logging behavior
+    - [ ] Add tests in `tests/unit/test_log_utils.py` to verify proper logging patterns
+    - [ ] Create test cases that check for duplicate log prevention
+  - [ ] Update logging documentation to clarify expected behavior
+
+- Resolve recursive task breakdown prompt detection issues
+
+  - [ ] Implement task history tracking to prevent repeated delegation
+    - [ ] Add task signature generation for identifying similar tasks
+  - [ ] Enhance recursive task breakdown detection in `src/agent/agent_types/architect`
+    - [ ] Create a more robust structure for identifying recursive prompts, ideally not relying on the contents of the message
+    - [ ] Improve detection logic to reduce false positives
+  - [ ] Add unit tests
+    - [ ] Test recursive pattern detection with various inputs
+    - [ ] Verify proper handling of similar but distinct tasks
+    - [ ] Ensure no legitimate tasks are incorrectly flagged
+
+- Optimize delegation paths between agent types
+
+  - [ ] Streamline agent delegation logic in `src/agent/coordination` and `src/agent/agent_types/architect`
+    - [ ] Remove unnecessary self-delegation in architect agent
+  - [ ] Add delegation efficiency analysis
+    - [ ] Add logging for delegation chain efficiency
+  - [ ] Update delegation documentation in `docs/howto/delegation_strategies.md`
+    - [ ] Clarify ideal delegation patterns
+    - [ ] Document optimized delegation flows
+    - [ ] Provide examples of efficient vs. inefficient delegation
+
+- Improve task complexity analysis with reliable LLM-based approach
+
+  - [ ] Create centralized complexity analysis module in `src/agent/complexity_analyzer.py`
+    - [ ] Implement `ComplexityAnalyzer` class with purely LLM-based analysis
+    - [ ] Add caching mechanism using LRU cache to avoid repeated LLM calls
+    - [ ] Implement proper async patterns with error handling and retries
+    - [ ] Add detailed logging for analysis decisions and performance metrics
+  - [ ] Add complexity analysis prompt template in `src/prompts/templates.py`
+    - [ ] Create `COMPLEXITY_ANALYSIS_PROMPT` with clear criteria for each complexity level
+    - [ ] Ensure prompt produces consistent, structured responses for reliable parsing
+  - [ ] Update agent implementations to use the centralized analyzer
+    - [ ] Modify `ArchitectAgent` to use the shared analyzer via dependency injection
+    - [ ] Update `PlannerAgent` to use the shared analyzer via dependency injection
+    - [ ] Refactor `AgentCoordinator` to leverage the centralized complexity analyzer
+    - [ ] Remove duplicate complexity analysis code from individual agents
+  - [ ] Add comprehensive tests for complexity analysis
+    - [ ] Create unit tests for the `ComplexityAnalyzer` class
+    - [ ] Add integration tests with mock LLM responses
+    - [ ] Create test cases with a wide variety of technical and non-technical tasks
+  - [ ] Add documentation about complexity analysis
+    - [ ] Document the centralized approach in `docs/reference/agent_system.md`
+    - [ ] Add usage examples in agent documentation
+    - [ ] Document caching and performance considerations
 
 - implement project management infrastructure and CLI commands for file generation
 
@@ -286,28 +314,3 @@
     - [ ] Create comprehensive workflow guide in `docs/guides/project_workflows.md`
     - [ ] Add tutorial series in `docs/tutorials/`
     - [ ] Update all command documentation
-
-## Task Delegation Feature Implementation
-
-### Task Breakdown/Planning Enhancements
-
-- [x] Implement a protocol-based hierarchical agent system
-- [x] Enable complex task breakdown with nested delegation
-- [x] Establish flexible delegation paths among agent types
-- [x] Create comprehensive unit and integration tests for delegation paths
-- [x] Update system architecture documentation to clarify delegation flow
-
-### Agent Type Enhancements
-
-- [x] Update ArchitectAgent to support complexity analysis and delegation decisions
-- [x] Enhance PlannerAgent with recursive task breakdown capability
-- [x] Add ExecutorAgent specialization for focused task execution
-- [x] Implement fallback mechanisms for delegation failures
-
-### Testing & Documentation
-
-- [x] Create unit tests for complexity-based delegation
-- [x] Implement integration tests for hierarchical delegation workflows
-- [x] Document task delegation workflow in a how-to guide
-- [x] Update architecture documentation to clarify delegation flow
-- [ ] Add API reference for delegation-related methods and classes

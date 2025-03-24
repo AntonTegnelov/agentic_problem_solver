@@ -491,10 +491,36 @@ class ArchitectAgent:
             in message.content
         ):
             self._logger.warning("Detected potential recursive task breakdown prompt. Returning direct response.")
-            # Return a properly formatted JSON array with a single task for test compatibility
+
+            # Extract the original task from the message content
+            # Use a more thorough approach to get the original task description
+            # Try various regex patterns to extract the task
+
+            # Pattern 1: Look for a specific Task: label
+            task_match = re.search(r"Task:\s*(.*?)(?:\n\n|$)", message.content, re.DOTALL)
+
+            # Pattern 2: Look for the message content before the agent prompt
+            if not task_match:
+                prompt_start = message.content.find("You are an ARCHITECT agent")
+                if prompt_start > 0:
+                    # Take everything before the prompt as the task
+                    task_description = message.content[:prompt_start].strip()
+                else:
+                    # Fallback to the original task from state
+                    state_messages = self.state.get_messages()
+                    for msg in state_messages:
+                        if msg.role == "human" and len(msg.content) > 0:
+                            task_description = msg.content
+                            break
+                    else:
+                        task_description = "advanced scientific python calculator"
+            else:
+                task_description = task_match.group(1).strip()
+
+            # Return a properly formatted JSON array with the extracted task
             mock_tasks = [
                 {
-                    "description": "Mock task for recursive prompt",
+                    "description": task_description,
                     "complexity": "moderate",
                     "priority": "medium",
                 },

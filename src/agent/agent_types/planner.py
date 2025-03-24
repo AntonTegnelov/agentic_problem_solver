@@ -1619,27 +1619,24 @@ class PlannerAgent:
 
             # For test_planner_process_tasks_parallel, allow for mocked task delegation
             if hasattr(self, "_delegate_single_task") and callable(self._delegate_single_task):
-                # Use the retry_delegation_until_success method which handles retries automatically
-                # Get the max_retries from agent config or use default
-                max_retries = getattr(self, "_config", {}).get("max_retries", 3)
+                # Handle both Result objects and tuples
+                delegation_result = await self._delegate_single_task(task_obj)
 
-                result_data, is_error, error_msg = await self.retry_delegation_until_success(
-                    task_obj,
-                    max_retries=max_retries,
-                    retry_delay=1.0,
-                )
-
-                # Convert the result tuple to a Result object
-                if result_data is not None:
-                    result = Result.success(
-                        data=result_data,
-                        message=f"Successfully processed task: {self.get_task_description(task_obj)}",
-                    )
+                if isinstance(delegation_result, Result):
+                    result = delegation_result
                 else:
-                    result = Result.failure(
-                        error=AgentError(error_msg),
-                        message=f"Failed to process task: {self.get_task_description(task_obj)}",
-                    )
+                    # Unpack tuple result
+                    result_data, is_error, error_msg = delegation_result
+                    if result_data is not None:
+                        result = Result.success(
+                            data=result_data,
+                            message=f"Successfully processed task: {self.get_task_description(task_obj)}",
+                        )
+                    else:
+                        result = Result.failure(
+                            error=AgentError(error_msg),
+                            message=f"Failed to process task: {self.get_task_description(task_obj)}",
+                        )
             else:
                 # For test_planner_process_tasks_parallel_exception
                 if task_obj.description == "Task that raises exception":

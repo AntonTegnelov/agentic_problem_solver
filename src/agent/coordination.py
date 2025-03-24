@@ -1685,7 +1685,7 @@ class AgentCoordinator:
 
         """
         agent = self._registry.get_agent(agent_id)
-        message = Message(content=task, role="human")
+        message = create_human_message(task)
         return await agent.process(message)
 
     async def broadcast_task(self, task: str) -> dict[str, Result]:
