@@ -44,4 +44,11 @@ coverage.xml
 .coverage
 
 # Postgres
-postgres-data/ 
+postgres-data/
+
+# Virtual environment (Windows host venv; the dev container uses /home/dev/.venv)
+.venv/
+# AI-assistant / editor-agent configs (local only)
+.claude/
+.aider*
+CONVENTIONS.MD

@@ -1,0 +1,42 @@
+name: agentic_problem_solver
+
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    image: agentic-problem-solver-dev:latest
+    container_name: agentic_problem_solver
+    hostname: agentic-problem-solver
+    ports:
+      # Host 2238 -> container sshd :22. Port allocation lives in
+      # E:\Programmering\Code\DEVCONTAINER_TEMPLATE.md — claim there first.
+      - "2238:22"
+    volumes:
+      # Repo root (includes the gitignored .env with GEMINI_API_KEY via the
+      # mount, never the image).
+      - ..:/workspaces/Agentic_problem_solver:cached
+      # Host pubkeys installed by the entrypoint at startup — edit
+      # %USERPROFILE%\.ssh\authorized_keys and restart, no rebuild needed.
+      - ${USERPROFILE}/.ssh/authorized_keys:/tmp/host_authorized_keys:ro
+      # Persist Claude Code OAuth credentials across rebuilds.
+      - claude-config:/home/dev/.claude
+      # Stable sshd host-key fingerprint across down/up cycles.
+      - ssh-host-keys:/etc/ssh/keys
+      # PAT credential store (and any other ~/.ssh state) survives recreates.
+      - ssh-config:/home/dev/.ssh
+      # Container venv outside the bind mount (the repo's .venv is the Windows
+      # one) and on a volume so the editable install survives recreates
+      # (Zed's dev container flow recreates on first attach). ~/.cache keeps
+      # the pip cache.
+      - venv:/home/dev/.venv
+      - home-cache:/home/dev/.cache
+    restart: unless-stopped
+    init: true
+
+volumes:
+  claude-config:
+  ssh-host-keys:
+  ssh-config:
+  venv:
+  home-cache:

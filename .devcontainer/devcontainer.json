@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "agentic-problem-solver",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspaces/Agentic_problem_solver",
+  "remoteUser": "dev",
+
+  // Keep the sshd entrypoint running so SSH access works while VS Code is
+  // attached via the Dev Containers extension.
+  "overrideCommand": false,
+
+  // NOTE: no "forwardPorts" here. Zed's dev container support translates it
+  // into an extra docker-published host port, which collides with the compose
+  // file's 2238:22 mapping and makes the container fail to start.
+
+  // Editable install into the container venv (on the `venv` named volume)
+  // plus the pinned test tooling from requirements.txt.
+  "postCreateCommand": "/home/dev/.venv/bin/pip install -e . -r requirements.txt",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // The repo's .venv is Windows-native; force the container venv.
+        "python.defaultInterpreterPath": "/home/dev/.venv/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "anthropic.claude-code"
+      ]
+    }
+  }
+}
