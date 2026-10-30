@@ -1,0 +1,15 @@
+[tools]
+python = "3.12"
+node = "22"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.install]
+run = "pip install -e . -r requirements.txt"
+
+[tasks.test]
+run = "python -m pytest"
+
+[tasks.run]
+run = "APS"
